@@ -71,7 +71,6 @@ class NavigationController {
 
         dynamic_reconfigure::Server<navigation_controller::NavigationConfig> dr_srv_;
         Parameters param;
-        void loadNavigationParameters();
         void loadNavigationParams();
 
         double normalizeAngle(double theta);

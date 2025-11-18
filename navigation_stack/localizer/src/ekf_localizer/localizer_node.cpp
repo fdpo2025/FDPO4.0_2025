@@ -206,7 +206,7 @@ void LocalizerNode::publishLogPose() {
 
     nav_msgs::Odometry odom_msg;
     odom_msg.header.stamp = last_state_stamp_;
-    odom_msg.header.frame_id = "odom";      
+    odom_msg.header.frame_id = "map";      
     odom_msg.child_frame_id = "base_link"; 
 
     odom_msg.pose.pose.position.x = X_state(0);
