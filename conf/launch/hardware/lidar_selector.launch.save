@@ -1,0 +1,52 @@
+<launch>
+
+    <!-- Argumento para escolher o driver: "hlds" ou "ydlidar" -->
+    <arg name="lidar_driver" default="ydlidar"/>
+    
+    <!-- Frame ID comum para ambos os drivers -->
+    <arg name="frame_id" default="laser"/>
+
+    <!-- ============================================ -->
+    <!-- Driver HLS-LFCD2 -->
+    <!-- ============================================ -->
+    <group if="$(eval lidar_driver == 'hlds')">
+        <arg name="serial_port" default="/dev/ttyAMA0"/>  <!-- Raspberry Pi GPIO UART -->
+        <arg name="baud_rate"  default="230400"/>
+
+        <node pkg="hls_lfcd_lds_driver" type="hlds_laser_publisher" name="hlds_laser" output="screen">
+            <param name="port"      value="$(arg serial_port)"/>
+            <param name="baud_rate" value="$(arg baud_rate)"/>
+            <param name="frame_id"  value="$(arg frame_id)"/>
+            <!-- Publicar em /base_scan para compatibilidade com beacon_detector -->
+            <remap from="scan" to="/base_scan"/>
+        </node>
+    </group>
+
+    <!-- ============================================ -->
+    <!-- Driver YDLidar X4 -->
+    <!-- ============================================ -->
+    <group if="$(eval lidar_driver == 'ydlidar')">
+        <arg name="serial_port_ydlidar" default="/dev/ttyUSB0"/>
+        <arg name="baud_rate_ydlidar" default="128000"/>
+        
+        <node pkg="sdpo_driver_laser_2d" type="sdpo_driver_laser_2d_node"
+            name="sdpo_driver_laser_2d" clear_params="true" output="screen">
+            <!-- Parâmetros configurados diretamente para compatibilidade FDPO -->
+            <param name="model" value="ydlidarx4"/>
+            <param name="serial_port_name" value="$(arg serial_port_ydlidar)"/>
+            <param name="baud_rate" value="$(arg baud_rate_ydlidar)"/>
+            <param name="base_frame_id" value="base_link"/>
+            <param name="laser_frame_id" value="$(arg frame_id)"/>
+            <param name="laser_pose_x" value="0.0"/>
+            <param name="laser_pose_y" value="0.0"/>
+            <param name="laser_pose_z" value="0.0"/>
+            <param name="laser_pose_yaw" value="0.0"/>
+            <param name="laser_pose_pitch" value="0.0"/>
+            <param name="laser_pose_roll" value="0.0"/>
+            <param name="dist_min" value="0.12"/>
+            <param name="dist_max" value="10.0"/>
+        </node>
+    </group>
+
+
+

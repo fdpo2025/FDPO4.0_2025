@@ -1,6 +1,6 @@
 loop_rate_hz: 100  # Frequência alta para evitar soluços no Pico
 
-v_nom: 0.4
+v_nom: 0.1
 w_nom: 1.2
 w_min: 0.0 
 

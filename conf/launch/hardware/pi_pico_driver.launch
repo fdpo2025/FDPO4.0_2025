@@ -2,7 +2,7 @@
 
     <arg name="serial_port" default="/dev/ttyACM0"/>
     <arg name="baud_rate"  default="115200"/>
-    <arg name="debug_comm" default="false" doc="Enable/disable communication debug logs"/>
+    <arg name="debug_comm" default="true" doc="Enable/disable communication debug logs"/>
 
     <node pkg="pi_pico_driver" type="pico_driver_node" name="pico_driver_node" output="screen">
         <param name="serial_port" value="$(arg serial_port)"/>
