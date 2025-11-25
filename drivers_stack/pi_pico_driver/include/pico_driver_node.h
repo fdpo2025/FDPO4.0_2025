@@ -39,6 +39,8 @@ namespace Communication {
         struct FromPico {
 
             Pose odom_pos;
+            double v_linear;
+            double w_angular;
             bool box_detection; // w/ ToF mesaure processed at the pico
 
         };

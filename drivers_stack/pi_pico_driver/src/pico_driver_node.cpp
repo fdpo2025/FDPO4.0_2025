@@ -10,6 +10,8 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   messageToReceive.odom_pos.x = 0.0;
   messageToReceive.odom_pos.y = 0.0;
   messageToReceive.odom_pos.theta = 0.0;
+  messageToReceive.v_linear = 0.0;
+  messageToReceive.w_angular = 0.0;
   messageToReceive.box_detection = false;
 
   // ----------------------- ROS init -----------------------
@@ -110,6 +112,9 @@ void PiPicoDriver::pubOdom() {
   tf::Quaternion q = tf::createQuaternionFromYaw(messageToReceive.odom_pos.theta);
   tf::quaternionTFToMsg(q, odom.pose.pose.orientation);
 
+  odom.twist.twist.linear.x  = messageToReceive.v_linear;
+  odom.twist.twist.angular.z = messageToReceive.w_angular;
+
   posePub.publish(odom);
 
   // Publish TF transform odom -> base_link
@@ -182,24 +187,26 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
     std::string pos_part = msg.substr(pos_idx);
     
     double x=0, y=0, theta=0;
+    double v=0.0, w=0.0;
     int tof = 0;
 
-    // Tenta com TOF primeiro
-    int n = std::sscanf(pos_part.c_str(), "POS: %lf, %lf, %lf, TOF: %d", &x, &y, &theta, &tof);
-    if (n < 3) {
-      // fallback: só POS
-      n = std::sscanf(pos_part.c_str(), "POS: %lf, %lf, %lf", &x, &y, &theta);
-      tof = messageToReceive.box_detection ? 1 : 0; // mantém anterior
-    }
-    if (n >= 3) {
+    int n = std::sscanf(
+      pos_part.c_str(),
+      "POS: %lf, %lf, %lf, V: %lf, W: %lf, TOF: %d",
+      &x, &y, &theta, &v, &w, &tof
+    );
+
+    if (n == 6) {
       messageToReceive.odom_pos = {x, y, theta};
+      messageToReceive.v_linear = v;
+      messageToReceive.w_angular = w;
+      messageToReceive.box_detection = (tof != 0);
+      pubBoxDetection();
       pubOdom();
-      if (pos_part.find("TOF:") != std::string::npos) {
-        messageToReceive.box_detection = (tof != 0);
-        pubBoxDetection();
-      }
       return;
     }
+
+    ROS_WARN_THROTTLE(5.0, "Mensagem POS mal formatada (esperado x,y,theta,V,W,TOF): %s", pos_part.c_str());
     ROS_WARN_THROTTLE(5.0, "Erro ao fazer parse da mensagem POS: %s", pos_part.c_str());
     return;
   }
