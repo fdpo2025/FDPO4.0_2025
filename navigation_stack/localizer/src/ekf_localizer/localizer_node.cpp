@@ -96,6 +96,9 @@ void LocalizerNode::ekf_predict(const nav_msgs::Odometry::ConstPtr& msg) {
     // Dt update
     if (odom_stamp.isZero()) {     // 1st message   
         odom_stamp = msg->header.stamp;
+        last_state_stamp_ = msg->header.stamp;
+        publishMapToOdomTF_();
+        publishLogPose();
         return;                     
     }
     const ros::Time last_stamp = odom_stamp;
@@ -240,8 +243,12 @@ void LocalizerNode::publishMapToOdomTF_() {
     try {
         T_odom_base_msg = tf_buffer.lookupTransform("odom", "base_link", stamp, ros::Duration(0.05));
     } catch (const tf2::TransformException& ex) {
-        ROS_WARN_THROTTLE(1.0, "TF lookup odom->base_link falhou: %s", ex.what());
-        return;
+        try {
+            T_odom_base_msg = tf_buffer.lookupTransform("odom", "base_link", ros::Time(0), ros::Duration(0.05));
+        } catch (const tf2::TransformException& ex2) {
+            ROS_WARN_THROTTLE(1.0, "TF lookup odom->base_link falhou: %s | fallback: %s", ex.what(), ex2.what());
+            return;
+        }
     }
 
     tf2::Transform t_odom_base;
