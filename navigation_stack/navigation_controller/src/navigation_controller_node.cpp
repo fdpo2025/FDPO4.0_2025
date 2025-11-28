@@ -13,7 +13,7 @@ navigationFsm(navigation::states::idle), tfBuffer(), tfListener(tfBuffer) {
     nh.param("rviz_append", rvizGoalAppend, false);
 
     // ros init
-    odomSub = nh.subscribe("/odom", 10, &NavigationController::updateCurrPose, this);
+    odomSub = nh.subscribe("/odometry/filtered", 10, &NavigationController::updateCurrPose, this);
     rvizGoalSub = nh.subscribe("/move_base_simple/goal", 10, &NavigationController::rvizGoalCallBack, this);
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
     controlTimer = nh.createTimer(ros::Duration(1.0 / std::max(1, param.loop_rate_hz)), &NavigationController::navigationFsmRunner, this);
@@ -83,46 +83,13 @@ void NavigationController::loadNavigationParams() {
 
 }
 
-bool NavigationController::desiredPoseFromMapToOdom() {
-
-    try {
-
-        geometry_msgs::PoseStamped poseMap, poseOdom;
-        poseMap.header.stamp = ros::Time(0);     
-        poseMap.header.frame_id = "map";
-        poseMap.pose.position.x = poseDesiredMap.x;
-        poseMap.pose.position.y = poseDesiredMap.y;
-        poseMap.pose.position.z = 0.0;
-        
-        tf2::Quaternion q;
-        q.setRPY(0, 0, poseDesiredMap.theta);
-        poseMap.pose.orientation = tf2::toMsg(q);
-
-        poseOdom = tfBuffer.transform(poseMap, "odom", ros::Duration(0.05));
-
-        poseDesired.x = poseOdom.pose.position.x;
-        poseDesired.y = poseOdom.pose.position.y;
-        poseDesired.theta = tf2::getYaw(poseOdom.pose.orientation);
-        return true;
-    }
-    catch (const tf2::TransformException& ex) {
-        ROS_WARN_THROTTLE(1.0, "TF transform map->odom failed: %s", ex.what());
-        return false;
-    }
-
-}
-
 void NavigationController::updateDesiredPose() {
 
     if(route.empty()) return;
 
-    poseDesiredMap = route.front().pose;
-
-    if (!desiredPoseFromMapToOdom()) {
-        ROS_INFO("map->odom TF unavailable");
-    } else {
-        ROS_INFO("New waypoint (map): x=%.2f y=%.2f yaw=%.2f  -> transformed to odom", poseDesiredMap.x, poseDesiredMap.y, poseDesiredMap.theta);
-    }
+    // Work directly in map frame no transformations needed
+    poseDesired = route.front().pose;
+    ROS_INFO("New waypoint (map): x=%.2f y=%.2f yaw=%.2f", poseDesired.x, poseDesired.y, poseDesired.theta);
 
 }
 
@@ -135,9 +102,13 @@ bool NavigationController::isBackwards() {
 double NavigationController::getAlignYawError() {
 
     double theta_d = std::atan2(poseDesired.y - poseCurr.y, poseDesired.x - poseCurr.x);
-    double theta_virtual = poseCurr.theta + (isBackwards() ? M_PI : 0.0);
+    
+    // If backwards, robot must point in opposite direction to waypoint
+    if (isBackwards()) {
+        theta_d = normalizeAngle(theta_d + M_PI);
+    }
 
-    return normalizeAngle(theta_d - theta_virtual); 
+    return normalizeAngle(theta_d - poseCurr.theta); 
 
 }
 
@@ -190,18 +161,34 @@ void NavigationController::updateCurrPose(const nav_msgs::Odometry::ConstPtr& ms
 
 void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::ConstPtr& msg) {
 
+    // Ensure goal is in map frame
+    geometry_msgs::PoseStamped poseInMap;
+    if (msg->header.frame_id != "map") {
+        try {
+            poseInMap = tfBuffer.transform(*msg, "map", ros::Duration(1.0));
+            ROS_INFO("Transformed RViz goal from %s to map frame", msg->header.frame_id.c_str());
+        } catch (const tf2::TransformException& ex) {
+            ROS_ERROR("Failed to transform goal from %s to map: %s", msg->header.frame_id.c_str(), ex.what());
+            return;
+        }
+    } else {
+        poseInMap = *msg;
+    }
+
     if(!rvizGoalAppend) route.clear();
 
     WayPoint waypoint_temp;
 
     waypoint_temp.id = route.empty() ? 0 : (route.back().id + 1);    
-    waypoint_temp.pose.x = msg->pose.position.x;
-    waypoint_temp.pose.y = msg->pose.position.y;
-    waypoint_temp.pose.theta = tf2::getYaw(msg->pose.orientation);
+    waypoint_temp.pose.x = poseInMap.pose.position.x;
+    waypoint_temp.pose.y = poseInMap.pose.position.y;
+    waypoint_temp.pose.theta = tf2::getYaw(poseInMap.pose.orientation);
     waypoint_temp.align = true;
     waypoint_temp.backwards = false;
 
     route.push_back(waypoint_temp);
+    ROS_INFO("RViz goal added: x=%.2f y=%.2f yaw=%.2f (map frame)", 
+             waypoint_temp.pose.x, waypoint_temp.pose.y, waypoint_temp.pose.theta);
 
     updateDesiredPose();
 
@@ -209,10 +196,10 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
 
 void NavigationController::publishVel() {
 
-    // Só publica se houver movimento real (não zeros)
-    // Isto evita publicar constantemente quando está em idle
+    // Only publish if there is real movement (not zeros)
+    // This avoids constantly publishing when idle
     if (std::abs(v_d) < 1e-6 && std::abs(w_d) < 1e-6) {
-        return;  // Não publica zeros quando está parado
+        return;  // Don't publish zeros when stopped
     }
 
     geometry_msgs::Twist cmd;
@@ -237,7 +224,7 @@ double NavigationController::normalizeAngle(double theta) {
 void NavigationController::hardStop() {
 
     w_d = v_d = 0.0;
-    // Força publicação de zeros para parar o robô imediatamente
+    // Force publish zeros to stop robot immediately
     geometry_msgs::Twist cmd;
     cmd.linear.x  = 0.0;
     cmd.linear.y  = 0.0;
@@ -289,7 +276,7 @@ void NavigationController::goToXY() {
 
     // linear
     double v_mag = 0.0;
-    if(std::fabs(yaw_error) <= M_PI/8.0) v_mag = param.v_nom * std::cos(yaw_error) * std::min<double>(1.0, param.kp_linear * position_error);
+    if(std::fabs(yaw_error) <= M_PI/6.0) v_mag = param.v_nom * std::cos(yaw_error) * std::min<double>(1.0, param.kp_linear * position_error);
     if(std::fabs(yaw_error) <= 0.0) v_mag = param.v_nom * std::cos(yaw_error) * std::min<double>(1.0, param.kp_linear * position_error);
 
     v_d = isBackwards() ? -v_mag : v_mag;
@@ -301,7 +288,6 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     // Update's
     navigationFsm.update_tis();
     bool enable = !(mode == "stop" || mode == "pause") && !route.empty();
-    if (!route.empty()) desiredPoseFromMapToOdom();
 
     // Compute Transitions
     if(navigationFsm.state == navigation::states::idle && enable) {

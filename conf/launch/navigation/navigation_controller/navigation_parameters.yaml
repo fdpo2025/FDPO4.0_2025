@@ -9,3 +9,5 @@ yaw_tol: 0.15
 
 kp_linear: 5.0            # ~1/lambda (lambda≈0.2)
 kp_angular: 1.0
+
+invert_odom_theta: true   # Se o frame odom estiver invertido, usar true para corrigir

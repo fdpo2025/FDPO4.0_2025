@@ -51,12 +51,11 @@ class NavigationController {
 
         tf2_ros::Buffer tfBuffer;
         tf2_ros::TransformListener tfListener;
-        Pose poseDesiredMap;
 
         std::string mode; // "start" | "pause" | "unpause" | "stop""
 
         Fsm navigationFsm;
-        // both with respect to the odom frame
+        // both with respect to the map frame
         Pose poseCurr, poseDesired;
         double v_d, w_d;
         
@@ -66,6 +65,7 @@ class NavigationController {
             double kp_linear, kp_angular;          
             double arrive_radius, yaw_tol;
             int loop_rate_hz;
+            bool invert_odom_theta;  // Se true, inverte o theta do odom (corrige frame invertido)
 
         };
 
@@ -93,7 +93,6 @@ class NavigationController {
 
         std::deque<WayPoint> route;
         void updateDesiredPose();
-        bool desiredPoseFromMapToOdom();
         void loadRouteFromParameters();
         
         ros::Subscriber odomSub;
