@@ -10,11 +10,11 @@ ekf_params:
   
   # Initial state covariance matrix P
   initial_covariance:
-    position_x: 0.05      # Initial covariance for X position (m²)
-    position_y: 0.05      # Initial covariance for Y position (m²)  
-    orientation: 0.05     # Initial covariance for orientation (rad²)
+    position_x: 0.5      # Initial covariance for X position (m²)
+    position_y: 0.5      # Initial covariance for Y position (m²)  
+    orientation: 0.5     # Initial covariance for orientation (rad²)
   
   # Process covariance matrix Q (model noise)
-    position_x: 0.5   # Process covariance for X position (m²)
-    position_y: 0.5   # Process covariance for Y position (m²)
+    position_x: 0.0005   # Process covariance for X position (m²)
+    position_y: 0.0005   # Process covariance for Y position (m²)
 

@@ -1,11 +1,11 @@
 loop_rate_hz: 100  # Frequência alta para evitar soluços no Pico
 
 v_nom: 0.1
-w_nom: 1.2
+w_nom: 0.2
 w_min: 0.0 
 
 arrive_radius: 0.05
-yaw_tol: 0.015
+yaw_tol: 0.15
 
 kp_linear: 5.0            # ~1/lambda (lambda≈0.2)
-kp_angular: 4.0
+kp_angular: 1.0
