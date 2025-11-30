@@ -62,6 +62,9 @@ class NavigationController {
         struct Parameters {
 
             double v_nom, w_nom, w_min;
+            double v_min;  // Velocidade mínima constante na fase de desaceleração
+            double a_max;  // Aceleração máxima (m/s²)
+            double d_max;  // Desaceleração máxima (m/s²)
             double kp_linear, kp_angular;          
             double arrive_radius, yaw_tol;
             int loop_rate_hz;

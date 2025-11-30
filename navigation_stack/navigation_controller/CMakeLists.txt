@@ -91,6 +91,23 @@ target_link_libraries(navigation_controller_node
 )
 
 ## -------------------------
+## Executável State Space (Template)
+## -------------------------
+add_executable(navigation_controller_ss_node
+  src/main_ss.cpp
+  src/navigation_controller_ss_node.cpp
+)
+
+add_dependencies(navigation_controller_ss_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
+
+target_link_libraries(navigation_controller_ss_node
+  ${catkin_LIBRARIES}
+)
+
+## -------------------------
 ## (Opcional) Instalação
 ## -------------------------
 ## Descomenta se quiseres instalar

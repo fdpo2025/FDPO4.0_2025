@@ -1,5 +1,6 @@
 # ===============================
 # Stage config for Robot@Factoryz
+# PERFECT LOCALIZATION MODE (GPS) - For testing navigation controller without localization errors
 # ===============================
 
 name "simulator_stage_edgars"
@@ -124,7 +125,7 @@ define robot_0_model position(
   #if "gps" the position model reports its position with perfect accuracy.
   #If "odom", a simple odometry model is used and position data drifts from the ground truth over time.
   #The odometry model is parameterized by the odom_error property
-  localization "odom"
+  localization "gps"
   #specify the position of the object's center, relative to its pose, origin [ x:<float> y:<float> z:<float> heading:<float> ]
   origin [0.000 0.000 0.000 0.000]
 
@@ -172,3 +173,4 @@ robot_0_model(
   color "blue"
   obstacle_return 0 
 )
+

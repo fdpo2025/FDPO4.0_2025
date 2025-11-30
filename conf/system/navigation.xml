@@ -2,23 +2,33 @@
 
   <arg name="lidar_driver" default="ydlidar" doc="Tipo de driver LiDAR: 'hlds' ou 'ydlidar'"/>
   <arg name="use_ekf" default="true" doc="Usar EKF localizer (se false, map=odom)"/>
+  <arg name="use_beacon_detector" default="true" doc="Usar beacon detector (desativado em modo perfect_localization)"/>
 
-  <include file="$(find conf)/launch/navigation/navigation_controller/run_navigation_controller.launch"/>
+  <arg name="use_ss_controller" default="false" doc="Use state space controller (true) or original controller (false)"/>
+
+  <!-- Navigation Controller: usa /base_pose_ground_truth quando perfect_localization, senão /odometry/filtered -->
+  <include file="$(find conf)/launch/navigation/navigation_controller/run_navigation_controller.launch">
+    <arg name="odom_topic" value="$(eval '/base_pose_ground_truth' if not arg('use_ekf') and not arg('use_beacon_detector') else '/odometry/filtered')"/>
+    <arg name="ss" value="$(arg use_ss_controller)"/>
+  </include>
   
-  <!-- Beacon Detector (sempre ativo, passa input_topic_type baseado no driver de lidar) -->
-  <include file="$(find conf)/launch/navigation/localizer/beacon_detector/run_beacon_detector.launch">
+  <!-- Beacon Detector (ativo apenas quando use_beacon_detector=true) -->
+  <include if="$(arg use_beacon_detector)" file="$(find conf)/launch/navigation/localizer/beacon_detector/run_beacon_detector.launch">
     <arg name="input_topic_type" value="$(eval 'point_cloud' if arg('lidar_driver') == 'ydlidar' else 'laser_scan')"/>
   </include>
 
   <!-- EKF Localizer -->
   <include if="$(arg use_ekf)" file="$(find conf)/launch/navigation/localizer/ekf_localizer/run_ekf_localizer.launch"/>
 
-  <!-- without EKF: transformações estáticas para teste com rosbag -->
+  <!-- without EKF: transformações estáticas -->
+  <!-- map->odom: identidade (map=odom quando não há EKF) -->
   <node unless="$(arg use_ekf)" pkg="tf" type="static_transform_publisher" name="map_to_odom_publisher"
         args="0 0 0 0 0 0 map odom 100"/>
-  <!-- odom->base_link: na origem quando não há hardware -->
-  <node unless="$(arg use_ekf)" pkg="tf" type="static_transform_publisher" name="odom_to_base_link_publisher"
+  
+  <!-- odom->base_link: apenas quando não há EKF E não está em modo perfect_localization (Stage já publica essa TF) -->
+  <node if="$(eval not arg('use_ekf') and arg('use_beacon_detector'))" pkg="tf" type="static_transform_publisher" name="odom_to_base_link_publisher"
         args="0 0 0 0 0 0 odom base_link 100"/>
+  
   <!-- base_link->laser: z=0.15, yaw=180° (mesma configuração do driver) -->
   <node unless="$(arg use_ekf)" pkg="tf" type="static_transform_publisher" name="base_link_to_laser_publisher"
         args="0 0 0.15 0 0 3.14159 base_link laser 100"/>

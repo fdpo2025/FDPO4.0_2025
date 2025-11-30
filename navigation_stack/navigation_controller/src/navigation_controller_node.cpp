@@ -13,7 +13,10 @@ navigationFsm(navigation::states::idle), tfBuffer(), tfListener(tfBuffer) {
     nh.param("rviz_append", rvizGoalAppend, false);
 
     // ros init
-    odomSub = nh.subscribe("/odometry/filtered", 10, &NavigationController::updateCurrPose, this);
+    std::string odom_topic;
+    nh.param("odom_topic", odom_topic, std::string("/odometry/filtered"));
+    odomSub = nh.subscribe(odom_topic, 10, &NavigationController::updateCurrPose, this);
+    ROS_INFO("NavigationController subscribing to odometry topic: %s", odom_topic.c_str());
     rvizGoalSub = nh.subscribe("/move_base_simple/goal", 10, &NavigationController::rvizGoalCallBack, this);
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
     controlTimer = nh.createTimer(ros::Duration(1.0 / std::max(1, param.loop_rate_hz)), &NavigationController::navigationFsmRunner, this);
@@ -75,6 +78,9 @@ void NavigationController::loadNavigationParams() {
     nh.param("v_nom", param.v_nom, 0.4);
     nh.param("w_nom", param.w_nom, 1.2);
     nh.param("w_min", param.w_min, 0.1);
+    nh.param("v_min", param.v_min, 0.07);
+    nh.param("a_max", param.a_max, 0.5);
+    nh.param("d_max", param.d_max, 0.5);
     nh.param("kp_linear", param.kp_linear, 5.0);
     nh.param("kp_angular", param.kp_angular, 2.0/M_PI * param.w_nom);
     nh.param("arrive_radius",  param.arrive_radius, 0.05);
@@ -258,30 +264,64 @@ void NavigationController::setTheta() {
 void NavigationController::goToXY() {
 
     double position_error = getPositionError();
-    double yaw_error = getAlignYawError(); 
+    double yaw_error = getAlignYawError();
+    double dt = 1.0 / param.loop_rate_hz;
 
-    if(position_error <= param.arrive_radius) {
-
+    // Stop if the robot reached the goal position
+    if (position_error <= param.arrive_radius) {
         v_d = 0.0;
         w_d = 0.0;
-        
         return;
     }
 
-    // angular
+    // -----------------------
+    //     ANGULAR CONTROL
+    // -----------------------
     w_d = param.kp_angular * yaw_error;
+    if (w_d > param.w_nom) w_d = param.w_nom;
+    else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
-    if(w_d > param.w_nom) w_d = param.w_nom;
-    else if(w_d < -param.w_nom) w_d = -param.w_nom;
-
-    // linear
+    // -----------------------
+    //     LINEAR CONTROL
+    // -----------------------
     double v_mag = 0.0;
-    if(std::fabs(yaw_error) <= M_PI/6.0) v_mag = param.v_nom * std::cos(yaw_error) * std::min<double>(1.0, param.kp_linear * position_error);
-    if(std::fabs(yaw_error) <= 0.0) v_mag = param.v_nom * std::cos(yaw_error) * std::min<double>(1.0, param.kp_linear * position_error);
 
-    v_d = isBackwards() ? -v_mag : v_mag;
+    // Keep the original condition
+    if (std::fabs(yaw_error) <= M_PI / 6.0) {
+        v_mag = param.v_nom
+                * std::cos(yaw_error)
+                * std::min<double>(1.0, param.kp_linear * position_error);
+    }
 
+    // -----------------------
+    //   MINIMUM SPEED ON TARGET  
+    // -----------------------
+    double v_target = v_mag;
+
+    if (v_target > 0.0 && v_target < param.v_min)
+        v_target = param.v_min;
+
+    // -----------------------
+    //   APPLY ACCEL/DECEL LIMIT
+    // -----------------------
+    if (v_target > v_d) {
+        // Accelerate
+        v_d += param.a_max * dt;
+        if (v_d > v_target) v_d = v_target;
+    } else {
+        // Decelerate
+        v_d -= param.d_max * dt;
+        if (v_d < v_target) v_d = v_target;
+    }
+
+    // -----------------------
+    //   BACKWARDS SUPPORT
+    // -----------------------
+    if (isBackwards())
+        v_d = -v_d;
 }
+
+
 
 void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 

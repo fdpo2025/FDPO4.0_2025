@@ -1,8 +1,17 @@
 <launch>
 
   <arg name="conf_root" default="$(find conf)"/>
-  <arg name="world_file" default="$(find simulation_stage)/worlds/factory_floor.world"/>
   <arg name="map_file" default="$(find conf)/launch/hmi/maps/factory_map.yaml"/>
+
+  <!-- Choose simulation mode -->
+  <arg name="perfect_localization" default="false" 
+       doc="If true: Stage with GPS (perfect localization) + navigation controller only (no EKF/beacons). If false: Stage with odom + full navigation stack (EKF + beacons + controller)."/>
+  
+  <!-- Select world file based on mode -->
+  <arg name="world_file" default="$(find simulation_stage)/worlds/factory_floor.world" 
+       if="$(eval not arg('perfect_localization'))"/>
+  <arg name="world_file" default="$(find simulation_stage)/worlds/factory_floor_perfect.world" 
+       if="$(arg perfect_localization)"/>
 
   <arg name="use_conf_navigation" default="true"/>
   <arg name="use_conf_hmi"        default="true"/>
@@ -11,7 +20,11 @@
 
   <node pkg="stage_ros" type="stageros" name="stage" args="$(arg world_file)"/>
 
-  <include if="$(arg use_conf_navigation)" file="$(arg conf_root)/system/navigation.xml"/>
+  <!-- Navigation stack: full (with EKF/beacons) or controller only (perfect localization) -->
+  <include if="$(arg use_conf_navigation)" file="$(arg conf_root)/system/navigation.xml">
+    <arg name="use_ekf" value="$(eval not arg('perfect_localization'))"/>
+    <arg name="use_beacon_detector" value="$(eval not arg('perfect_localization'))"/>
+  </include>
 
   <include if="$(arg use_conf_hmi)" file="$(arg conf_root)/system/hmi.xml">
       <arg name="map_file" value="$(arg map_file)"/>
