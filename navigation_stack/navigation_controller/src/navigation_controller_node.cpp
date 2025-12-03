@@ -2,7 +2,7 @@
 #include <cmath>
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0), 
-navigationFsm(navigation::states::idle), tfBuffer(), tfListener(tfBuffer) {
+navigationFsm(navigation::states::idle), tfBuffer(), tfListener(tfBuffer), waypointReached(false) {
     
     mode = "idle";
 
@@ -332,18 +332,21 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     // Compute Transitions
     if(navigationFsm.state == navigation::states::idle && enable) {
 
+        waypointReached = false;  // Reset flag when starting new waypoint
         navigationFsm.new_state = navigation::states::driveToGoal;
 
     }
 
     else if(navigationFsm.state == navigation::states::driveToGoal && isPositionArrived() && route.front().align && enable) {
 
+        waypointReached = true;  // Mark waypoint as reached
         navigationFsm.new_state = navigation::states::turnToFinalYaw;
 
     }
 
     else if(navigationFsm.state == navigation::states::driveToGoal && isPositionArrived() && !route.front().align && enable) {
 
+        waypointReached = true;  // Mark waypoint as reached
         route.pop_front();
         updateDesiredPose();
         
@@ -356,8 +359,9 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     }
 
-    else if (navigationFsm.state == navigation::states::turnToFinalYaw && enable && !isPositionArrived()) {
+    else if (navigationFsm.state == navigation::states::turnToFinalYaw && enable && !waypointReached && !isPositionArrived()) {
 
+        // Only go back to driveToGoal if waypoint was never reached
         navigationFsm.new_state = navigation::states::driveToGoal;
 
     }
@@ -372,12 +376,14 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             poseDesired = poseCurr;
         }
         
+        waypointReached = false;  // Reset for next waypoint
         navigationFsm.new_state = navigation::states::done;
 
     }
 
     else if(navigationFsm.state == navigation::states::done && enable) {
 
+        waypointReached = false;  // Reset flag when starting new waypoint
         navigationFsm.new_state = navigation::states::driveToGoal;
 
     }
@@ -422,6 +428,7 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
             return true;
         }
 
+        waypointReached = false;  // Reset flag on start
         res.success = true;  res.message = "started";
         ROS_INFO("Navigation START");
         return true;
@@ -433,6 +440,7 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
         route.clear();
         navigationFsm.new_state = navigation::states::idle;
         poseDesired = poseCurr;
+        waypointReached = false;  // Reset flag on stop
         navigationFsm.set_state();
 
         res.success = true; res.message = "stopped+cleared";

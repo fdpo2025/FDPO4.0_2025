@@ -53,4 +53,3 @@ class NavigationControllerSS {
         void computeStateSpaceControl();
 
 };
-

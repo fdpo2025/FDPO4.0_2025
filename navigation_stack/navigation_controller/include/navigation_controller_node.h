@@ -58,6 +58,7 @@ class NavigationController {
         // both with respect to the map frame
         Pose poseCurr, poseDesired;
         double v_d, w_d;
+        bool waypointReached;  // Flag to lock waypoint completion
         
         struct Parameters {
 
