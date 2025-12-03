@@ -15,7 +15,6 @@
 // MAIN CLASS - NavigationControllerSS
 // ============================================================================
 // This class has only basic ROS infrastructure.
-// Colleague should implement state space control logic.
 // ============================================================================
 
 class NavigationControllerSS {

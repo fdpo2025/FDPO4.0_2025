@@ -347,6 +347,11 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         route.pop_front();
         updateDesiredPose();
         
+        // If route is now empty, lock current position to prevent corrections
+        if (route.empty()) {
+            poseDesired = poseCurr;
+        }
+        
         navigationFsm.new_state = navigation::states::done;
 
     }
@@ -362,6 +367,11 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         route.pop_front();
         updateDesiredPose();
         
+        // If route is now empty, lock current position to prevent corrections
+        if (route.empty()) {
+            poseDesired = poseCurr;
+        }
+        
         navigationFsm.new_state = navigation::states::done;
 
     }
@@ -374,6 +384,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     else if(navigationFsm.state == navigation::states::done && !enable) {
 
+        // Lock current position to prevent EKF-induced corrections
+        poseDesired = poseCurr;
         navigationFsm.new_state = navigation::states::idle;
 
     }
@@ -384,7 +396,13 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     // Compute Actions
     if(navigationFsm.state == navigation::states::driveToGoal) goToXY();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
-    else v_d = w_d = 0.0;
+    else {
+        v_d = w_d = 0.0;
+        // When idle or done, continuously update desired pose to current to prevent EKF corrections
+        if (route.empty()) {
+            poseDesired = poseCurr;
+        }
+    }
 
     // Affect outputs
     publishVel();
