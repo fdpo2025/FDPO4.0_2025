@@ -13,7 +13,7 @@
     <!-- State Space Controller -->
     <node if="$(arg ss)" pkg="navigation_controller" type="navigation_controller_ss_node" name="navigation_controller_node" output="screen">
         <rosparam file="$(find conf)/launch/navigation/navigation_controller/route.yaml" command="load"/>
-        <rosparam file="$(find conf)/launch/navigation/navigation_controller/navigation_parameters.yaml" command="load"/>
+        <rosparam file="$(find conf)/launch/navigation/navigation_controller/ss_controller_parameters.yaml" command="load"/>
         <param name="odom_topic" value="$(arg odom_topic)"/>
     </node>
     

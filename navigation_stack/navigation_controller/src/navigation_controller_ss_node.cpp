@@ -5,7 +5,8 @@
 // CONSTRUCTOR
 // ============================================================================
 NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_) 
-    : nh(nh_), curr_x(0.0), curr_y(0.0), curr_theta(0.0), v_d(0.0), w_d(0.0) {
+    : nh(nh_), curr_x(0.0), curr_y(0.0), curr_theta(0.0), v_d(0.0), w_d(0.0),
+      seg_idx(0), last_th(0.0) {
     
     // ========================================================================
     // SUBSCRIBE TO ODOMETRY TOPIC
@@ -16,10 +17,22 @@ NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_)
     ROS_INFO("NavigationControllerSS subscribing to: %s", odom_topic.c_str());
 
     // ========================================================================
+    // SUBSCRIBE TO RVIZ GOAL TOPIC
+    // ========================================================================
+    rvizGoalSub = nh.subscribe("/move_base_simple/goal", 10, 
+                                &NavigationControllerSS::rvizGoalCallback, this);
+    ROS_INFO("NavigationControllerSS subscribing to: /move_base_simple/goal");
+
+    // ========================================================================
     // PUBLISH TO VELOCITY TOPIC
     // ========================================================================
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
     ROS_INFO("NavigationControllerSS publishing to: /cmd_vel");
+
+    // ========================================================================
+    // LOAD CONTROLLER PARAMETERS
+    // ========================================================================
+    loadControllerParams();
 
     // ========================================================================
     // TIMER FOR CONTROL LOOP
@@ -28,6 +41,11 @@ NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_)
     nh.param("loop_rate_hz", loop_rate_hz, 30);
     controlTimer = nh.createTimer(ros::Duration(1.0 / loop_rate_hz), 
                                    &NavigationControllerSS::controlLoop, this);
+
+    // ========================================================================
+    // LOAD PATH FROM PARAMETERS
+    // ========================================================================
+    loadPathFromParameters();
 
     ROS_INFO("NavigationControllerSS initialized");
 }
@@ -39,6 +57,28 @@ void NavigationControllerSS::odomCallback(const nav_msgs::Odometry::ConstPtr& ms
     curr_x = msg->pose.pose.position.x;
     curr_y = msg->pose.pose.position.y;
     curr_theta = tf2::getYaw(msg->pose.pose.orientation);
+}
+
+// ============================================================================
+// RVIZ GOAL CALLBACK
+// ============================================================================
+void NavigationControllerSS::rvizGoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+    std::vector<Point> waypoints;
+    
+    // Se já existe um caminho, adiciona o novo goal ao final
+    if (!path.empty()) {
+        waypoints = path;
+    }
+    
+    // Adiciona o novo goal
+    Point goal;
+    goal.x = msg->pose.position.x;
+    goal.y = msg->pose.position.y;
+    waypoints.push_back(goal);
+    
+    ROS_INFO("RViz goal received: x=%.2f y=%.2f", goal.x, goal.y);
+    
+    updatePathFromWaypoints(waypoints);
 }
 
 // ============================================================================
@@ -65,10 +105,10 @@ void NavigationControllerSS::controlLoop(const ros::TimerEvent&) {
     velPub.publish(cmd);
 }
 
-// ----------------------------------
-// Funções auxiliares
-// ----------------------------------
-std::pair<double, double> normalize(double vx, double vy) {
+// ============================================================================
+// FUNÇÕES AUXILIARES
+// ============================================================================
+std::pair<double, double> NavigationControllerSS::normalize(double vx, double vy) const {
     double length = std::hypot(vx, vy);
     if (length == 0.0) {
         return {0.0, 0.0};
@@ -76,22 +116,21 @@ std::pair<double, double> normalize(double vx, double vy) {
     return {vx / length, vy / length};
 }
 
-std::vector<Point> smooth_path(const std::vector<Point>& path,
-                               double radius = 0.3,
-                               int corner_steps = 8)
-{
-    if (path.size() < 3) {
-        return path;
+std::vector<Point> NavigationControllerSS::smoothPath(const std::vector<Point>& path_in,
+                                                        double radius,
+                                                        int corner_steps) const {
+    if (path_in.size() < 3) {
+        return path_in;
     }
 
     std::vector<Point> new_path;
-    new_path.reserve(path.size() * corner_steps); // reserva aproximada
-    new_path.push_back(path[0]);
+    new_path.reserve(path_in.size() * corner_steps);
+    new_path.push_back(path_in[0]);
 
-    for (size_t i = 1; i + 1 < path.size(); ++i) {
-        Point p_prev = path[i - 1];
-        Point p_curr = path[i];
-        Point p_next = path[i + 1];
+    for (size_t i = 1; i + 1 < path_in.size(); ++i) {
+        Point p_prev = path_in[i - 1];
+        Point p_curr = path_in[i];
+        Point p_next = path_in[i + 1];
 
         double v1x = p_curr.x - p_prev.x;
         double v1y = p_curr.y - p_prev.y;
@@ -136,8 +175,83 @@ std::vector<Point> smooth_path(const std::vector<Point>& path,
         new_path.push_back(after);
     }
 
-    new_path.push_back(path.back());
+    new_path.push_back(path_in.back());
     return new_path;
+}
+
+// ============================================================================
+// LOAD CONTROLLER PARAMETERS
+// ============================================================================
+void NavigationControllerSS::loadControllerParams() {
+    // Valores padrão
+    params.kx = 1.0;
+    params.ky = 50.0;
+    params.kth = 5.0;
+    params.v_max = 0.4;
+    params.w_max = 3.0;
+    params.v_ref = 0.2;
+    params.end_dist_tol = 0.05;
+    params.smooth_radius = 0.3;
+    params.smooth_corner_steps = 8;
+    
+    // Carregar do ROS parameter server
+    nh.param("kx", params.kx, params.kx);
+    nh.param("ky", params.ky, params.ky);
+    nh.param("kth", params.kth, params.kth);
+    nh.param("v_max", params.v_max, params.v_max);
+    nh.param("w_max", params.w_max, params.w_max);
+    nh.param("v_ref", params.v_ref, params.v_ref);
+    nh.param("end_dist_tol", params.end_dist_tol, params.end_dist_tol);
+    nh.param("smooth_radius", params.smooth_radius, params.smooth_radius);
+    nh.param("smooth_corner_steps", params.smooth_corner_steps, params.smooth_corner_steps);
+    
+    ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f",
+             params.kx, params.ky, params.kth, params.v_max, params.w_max, params.v_ref, params.end_dist_tol);
+}
+
+// ============================================================================
+// LOAD PATH FROM PARAMETERS
+// ============================================================================
+void NavigationControllerSS::loadPathFromParameters() {
+    XmlRpc::XmlRpcValue waypoints;
+    if (!nh.getParam("waypoints", waypoints)) {
+        ROS_WARN("NavigationControllerSS: No waypoints parameter found. Waiting for RViz goal or waypoints parameter.");
+        return;
+    }
+
+    std::vector<Point> waypoint_list;
+    for (int i = 0; i < static_cast<int>(waypoints.size()); ++i) {
+        Point wp;
+        wp.x = static_cast<double>(waypoints[i]["x"]);
+        wp.y = static_cast<double>(waypoints[i]["y"]);
+        waypoint_list.push_back(wp);
+        ROS_INFO("NavigationControllerSS: Waypoint %d: x=%.2f y=%.2f", i, wp.x, wp.y);
+    }
+
+    updatePathFromWaypoints(waypoint_list);
+}
+
+// ============================================================================
+// UPDATE PATH FROM WAYPOINTS
+// ============================================================================
+void NavigationControllerSS::updatePathFromWaypoints(const std::vector<Point>& waypoints) {
+    if (waypoints.empty()) {
+        ROS_WARN("NavigationControllerSS: Empty waypoints list");
+        return;
+    }
+
+    // Atualiza o caminho base
+    path = waypoints;
+    
+    // Gera o caminho suavizado
+    smooth = smoothPath(path, params.smooth_radius, params.smooth_corner_steps);
+    
+    // Reinicia o índice do segmento
+    seg_idx = 0;
+    last_th = 0.0;
+    
+    ROS_INFO("NavigationControllerSS: Path updated with %zu waypoints, smoothed to %zu points", 
+             path.size(), smooth.size());
 }
 
 // ============================================================================
@@ -147,11 +261,17 @@ RefState NavigationControllerSS::computeRef(double x, double y, double theta,
                                             const std::vector<Point>& path_in,
                                             int seg_idx_in)
 {
+    // Acede aos parâmetros via membro da classe
+    double v_ref = params.v_ref;
+    
     int N = static_cast<int>(path_in.size());
 
     if (seg_idx_in >= N - 1) {
         Point last = path_in.back();
-        return { last.x, last.y, last_th, 0.0, 0.0, seg_idx_in };
+        // Usa o último theta conhecido ou calcula a partir da posição atual
+        double theta_final = (N >= 2) ? std::atan2(last.y - path_in[N-2].y, 
+                                                     last.x - path_in[N-2].x) : last_th;
+        return { last.x, last.y, theta_final, 0.0, 0.0, seg_idx_in };
     }
 
     Point A = path_in[seg_idx_in];
@@ -184,7 +304,7 @@ RefState NavigationControllerSS::computeRef(double x, double y, double theta,
     double yr = A.y + s * ABy;
     double theta_r = std::atan2(ABy, ABx);
 
-    return { xr, yr, theta_r, V_REF, 0.0, seg_idx_in };
+    return { xr, yr, theta_r, v_ref, 0.0, seg_idx_in };
 }
 
 
@@ -196,38 +316,33 @@ RefState NavigationControllerSS::computeRef(double x, double y, double theta,
 void NavigationControllerSS::computeStateSpaceControl() {
     
     // ========================================================================
-    // TODO: IMPLEMENT STATE SPACE CONTROL LOGIC
+    // VERIFICAR SE HÁ CAMINHO DISPONÍVEL
     // ========================================================================
-    // 
-    // AVAILABLE INPUTS:
-    // - curr_x, curr_y, curr_theta: Current robot pose
-    // 
-    // EXPECTED OUTPUTS:
-    // - v_d: Desired linear velocity (m/s)
-    // - w_d: Desired angular velocity (rad/s)
-    //
-    // Colleague should implement here the state space control logic.
-    // For example:
-    // - Define system state (x, y, theta, or others)
-    // - Calculate state error
-    // - Apply control law (e.g., u = -K * (x - x_d))
-    // - Convert to v_d and w_d
-    //
+    if (smooth.empty()) {
+        // Sem caminho → pára
+        v_d = 0.0;
+        w_d = 0.0;
+        return;
+    }
 
-    // 1) Verificar se já estamos no fim do caminho
+    // ========================================================================
+    // VERIFICAR SE JÁ ESTAMOS NO FIM DO CAMINHO
+    // ========================================================================
     const Point& goal = smooth.back();
     double dx_goal = goal.x - curr_x;
     double dy_goal = goal.y - curr_y;
     double dist_goal = std::hypot(dx_goal, dy_goal);
 
-    if (dist_goal < END_DIST_TOL && seg_idx >= static_cast<int>(smooth.size()) - 1) {
+    if (dist_goal < params.end_dist_tol && seg_idx >= static_cast<int>(smooth.size()) - 1) {
         // Dentro da tolerância → pára
         v_d = 0.0;
         w_d = 0.0;
         return;
     }
 
-    // 2) Calcula referência no caminho suavizado
+    // ========================================================================
+    // CALCULAR REFERÊNCIA NO CAMINHO SUAVIZADO
+    // ========================================================================
     RefState ref = computeRef(curr_x, curr_y, curr_theta, smooth, seg_idx);
 
     seg_idx = ref.seg_idx;
@@ -241,7 +356,9 @@ void NavigationControllerSS::computeStateSpaceControl() {
 
     double theta = curr_theta;
 
-    // 3) Erro no referencial do robô
+    // ========================================================================
+    // CALCULAR ERRO NO REFERENCIAL DO ROBÔ
+    // ========================================================================
     double dx = xr - curr_x;
     double dy = yr - curr_y;
 
@@ -252,17 +369,23 @@ void NavigationControllerSS::computeStateSpaceControl() {
     // Normalizar para [-pi, pi)
     e_theta = std::atan2(std::sin(e_theta), std::cos(e_theta));
 
-    // 4) Lei de controlo (igual ao código original)
-    double v = v_r * std::cos(e_theta) + KX * ex;
-    double w = w_r + KY * v_r * ey + KTH * std::sin(e_theta);
+    // ========================================================================
+    // APLICAR LEI DE CONTROLO DE ESPAÇO DE ESTADOS
+    // ========================================================================
+    double v = v_r * std::cos(e_theta) + params.kx * ex;
+    double w = w_r + params.ky * v_r * ey + params.kth * std::sin(e_theta);
 
-    // 5) Saturação
-    if (v >  V_MAX) v =  V_MAX;
-    if (v < -V_MAX) v = -V_MAX;
-    if (w >  W_MAX) w =  W_MAX;
-    if (w < -W_MAX) w = -W_MAX;
+    // ========================================================================
+    // SATURAÇÃO DE VELOCIDADES
+    // ========================================================================
+    if (v >  params.v_max) v =  params.v_max;
+    if (v < -params.v_max) v = -params.v_max;
+    if (w >  params.w_max) w =  params.w_max;
+    if (w < -params.w_max) w = -params.w_max;
 
-    // 6) Guardar como velocidades desejadas
+    // ========================================================================
+    // GUARDAR COMO VELOCIDADES DESEJADAS
+    // ========================================================================
     v_d = v;
     w_d = w;
 }
