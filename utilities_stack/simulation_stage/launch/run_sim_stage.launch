@@ -15,6 +15,8 @@
 
   <arg name="use_conf_navigation" default="true"/>
   <arg name="use_conf_hmi"        default="true"/>
+  <arg name="use_ss_controller"   default="false" doc="Use state space controller (true) or original controller (false)"/>
+  <arg name="use_raw_odom"         default="false" doc="Use raw odometry (/odom) instead of EKF filtered. Only works when use_ekf=false"/>
 
   <param name="/use_sim_time" value="true"/>
 
@@ -24,6 +26,8 @@
   <include if="$(arg use_conf_navigation)" file="$(arg conf_root)/system/navigation.xml">
     <arg name="use_ekf" value="$(eval not arg('perfect_localization'))"/>
     <arg name="use_beacon_detector" value="$(eval not arg('perfect_localization'))"/>
+    <arg name="use_ss_controller" value="$(arg use_ss_controller)"/>
+    <arg name="use_raw_odom" value="$(arg use_raw_odom)"/>
   </include>
 
   <include if="$(arg use_conf_hmi)" file="$(arg conf_root)/system/hmi.xml">
