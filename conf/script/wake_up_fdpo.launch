@@ -6,6 +6,7 @@
 	<arg name="lidar_driver" default="ydlidar" doc="Escolha o driver de LiDAR: 'hlds' ou 'ydlidar'"/>
 	<arg name="debug_pico_comm" default="false" doc="Mostrar logs de comunicação Pi4-Pico (pode poluir terminal)"/>
 	<arg name="use_ekf" default="true" doc="Usar EKF localizer com beacons (se false, map=odom, só odometria)"/>
+	<arg name="use_raw_odom" default="false" doc="Usar odometria pura (/odom) em vez de filtrada. Só funciona quando use_ekf=false"/>
 	<arg name="use_hal" default="true"/>
 	<arg name="use_navigation" default="true"/>
 	<arg name="use_hmi" default="true"/>
@@ -21,6 +22,7 @@
 	<include if="$(arg use_navigation)" file="$(find conf)/system/navigation.xml">
 		<arg name="lidar_driver" value="$(arg lidar_driver)"/>
 		<arg name="use_ekf" value="$(arg use_ekf)"/>
+		<arg name="use_raw_odom" value="$(arg use_raw_odom)"/>
 	</include>
     
 	<!-- HMI: Interface Humano-Máquina (Mapa, RViz, etc) -->
