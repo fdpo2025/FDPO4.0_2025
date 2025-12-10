@@ -1,6 +1,14 @@
 waypoints:
+  - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
   - { id: 0, x: -0.695, y: 0.355, yaw: 1.57, align: false, backwards: false}
+  - { id: 0, x: 0.0, y: 0.355, yaw: 1.57, align: false, backwards: false}
+  - { id: 0, x: 0.0, y: -0.355, yaw: 1.57, align: false, backwards: false}
+  - { id: 0, x: 0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
   - { id: 0, x: 0.695, y: 0.355, yaw: 1.57, align: false, backwards: false}
+  - { id: 0, x: 0.0, y: 0.355, yaw: 1.57, align: false, backwards: false}
+  - { id: 0, x: 0.0, y: -0.355, yaw: 1.57, align: false, backwards: false}
+  - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
+
 
 # # Ronda 1
 # waypoints:

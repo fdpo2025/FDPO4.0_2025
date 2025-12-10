@@ -119,9 +119,11 @@ std::pair<double, double> NavigationControllerSS::normalize(double vx, double vy
 std::vector<Point> NavigationControllerSS::smoothPath(const std::vector<Point>& path_in,
                                                         double radius,
                                                         int corner_steps) const {
-    if (path_in.size() < 3) {
+    if (path_in.size() < 2) {
         return path_in;
     }
+
+    ROS_WARN("ESTOU A USAR ESTE smoothPath!!!");
 
     std::vector<Point> new_path;
     new_path.reserve(path_in.size() * corner_steps);
@@ -146,7 +148,8 @@ std::vector<Point> NavigationControllerSS::smoothPath(const std::vector<Point>& 
 
         double dist1 = std::hypot(v1x, v1y);
         double dist2 = std::hypot(v2x, v2y);
-        double r = std::min({radius, dist1 * 0.5, dist2 * 0.5});
+        //double r = std::min({radius, dist1 * 2, dist2 * 2});
+        double r = radius;
 
         Point before{
             p_curr.x - d1x * r,
@@ -191,7 +194,7 @@ void NavigationControllerSS::loadControllerParams() {
     params.w_max = 3.0;
     params.v_ref = 0.2;
     params.end_dist_tol = 0.05;
-    params.smooth_radius = 0.3;
+    params.smooth_radius = 0.01;
     params.smooth_corner_steps = 8;
     
     // Carregar do ROS parameter server
@@ -245,6 +248,10 @@ void NavigationControllerSS::updatePathFromWaypoints(const std::vector<Point>& w
     
     // Gera o caminho suavizado
     smooth = smoothPath(path, params.smooth_radius, params.smooth_corner_steps);
+
+    ROS_INFO("smooth size = %zu, path size = %zu", smooth.size(), path.size());
+    ROS_WARN("OLAAAAAAAAAAAA");
+
     
     // Reinicia o índice do segmento
     seg_idx = 0;

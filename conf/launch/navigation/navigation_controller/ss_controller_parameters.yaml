@@ -3,7 +3,7 @@
 # Ganhos do controlador
 kx: 1.0          # Ganho de erro em x
 ky: 50.0         # Ganho de erro em y
-kth: 5.0         # Ganho de erro angular
+kth: 10.0         # Ganho de erro angular
 
 # Limites de velocidade
 v_max: 0.4       # Velocidade linear máxima (m/s)
@@ -15,5 +15,5 @@ end_dist_tol: 0.05   # Tolerância de chegada ao goal (m)
 
 # Parâmetros de suavização do caminho
 smooth_radius: 0.3    # Raio de suavização dos cantos (m)
-smooth_corner_steps: 8  # Número de pontos por canto suavizado
+smooth_corner_steps: 40  # Número de pontos por canto suavizado
 
