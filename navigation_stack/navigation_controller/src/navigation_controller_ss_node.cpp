@@ -247,7 +247,8 @@ void NavigationControllerSS::updatePathFromWaypoints(const std::vector<Point>& w
     path = waypoints;
     
     // Gera o caminho suavizado
-    smooth = smoothPath(path, params.smooth_radius, params.smooth_corner_steps);
+    //smooth = smoothPath(path, params.smooth_radius, params.smooth_corner_steps);
+    smooth = path;
 
     ROS_INFO("smooth size = %zu, path size = %zu", smooth.size(), path.size());
     ROS_WARN("OLAAAAAAAAAAAA");
