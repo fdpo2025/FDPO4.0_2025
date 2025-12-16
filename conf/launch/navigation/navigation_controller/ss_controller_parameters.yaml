@@ -1,6 +1,7 @@
 # Parâmetros do State Space Controller
 
 # Ganhos do controlador
+<<<<<<< HEAD
 kx: 1.0          # Ganho de erro em x
 ky: 50.0         # Ganho de erro em y
 kth: 5.0         # Ganho de erro angular
