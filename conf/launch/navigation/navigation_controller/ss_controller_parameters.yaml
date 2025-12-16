@@ -1,9 +1,9 @@
 # Parâmetros do State Space Controller
 
 # Ganhos do controlador
-kx: 1.0          # Ganho de erro em x
-ky: 50.0         # Ganho de erro em y
-kth: 10.0         # Ganho de erro angular
+kx: 10.0          # Ganho de erro em x
+ky: 30.0         # Ganho de erro em y
+kth: 20.0         # Ganho de erro angular
 
 # Limites de velocidade
 v_max: 0.4       # Velocidade linear máxima (m/s)
