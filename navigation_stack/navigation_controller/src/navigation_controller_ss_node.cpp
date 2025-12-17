@@ -384,7 +384,7 @@ void NavigationControllerSS::computeStateSpaceControl() {
     double v = v_r * std::cos(e_theta) + params.kx * ex;
     double w = w_r + params.ky * v_r * ey + params.kth * std::sin(e_theta);
 
-    double dt = 1.0 / param.loop_rate_hz;
+    double dt = 1.0 / loop_rate_hz;
 
     double a_max = 0.1;
     double d_max = 0.1;
