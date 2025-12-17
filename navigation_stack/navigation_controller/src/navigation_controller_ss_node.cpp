@@ -194,7 +194,7 @@ void NavigationControllerSS::loadControllerParams() {
     params.w_max = 3.0;
     params.v_ref = 0.2;
     params.end_dist_tol = 0.05;
-    params.smooth_radius = 0.1;
+    params.smooth_radius = 0.2;
     params.smooth_corner_steps = 8;
     
     // Carregar do ROS parameter server
