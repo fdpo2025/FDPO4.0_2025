@@ -92,6 +92,7 @@ class NavigationControllerSS {
         // Colleague can use these variables in control logic
         double curr_x, curr_y, curr_theta;  // Current robot pose
         double v_d, w_d;                    // Desired velocities (output)
+        int loop_rate_hz;                   // Control loop rate (Hz)
         
         // ====================================================================
         // PARÂMETROS DO CONTROLADOR

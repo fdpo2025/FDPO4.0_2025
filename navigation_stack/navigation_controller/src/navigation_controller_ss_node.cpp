@@ -6,7 +6,7 @@
 // ============================================================================
 NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_) 
     : nh(nh_), curr_x(0.0), curr_y(0.0), curr_theta(0.0), v_d(0.0), w_d(0.0),
-      seg_idx(0), last_th(0.0) {
+      seg_idx(0), last_th(0.0), loop_rate_hz(30) {
     
     // ========================================================================
     // SUBSCRIBE TO ODOMETRY TOPIC
@@ -37,7 +37,6 @@ NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_)
     // ========================================================================
     // TIMER FOR CONTROL LOOP
     // ========================================================================
-    int loop_rate_hz;
     nh.param("loop_rate_hz", loop_rate_hz, 30);
     controlTimer = nh.createTimer(ros::Duration(1.0 / loop_rate_hz), 
                                    &NavigationControllerSS::controlLoop, this);
