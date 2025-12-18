@@ -9,16 +9,20 @@
 #include <string>
 #include <fstream>
 #include <yaml-cpp/yaml.h>
-#include <ros/package.h>
+#include <cstdlib>
 #include <sstream>
 #include <iomanip>
 
 class MeasurementCollector {
 public:
     MeasurementCollector() : nh_(), collecting_(false), current_iteration_(0) {
-        // Obter caminho para guardar ficheiros YAML
-        std::string package_path = ros::package::getPath("lidar_calibration");
-        yaml_dir_ = package_path + "/data";
+        // Obter caminho para guardar ficheiros YAML (usar ~/.ros/lidar_calibration/data)
+        const char* home = std::getenv("HOME");
+        if (home) {
+            yaml_dir_ = std::string(home) + "/.ros/lidar_calibration/data";
+        } else {
+            yaml_dir_ = "/tmp/lidar_calibration/data";
+        }
         
         // Criar diretório se não existir
         std::string mkdir_cmd = "mkdir -p " + yaml_dir_;

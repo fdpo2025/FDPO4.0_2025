@@ -42,11 +42,13 @@ include_directories(${catkin_INCLUDE_DIRS})
 # Nó de recolha
 add_executable(measurement_collector_node src/measurement_collector_node.cpp)
 target_link_libraries(measurement_collector_node ${catkin_LIBRARIES} yaml-cpp)
+target_include_directories(measurement_collector_node PRIVATE ${catkin_INCLUDE_DIRS})
 add_dependencies(measurement_collector_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 
 # Nó de cálculo de estatísticas
 add_executable(statistics_calculator_node src/statistics_calculator_node.cpp)
 target_link_libraries(statistics_calculator_node ${catkin_LIBRARIES} yaml-cpp)
+target_include_directories(statistics_calculator_node PRIVATE ${catkin_INCLUDE_DIRS})
 add_dependencies(statistics_calculator_node ${catkin_EXPORTED_TARGETS} ${PROJECT_NAME}_gencpp)
 
 

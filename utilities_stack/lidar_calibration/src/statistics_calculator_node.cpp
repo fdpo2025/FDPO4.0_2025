@@ -2,7 +2,7 @@
 #include <std_srvs/Empty.h>
 #include <lidar_calibration/GetStatistics.h>
 #include <yaml-cpp/yaml.h>
-#include <ros/package.h>
+#include <cstdlib>
 #include <cmath>
 #include <vector>
 #include <map>
@@ -11,9 +11,13 @@
 class StatisticsCalculator {
 public:
     StatisticsCalculator() : nh_() {
-        // Obter caminho do ficheiro YAML
-        std::string package_path = ros::package::getPath("lidar_calibration");
-        yaml_file_ = package_path + "/data/measurements.yaml";
+        // Obter caminho do ficheiro YAML (usar ~/.ros/lidar_calibration/data)
+        const char* home = std::getenv("HOME");
+        if (home) {
+            yaml_file_ = std::string(home) + "/.ros/lidar_calibration/data/measurements.yaml";
+        } else {
+            yaml_file_ = "/tmp/lidar_calibration/data/measurements.yaml";
+        }
         
         // Serviço para calcular estatísticas
         get_stats_service_ = nh_.advertiseService("calculate_statistics", 
