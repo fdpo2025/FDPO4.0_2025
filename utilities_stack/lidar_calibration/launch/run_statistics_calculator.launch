@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<launch>
+  <node pkg="lidar_calibration" type="statistics_calculator_node" name="statistics_calculator_node" output="screen">
+  </node>
+</launch>
+

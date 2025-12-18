@@ -1,0 +1,6 @@
+# Serviço para controlar a recolha de medições
+# Request vazio (usa-se apenas para iniciar/parar)
+---
+bool success
+string message
+

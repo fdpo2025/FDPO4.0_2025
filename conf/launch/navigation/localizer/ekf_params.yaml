@@ -14,7 +14,8 @@ ekf_params:
     position_y: 0.5      # Initial covariance for Y position (m²)  
     orientation: 0.5     # Initial covariance for orientation (rad²)
   
-  # Process covariance matrix Q (model noise)
-    position_x: 0.0005   # Process covariance for X position (m²)
-    position_y: 0.0005   # Process covariance for Y position (m²)
+  # Process covariance matrix Q (model noise for [v, w] inputs)
+  process_covariance:
+    velocity_linear: 0.0005   # Process covariance for linear velocity (m²/s²)
+    velocity_angular: 0.0005  # Process covariance for angular velocity (rad²/s²)
 
