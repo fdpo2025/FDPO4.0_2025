@@ -1,5 +1,5 @@
 waypoints:
-  - { id: 0, x: -0.6695, y: -0.355, yaw: 1.57, align: false, backwards: false}
+  - { id: 0, x: -0.6695, y: -0.200, yaw: 1.57, align: false, backwards: false}
   - { id: 0, x: -0.695, y: 0.280, yaw: 1.57, align: false, backwards: false}
   - { id: 0, x: 0.0, y: 0.280, yaw: 1.57, align: false, backwards: false}
   - { id: 0, x: 0.0, y: -0.355, yaw: 1.57, align: false, backwards: false}
