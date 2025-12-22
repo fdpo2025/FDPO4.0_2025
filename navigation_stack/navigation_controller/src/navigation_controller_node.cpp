@@ -79,6 +79,7 @@ void NavigationController::loadNavigationParams() {
     nh.param("w_nom", param.w_nom, 1.2);
     nh.param("w_min", param.w_min, 0.1);
     nh.param("v_min", param.v_min, 0.07);
+    nh.param("v_max", param.v_max, 0.5);  // Limite máximo de velocidade (m/s)
     nh.param("a_max", param.a_max, 0.5);
     nh.param("d_max", param.d_max, 0.5);
     nh.param("kp_linear", param.kp_linear, 5.0);
@@ -315,6 +316,12 @@ void NavigationController::goToXY() {
         v_target = param.v_min;
 
     // -----------------------
+    //   APPLY MAXIMUM SPEED LIMIT
+    // -----------------------
+    if (v_target > param.v_max)
+        v_target = param.v_max;
+
+    // -----------------------
     //   APPLY ACCEL/DECEL LIMIT
     // -----------------------
     if (v_target > v_d) {
@@ -326,6 +333,14 @@ void NavigationController::goToXY() {
         v_d -= param.d_max * dt;
         if (v_d < v_target) v_d = v_target;
     }
+
+    // -----------------------
+    //   ENSURE MAXIMUM SPEED LIMIT (after accel/decel)
+    // -----------------------
+    if (v_d > param.v_max)
+        v_d = param.v_max;
+    if (v_d < -param.v_max)
+        v_d = -param.v_max;
 
     // -----------------------
     //   BACKWARDS SUPPORT

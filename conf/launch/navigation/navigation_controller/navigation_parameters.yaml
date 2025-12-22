@@ -1,6 +1,7 @@
 loop_rate_hz: 100  # Frequência alta para evitar soluços no Pico
 
 v_nom: 0.4
+v_max: 0.5               # Velocidade linear máxima (m/s) - limite absoluto
 w_nom: 1.0
 w_min: 0.0 
 v_min: 0.05             
