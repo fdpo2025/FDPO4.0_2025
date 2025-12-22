@@ -94,21 +94,31 @@ private:
                 
                 if (all_r.empty() || all_r.size() != all_theta.size()) continue;
                 
-                // 1. Calcular MÉDIA de r e theta
-                double mean_r = 0.0, mean_theta = 0.0;
+                // 1. Calcular MÉDIA de r (aritmética simples)
+                double mean_r = 0.0;
                 for (size_t i = 0; i < all_r.size(); ++i) {
                     mean_r += all_r[i];
-                    mean_theta += all_theta[i];
                 }
                 mean_r /= all_r.size();
-                mean_theta /= all_theta.size();
-                mean_theta = normalizeAngle(mean_theta);
+                
+                // 1b. Calcular MÉDIA CIRCULAR de theta (corrige wraparound)
+                // Converter ângulos para (cos, sin), calcular média, converter de volta
+                double sum_cos = 0.0, sum_sin = 0.0;
+                for (size_t i = 0; i < all_theta.size(); ++i) {
+                    sum_cos += std::cos(all_theta[i]);
+                    sum_sin += std::sin(all_theta[i]);
+                }
+                double mean_cos = sum_cos / all_theta.size();
+                double mean_sin = sum_sin / all_theta.size();
+                double mean_theta = std::atan2(mean_sin, mean_cos);
                 
                 // 2. Calcular RESÍDUOS (cada medição - média)
                 std::vector<double> residuals_r, residuals_theta;
                 for (size_t i = 0; i < all_r.size(); ++i) {
                     residuals_r.push_back(all_r[i] - mean_r);
-                    residuals_theta.push_back(normalizeAngle(all_theta[i] - mean_theta));
+                    // Para ângulos: diferença angular normalizada
+                    double diff = normalizeAngle(all_theta[i] - mean_theta);
+                    residuals_theta.push_back(diff);
                 }
                 
                 // 3. Calcular VARIÂNCIA a partir do somatório dos resíduos
