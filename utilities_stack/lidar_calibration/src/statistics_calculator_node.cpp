@@ -51,104 +51,129 @@ private:
                 return true;
             }
             
-            // Estrutura: [beacon_name] -> todas as medições de todas as iterações
-            std::map<std::string, std::vector<double>> all_r_by_beacon;
-            std::map<std::string, std::vector<double>> all_theta_by_beacon;
+            // Estrutura: [beacon_name] -> estatísticas locais por iteração
+            struct LocalStats {
+                double var_r;
+                double var_theta;
+                size_t N;
+            };
+            std::map<std::string, std::vector<LocalStats>> stats_by_beacon;
             
-            // Agregar todas as medições de todas as iterações
+            // PASSO 1: Calcular estatísticas POR ITERAÇÃO (robô parado)
             for (const auto& iteration : root["iterations"]) {
                 if (!iteration["beacons"]) continue;
                 
                 for (const auto& beacon_node : iteration["beacons"]) {
                     std::string beacon_name = beacon_node.first.as<std::string>();
                     
-                    if (beacon_node.second["r"] && beacon_node.second["theta"]) {
-                        std::vector<double> r_vals = beacon_node.second["r"].as<std::vector<double>>();
-                        std::vector<double> theta_vals = beacon_node.second["theta"].as<std::vector<double>>();
-                        
-                        // Adicionar às listas agregadas
-                        for (double r : r_vals) {
-                            all_r_by_beacon[beacon_name].push_back(r);
-                        }
-                        for (double theta : theta_vals) {
-                            all_theta_by_beacon[beacon_name].push_back(theta);
-                        }
+                    if (!beacon_node.second["r"] || !beacon_node.second["theta"]) continue;
+                    
+                    std::vector<double> r_vals = beacon_node.second["r"].as<std::vector<double>>();
+                    std::vector<double> theta_vals = beacon_node.second["theta"].as<std::vector<double>>();
+                    
+                    if (r_vals.empty() || r_vals.size() != theta_vals.size() || r_vals.size() < 2) continue;
+                    
+                    // Calcular MÉDIA LOCAL (desta iteração)
+                    double mean_r_j = 0.0;
+                    for (double r : r_vals) {
+                        mean_r_j += r;
                     }
+                    mean_r_j /= r_vals.size();
+                    
+                    // Média circular de theta
+                    double sum_cos = 0.0, sum_sin = 0.0;
+                    for (double theta : theta_vals) {
+                        sum_cos += std::cos(theta);
+                        sum_sin += std::sin(theta);
+                    }
+                    double mean_cos = sum_cos / theta_vals.size();
+                    double mean_sin = sum_sin / theta_vals.size();
+                    double mean_theta_j = std::atan2(mean_sin, mean_cos);
+                    
+                    // Calcular RESÍDUOS LOCAIS e VARIÂNCIA LOCAL
+                    double var_r_j = 0.0, var_theta_j = 0.0;
+                    for (size_t i = 0; i < r_vals.size(); ++i) {
+                        double res_r = r_vals[i] - mean_r_j;
+                        var_r_j += res_r * res_r;
+                        
+                        double res_theta = normalizeAngle(theta_vals[i] - mean_theta_j);
+                        var_theta_j += res_theta * res_theta;
+                    }
+                    
+                    // Correção de Bessel: dividir por (N-1) para estimativa não enviesada
+                    size_t N_j = r_vals.size();
+                    if (N_j > 1) {
+                        var_r_j /= (N_j - 1);
+                        var_theta_j /= (N_j - 1);
+                    } else {
+                        var_r_j = 0.0;
+                        var_theta_j = 0.0;
+                    }
+                    
+                    // Guardar estatísticas locais desta iteração
+                    LocalStats local;
+                    local.var_r = var_r_j;
+                    local.var_theta = var_theta_j;
+                    local.N = N_j;
+                    stats_by_beacon[beacon_name].push_back(local);
                 }
             }
             
-            if (all_r_by_beacon.empty()) {
+            if (stats_by_beacon.empty()) {
                 res.success = false;
                 res.message = "No measurements found in YAML file";
                 return true;
             }
             
             res.success = true;
-            res.message = "Statistics computed successfully";
+            res.message = "Statistics computed successfully (per-iteration method)";
             
-            // Para cada beacon, calcular estatísticas
-            for (const auto& beacon_pair : all_r_by_beacon) {
+            // PASSO 2: Combinar variâncias das iterações (média ponderada)
+            // σ² = Σ[(N_j - 1) * σ²_j] / Σ(N_j - 1)
+            for (const auto& beacon_pair : stats_by_beacon) {
                 const std::string& beacon_name = beacon_pair.first;
-                const std::vector<double>& all_r = beacon_pair.second;
-                const std::vector<double>& all_theta = all_theta_by_beacon[beacon_name];
+                const std::vector<LocalStats>& local_stats = beacon_pair.second;
                 
-                if (all_r.empty() || all_r.size() != all_theta.size()) continue;
+                if (local_stats.empty()) continue;
                 
-                // 1. Calcular MÉDIA de r (aritmética simples)
-                double mean_r = 0.0;
-                for (size_t i = 0; i < all_r.size(); ++i) {
-                    mean_r += all_r[i];
-                }
-                mean_r /= all_r.size();
+                // Calcular variância combinada (média ponderada)
+                double sum_weighted_var_r = 0.0;
+                double sum_weighted_var_theta = 0.0;
+                double sum_weights = 0.0;
+                size_t total_samples = 0;
                 
-                // 1b. Calcular MÉDIA CIRCULAR de theta (corrige wraparound)
-                // Converter ângulos para (cos, sin), calcular média, converter de volta
-                double sum_cos = 0.0, sum_sin = 0.0;
-                for (size_t i = 0; i < all_theta.size(); ++i) {
-                    sum_cos += std::cos(all_theta[i]);
-                    sum_sin += std::sin(all_theta[i]);
-                }
-                double mean_cos = sum_cos / all_theta.size();
-                double mean_sin = sum_sin / all_theta.size();
-                double mean_theta = std::atan2(mean_sin, mean_cos);
-                
-                // 2. Calcular RESÍDUOS (cada medição - média)
-                std::vector<double> residuals_r, residuals_theta;
-                for (size_t i = 0; i < all_r.size(); ++i) {
-                    residuals_r.push_back(all_r[i] - mean_r);
-                    // Para ângulos: diferença angular normalizada
-                    double diff = normalizeAngle(all_theta[i] - mean_theta);
-                    residuals_theta.push_back(diff);
+                for (const auto& local : local_stats) {
+                    if (local.N > 1) {
+                        double weight = local.N - 1;  // Peso = (N_j - 1)
+                        sum_weighted_var_r += weight * local.var_r;
+                        sum_weighted_var_theta += weight * local.var_theta;
+                        sum_weights += weight;
+                    }
+                    total_samples += local.N;
                 }
                 
-                // 3. Calcular VARIÂNCIA a partir do somatório dos resíduos
-                // Var = (1/N) * Σ(residual²)
                 double var_r = 0.0, var_theta = 0.0;
-                for (size_t i = 0; i < residuals_r.size(); ++i) {
-                    var_r += residuals_r[i] * residuals_r[i];
-                    var_theta += residuals_theta[i] * residuals_theta[i];
+                if (sum_weights > 0) {
+                    var_r = sum_weighted_var_r / sum_weights;
+                    var_theta = sum_weighted_var_theta / sum_weights;
                 }
-                var_r /= residuals_r.size();
-                var_theta /= residuals_theta.size();
                 
                 // Guardar resultados
                 res.beacon_names.push_back(beacon_name);
-                res.mean_r.push_back(mean_r);
-                res.mean_theta.push_back(mean_theta);
+                res.mean_r.push_back(0.0);  // Média global não é relevante para Cov(v)
+                res.mean_theta.push_back(0.0);  // Média global não é relevante para Cov(v)
                 res.var_r.push_back(var_r);
                 res.var_theta.push_back(var_theta);
-                res.num_samples.push_back((int)all_r.size());
+                res.num_samples.push_back((int)total_samples);
                 
                 ROS_INFO("[StatisticsCalculator] Beacon '%s':", beacon_name.c_str());
-                ROS_INFO("  Mean r: %.6f m", mean_r);
-                ROS_INFO("  Mean theta: %.6f rad (%.2f deg)", mean_theta, mean_theta * 180.0 / M_PI);
-                ROS_INFO("  Variance r: %.9f m²", var_r);
-                ROS_INFO("  Variance theta: %.9f rad² (%.6f deg²)", 
+                ROS_INFO("  Variance r (sensor noise): %.9f m²", var_r);
+                ROS_INFO("  Variance theta (sensor noise): %.9f rad² (%.6f deg²)", 
                          var_theta, var_theta * (180.0 / M_PI) * (180.0 / M_PI));
                 ROS_INFO("  Std dev r: %.6f m", std::sqrt(var_r));
                 ROS_INFO("  Std dev theta: %.6f rad (%.2f deg)", 
                          std::sqrt(var_theta), std::sqrt(var_theta) * 180.0 / M_PI);
-                ROS_INFO("  Samples: %zu", all_r.size());
+                ROS_INFO("  Total samples: %zu (from %zu iterations)", total_samples, local_stats.size());
             }
             
             return true;
