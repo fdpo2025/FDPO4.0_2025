@@ -6,14 +6,14 @@ ky: 50.0         # Ganho de erro em y
 kth: 5.0         # Ganho de erro angular
 
 # Limites de velocidade
-v_max: 0.4       # Velocidade linear máxima (m/s)
+v_max: 0.3       # Velocidade linear máxima (m/s)
 w_max: 1.0       # Velocidade angular máxima (rad/s)
 v_ref: 0.2       # Velocidade de referência (m/s)
 
 # Tolerâncias
-end_dist_tol: 0.05   # Tolerância de chegada ao goal (m)
+end_dist_tol: 0.03   # Tolerância de chegada ao goal (m)
 
 # Parâmetros de suavização do caminho
-smooth_radius: 0.3    # Raio de suavização dos cantos (m)
+smooth_radius: 0.2    # Raio de suavização dos cantos (m)
 smooth_corner_steps: 40  # Número de pontos por canto suavizado
 
