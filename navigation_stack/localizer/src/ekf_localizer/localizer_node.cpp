@@ -181,11 +181,10 @@ void LocalizerNode::ekf_update(const localizer::BeaconMatch::ConstPtr& msg) {
         Z_estimated(0) = dist_estimated;
         Z_estimated(1) = theta_estimated;
 
-        // Measured Covariance
-        // double sigma_r  = 0.005;  
-        // double sigma_th = 1.5;
-        double sigma_r  = 0.03 + 0.02 * dist_estimated;  
-        double sigma_th = 1.5 * M_PI/180.0;
+        // Measured Covariance (calibrated from LiDAR measurements)
+        // Values from calibration: sigma_r = 0.008024 m, sigma_theta = 0.051428 rad
+        double sigma_r  = 0.008024;  // Calibrated: 0.008024 m
+        double sigma_th = 0.051428;  // Calibrated: 0.051428 rad (2.95 degrees)
 
         R(0,0) = sigma_r * sigma_r; R(0,1) = R(1,0) = 0; R(1,1) = sigma_th * sigma_th;
 
