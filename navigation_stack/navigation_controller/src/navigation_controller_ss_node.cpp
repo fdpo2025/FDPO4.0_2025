@@ -7,7 +7,7 @@
 NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_) 
     : nh(nh_), curr_x(0.0), curr_y(0.0), curr_theta(0.0), v_d(0.0), w_d(0.0),
       seg_idx(0), last_th(0.0), loop_rate_hz(30),
-      navigationFsm(navigation_ss::states::idle), mode("idle") {
+      navigationFsm(navigation_ss::states::idle), mode("stop") {
     
     // ========================================================================
     // SUBSCRIBE TO ODOMETRY TOPIC
@@ -49,11 +49,26 @@ NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_)
     ROS_INFO("NavigationControllerSS: Service 'control_ss' advertised");
 
     // ========================================================================
-    // LOAD PATH FROM PARAMETERS
+    // NÃO CARREGAR WAYPOINTS NO CONSTRUTOR - só quando start for chamado
+    // Garantir que começa parado
     // ========================================================================
-    loadPathFromParameters();
+    // loadPathFromParameters();  // Removido - só carrega quando start é chamado
 
-    ROS_INFO("NavigationControllerSS initialized");
+    // Garantir velocidades zero no início
+    v_d = 0.0;
+    w_d = 0.0;
+    
+    // Publicar zeros uma vez para garantir que o robô está parado
+    geometry_msgs::Twist cmd;
+    cmd.linear.x = 0.0;
+    cmd.linear.y = 0.0;
+    cmd.linear.z = 0.0;
+    cmd.angular.x = 0.0;
+    cmd.angular.y = 0.0;
+    cmd.angular.z = 0.0;
+    velPub.publish(cmd);
+
+    ROS_INFO("NavigationControllerSS initialized - starting in STOPPED state");
 }
 
 // ============================================================================
@@ -82,9 +97,12 @@ void NavigationControllerSS::rvizGoalCallback(const geometry_msgs::PoseStamped::
     goal.y = msg->pose.position.y;
     waypoints.push_back(goal);
     
-    ROS_INFO("RViz goal received: x=%.2f y=%.2f", goal.x, goal.y);
+    ROS_INFO("RViz goal received: x=%.2f y=%.2f (mode: %s)", goal.x, goal.y, mode.c_str());
     
     updatePathFromWaypoints(waypoints);
+    
+    // NOTA: Não inicia navegação automaticamente - precisa chamar serviço "start"
+    // Isso garante que o robô só começa quando explicitamente solicitado
 }
 
 // ============================================================================
