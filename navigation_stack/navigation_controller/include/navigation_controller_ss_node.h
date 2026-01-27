@@ -40,6 +40,8 @@ struct SSControllerParams {
     double v_ref;
     double end_dist_tol;
     double yaw_tol;         // Tolerância de yaw para alinhamento final
+    double a_max;           // Aceleração máxima (m/s²)
+    double d_max;           // Desaceleração máxima (m/s²)
     double smooth_radius;
     int smooth_corner_steps;
 };

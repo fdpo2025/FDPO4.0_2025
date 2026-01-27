@@ -231,6 +231,8 @@ void NavigationControllerSS::loadControllerParams() {
     params.v_ref = 0.2;
     params.end_dist_tol = 0.05;
     params.yaw_tol = 0.08;  // Tolerância de yaw (rad)
+    params.a_max = 0.5;     // Aceleração máxima (m/s²) - padrão igual ao navigation_controller
+    params.d_max = 0.5;     // Desaceleração máxima (m/s²) - padrão igual ao navigation_controller
     params.smooth_radius = 0.01;
     params.smooth_corner_steps = 8;
     
@@ -243,11 +245,14 @@ void NavigationControllerSS::loadControllerParams() {
     nh.param("v_ref", params.v_ref, params.v_ref);
     nh.param("end_dist_tol", params.end_dist_tol, params.end_dist_tol);
     nh.param("yaw_tol", params.yaw_tol, params.yaw_tol);
+    nh.param("a_max", params.a_max, params.a_max);
+    nh.param("d_max", params.d_max, params.d_max);
     nh.param("smooth_radius", params.smooth_radius, params.smooth_radius);
     nh.param("smooth_corner_steps", params.smooth_corner_steps, params.smooth_corner_steps);
     
-    ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f, yaw_tol=%.3f",
-             params.kx, params.ky, params.kth, params.v_max, params.w_max, params.v_ref, params.end_dist_tol, params.yaw_tol);
+    ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f, yaw_tol=%.3f, a_max=%.2f, d_max=%.2f",
+              params.kx, params.ky, params.kth, params.v_max, params.w_max, params.v_ref, 
+              params.end_dist_tol, params.yaw_tol, params.a_max, params.d_max);
 }
 
 // ============================================================================
@@ -419,37 +424,41 @@ void NavigationControllerSS::computeStateSpaceControl() {
     // ========================================================================
     // APLICAR LEI DE CONTROLO DE ESPAÇO DE ESTADOS
     // ========================================================================
-    double v = v_r * std::cos(e_theta) + params.kx * ex;
-    double w = w_r + params.ky * v_r * ey + params.kth * std::sin(e_theta);
+    double v_target = v_r * std::cos(e_theta) + params.kx * ex;
+    double w_target = w_r + params.ky * v_r * ey + params.kth * std::sin(e_theta);
 
+    // ========================================================================
+    // SATURAÇÃO DE VELOCIDADES (limites máximos)
+    // ========================================================================
+    if (v_target >  params.v_max) v_target =  params.v_max;
+    if (v_target < -params.v_max) v_target = -params.v_max;
+    if (w_target >  params.w_max) w_target =  params.w_max;
+    if (w_target < -params.w_max) w_target = -params.w_max;
+
+    // ========================================================================
+    // APLICAR LIMITAÇÃO DE ACELERAÇÃO/DESACELERAÇÃO (igual ao navigation_controller)
+    // ========================================================================
     double dt = 1.0 / loop_rate_hz;
 
-    double a_max = 0.1;
-    double d_max = 0.1;
-
-    if (v > v_d) {
+    // Aceleração/Desaceleração linear
+    if (v_target > v_d) {
         // Accelerate
-        v_d += a_max * dt;
-        if (v_d > v) v_d = v;
+        v_d += params.a_max * dt;
+        if (v_d > v_target) v_d = v_target;
     } else {
         // Decelerate
-        v_d -= d_max * dt;
-        if (v_d < v) v_d = v;
+        v_d -= params.d_max * dt;
+        if (v_d < v_target) v_d = v_target;
     }
 
-    // ========================================================================
-    // SATURAÇÃO DE VELOCIDADES
-    // ========================================================================
-    if (v >  params.v_max) v =  params.v_max;
-    if (v < -params.v_max) v = -params.v_max;
-    if (w >  params.w_max) w =  params.w_max;
-    if (w < -params.w_max) w = -params.w_max;
+    // Garantir limites máximos após aceleração/desaceleração
+    if (v_d >  params.v_max) v_d =  params.v_max;
+    if (v_d < -params.v_max) v_d = -params.v_max;
 
     // ========================================================================
-    // GUARDAR COMO VELOCIDADES DESEJADAS
+    // VELOCIDADE ANGULAR (aplicar diretamente, sem limitação de aceleração angular)
     // ========================================================================
-    v_d = v;
-    w_d = w;
+    w_d = w_target;
 }
 
 // ============================================================================

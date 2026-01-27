@@ -10,6 +10,10 @@ v_max: 0.3       # Velocidade linear máxima (m/s)
 w_max: 1.0       # Velocidade angular máxima (rad/s)
 v_ref: 0.2       # Velocidade de referência (m/s)
 
+# Limites de aceleração
+a_max: 0.5       # Aceleração máxima (m/s²)
+d_max: 0.5       # Desaceleração máxima (m/s²)
+
 # Tolerâncias
 end_dist_tol: 0.03   # Tolerância de chegada ao goal (m)
 
