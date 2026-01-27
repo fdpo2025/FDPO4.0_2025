@@ -12,11 +12,14 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <tf2/utils.h>
 #include <XmlRpcValue.h>
+#include <navigation_controller/NavigationControl.h>
+#include "fsm.h"
 
 #include <vector>
 #include <utility>
 #include <cmath>
 #include <algorithm>
+#include <string>
 
 // ============================================================================
 // MAIN CLASS - NavigationControllerSS
@@ -36,6 +39,7 @@ struct SSControllerParams {
     double w_max;
     double v_ref;
     double end_dist_tol;
+    double yaw_tol;         // Tolerância de yaw para alinhamento final
     double smooth_radius;
     int smooth_corner_steps;
 };
@@ -78,13 +82,13 @@ class NavigationControllerSS {
         ros::Subscriber rvizGoalSub;
         ros::Publisher velPub;
         ros::Timer controlTimer;
+        ros::ServiceServer controlSrv;
 
         // ====================================================================
         // CALLBACKS ROS
         // ====================================================================
         void odomCallback(const nav_msgs::Odometry::ConstPtr& msg);
         void rvizGoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
-        void controlLoop(const ros::TimerEvent&);
 
         // ====================================================================
         // DATA AVAILABLE FOR CONTROLLER
@@ -93,6 +97,12 @@ class NavigationControllerSS {
         double curr_x, curr_y, curr_theta;  // Current robot pose
         double v_d, w_d;                    // Desired velocities (output)
         int loop_rate_hz;                   // Control loop rate (Hz)
+        
+        // ====================================================================
+        // FSM AND CONTROL MODE
+        // ====================================================================
+        Fsm navigationFsm;
+        std::string mode;  // "idle" | "start" | "pause" | "stop"
         
         // ====================================================================
         // PARÂMETROS DO CONTROLADOR
@@ -125,6 +135,42 @@ class NavigationControllerSS {
                             const std::vector<Point>& path,
                             int seg_idx);
         void computeStateSpaceControl();
+        
+        // ====================================================================
+        // FSM LOGIC
+        // ====================================================================
+        void navigationFsmRunner(const ros::TimerEvent&);
+        void driveToGoal();
+        void turnToFinalYaw();
+        
+        // ====================================================================
+        // HELPER FUNCTIONS FOR FSM
+        // ====================================================================
+        double normalizeAngle(double theta);
+        bool isPositionArrived();
+        bool isYawDesired();
+        double getPositionError();
+        double getDesiredYawError();
+        
+        // ====================================================================
+        // SERVICE CALLBACK
+        // ====================================================================
+        bool controlSrvCb(navigation_controller::NavigationControl::Request& req,
+                         navigation_controller::NavigationControl::Response& res);
 
 };
+
+// ============================================================================
+// NAMESPACE FOR FSM STATES
+// ============================================================================
+namespace navigation_ss {
+    namespace states {
+        enum {
+            idle = 0,
+            driveToGoal,
+            turnToFinalYaw,
+            done
+        };
+    }
+}
 

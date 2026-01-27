@@ -6,7 +6,8 @@
 // ============================================================================
 NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_) 
     : nh(nh_), curr_x(0.0), curr_y(0.0), curr_theta(0.0), v_d(0.0), w_d(0.0),
-      seg_idx(0), last_th(0.0), loop_rate_hz(30) {
+      seg_idx(0), last_th(0.0), loop_rate_hz(30),
+      navigationFsm(navigation_ss::states::idle), mode("idle") {
     
     // ========================================================================
     // SUBSCRIBE TO ODOMETRY TOPIC
@@ -35,11 +36,17 @@ NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_)
     loadControllerParams();
 
     // ========================================================================
-    // TIMER FOR CONTROL LOOP
+    // TIMER FOR CONTROL LOOP (FSM RUNNER)
     // ========================================================================
     nh.param("loop_rate_hz", loop_rate_hz, 30);
     controlTimer = nh.createTimer(ros::Duration(1.0 / loop_rate_hz), 
-                                   &NavigationControllerSS::controlLoop, this);
+                                   &NavigationControllerSS::navigationFsmRunner, this);
+
+    // ========================================================================
+    // SERVICE FOR CONTROL COMMANDS
+    // ========================================================================
+    controlSrv = nh.advertiseService("control_ss", &NavigationControllerSS::controlSrvCb, this);
+    ROS_INFO("NavigationControllerSS: Service 'control_ss' advertised");
 
     // ========================================================================
     // LOAD PATH FROM PARAMETERS
@@ -81,27 +88,39 @@ void NavigationControllerSS::rvizGoalCallback(const geometry_msgs::PoseStamped::
 }
 
 // ============================================================================
-// CONTROL LOOP
+// HELPER FUNCTIONS FOR FSM
 // ============================================================================
-void NavigationControllerSS::controlLoop(const ros::TimerEvent&) {
-    
-    // ========================================================================
-    // CALL STATE SPACE CONTROLLER
-    // ========================================================================
-    // This function should calculate v_d and w_d based on current state
-    computeStateSpaceControl();
-    
-    // ========================================================================
-    // PUBLISH VELOCITY
-    // ========================================================================
-    geometry_msgs::Twist cmd;
-    cmd.linear.x  = v_d;
-    cmd.linear.y  = 0.0;
-    cmd.linear.z  = 0.0;
-    cmd.angular.x = 0.0;
-    cmd.angular.y = 0.0;
-    cmd.angular.z = w_d;
-    velPub.publish(cmd);
+double NavigationControllerSS::normalizeAngle(double theta) {
+    while(theta > M_PI) theta -= 2.0 * M_PI;
+    while(theta <= -M_PI) theta += 2.0 * M_PI;
+    return theta;
+}
+
+double NavigationControllerSS::getPositionError() {
+    if (smooth.empty()) return 999.0;
+    const Point& goal = smooth.back();
+    return std::hypot(goal.x - curr_x, goal.y - curr_y);
+}
+
+bool NavigationControllerSS::isPositionArrived() {
+    return getPositionError() <= params.end_dist_tol;
+}
+
+double NavigationControllerSS::getDesiredYawError() {
+    if (smooth.empty()) return 0.0;
+    const Point& goal = smooth.back();
+    double desired_yaw = std::atan2(goal.y - curr_y, goal.x - curr_x);
+    // Se há pelo menos 2 pontos, usar direção do último segmento
+    if (smooth.size() >= 2) {
+        const Point& prev = smooth[smooth.size() - 2];
+        desired_yaw = std::atan2(goal.y - prev.y, goal.x - prev.x);
+    }
+    return normalizeAngle(desired_yaw - curr_theta);
+}
+
+bool NavigationControllerSS::isYawDesired() {
+    double yaw_error = getDesiredYawError();
+    return std::fabs(yaw_error) <= params.yaw_tol;
 }
 
 // ============================================================================
@@ -193,6 +212,7 @@ void NavigationControllerSS::loadControllerParams() {
     params.w_max = 3.0;
     params.v_ref = 0.2;
     params.end_dist_tol = 0.05;
+    params.yaw_tol = 0.08;  // Tolerância de yaw (rad)
     params.smooth_radius = 0.01;
     params.smooth_corner_steps = 8;
     
@@ -204,11 +224,12 @@ void NavigationControllerSS::loadControllerParams() {
     nh.param("w_max", params.w_max, params.w_max);
     nh.param("v_ref", params.v_ref, params.v_ref);
     nh.param("end_dist_tol", params.end_dist_tol, params.end_dist_tol);
+    nh.param("yaw_tol", params.yaw_tol, params.yaw_tol);
     nh.param("smooth_radius", params.smooth_radius, params.smooth_radius);
     nh.param("smooth_corner_steps", params.smooth_corner_steps, params.smooth_corner_steps);
     
-    ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f",
-             params.kx, params.ky, params.kth, params.v_max, params.w_max, params.v_ref, params.end_dist_tol);
+    ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f, yaw_tol=%.3f",
+             params.kx, params.ky, params.kth, params.v_max, params.w_max, params.v_ref, params.end_dist_tol, params.yaw_tol);
 }
 
 // ============================================================================
@@ -411,5 +432,194 @@ void NavigationControllerSS::computeStateSpaceControl() {
     // ========================================================================
     v_d = v;
     w_d = w;
+}
+
+// ============================================================================
+// FSM ACTIONS: driveToGoal
+// ============================================================================
+void NavigationControllerSS::driveToGoal() {
+    // Se não há caminho, parar
+    if (smooth.empty()) {
+        v_d = 0.0;
+        w_d = 0.0;
+        return;
+    }
+    
+    // Usar o controlo de espaço de estados existente
+    computeStateSpaceControl();
+}
+
+// ============================================================================
+// FSM ACTIONS: turnToFinalYaw
+// ============================================================================
+void NavigationControllerSS::turnToFinalYaw() {
+    // Se não há caminho, parar
+    if (smooth.empty()) {
+        v_d = 0.0;
+        w_d = 0.0;
+        return;
+    }
+    
+    // Apenas controlo de orientação (velocidade linear = 0)
+    v_d = 0.0;
+    
+    double yaw_error = getDesiredYawError();
+    
+    // Controlo proporcional de yaw
+    w_d = params.kth * yaw_error;
+    
+    // Limitar velocidade angular
+    if (w_d > params.w_max) w_d = params.w_max;
+    else if (w_d < -params.w_max) w_d = -params.w_max;
+}
+
+// ============================================================================
+// FSM RUNNER
+// ============================================================================
+void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
+    
+    // ========================================================================
+    // UPDATE FSM TIMES
+    // ========================================================================
+    navigationFsm.update_tis();
+    
+    // ========================================================================
+    // CHECK ENABLE CONDITION
+    // ========================================================================
+    bool enable = !(mode == "stop" || mode == "pause") && !smooth.empty();
+    
+    // ========================================================================
+    // COMPUTE TRANSITIONS
+    // ========================================================================
+    if(navigationFsm.state == navigation_ss::states::idle && enable) {
+        navigationFsm.new_state = navigation_ss::states::driveToGoal;
+    }
+    
+    else if(navigationFsm.state == navigation_ss::states::driveToGoal && isPositionArrived() && enable) {
+        navigationFsm.new_state = navigation_ss::states::turnToFinalYaw;
+    }
+    
+    else if(navigationFsm.state == navigation_ss::states::turnToFinalYaw && isYawDesired() && enable) {
+        // Waypoint concluído - limpar caminho
+        smooth.clear();
+        path.clear();
+        seg_idx = 0;
+        last_th = 0.0;
+        
+        // Se não há mais waypoints, ir para idle
+        if(smooth.empty()) {
+            navigationFsm.new_state = navigation_ss::states::idle;
+        } else {
+            navigationFsm.new_state = navigation_ss::states::done;
+        }
+    }
+    
+    else if(navigationFsm.state == navigation_ss::states::turnToFinalYaw && !isPositionArrived() && enable) {
+        // Se o robô se afastou durante o alinhamento, voltar a navegar
+        navigationFsm.new_state = navigation_ss::states::driveToGoal;
+    }
+    
+    else if(navigationFsm.state == navigation_ss::states::done && enable) {
+        navigationFsm.new_state = navigation_ss::states::driveToGoal;
+    }
+    
+    else if(navigationFsm.state == navigation_ss::states::done && !enable) {
+        navigationFsm.new_state = navigation_ss::states::idle;
+    }
+    
+    // Se não há caminho durante driveToGoal ou turnToFinalYaw, ir para idle
+    if ((navigationFsm.state == navigation_ss::states::driveToGoal || 
+         navigationFsm.state == navigation_ss::states::turnToFinalYaw) && smooth.empty()) {
+        navigationFsm.new_state = navigation_ss::states::idle;
+    }
+    
+    // ========================================================================
+    // APPLY STATE TRANSITION
+    // ========================================================================
+    navigationFsm.set_state();
+    
+    // ========================================================================
+    // COMPUTE ACTIONS BASED ON STATE
+    // ========================================================================
+    if(navigationFsm.state == navigation_ss::states::driveToGoal && enable) {
+        driveToGoal();
+    }
+    else if(navigationFsm.state == navigation_ss::states::turnToFinalYaw && enable) {
+        turnToFinalYaw();
+    }
+    else {
+        // Parar se não há caminho ou estado inválido
+        v_d = 0.0;
+        w_d = 0.0;
+    }
+    
+    // ========================================================================
+    // PUBLISH VELOCITY
+    // ========================================================================
+    geometry_msgs::Twist cmd;
+    cmd.linear.x  = v_d;
+    cmd.linear.y  = 0.0;
+    cmd.linear.z  = 0.0;
+    cmd.angular.x = 0.0;
+    cmd.angular.y = 0.0;
+    cmd.angular.z = w_d;
+    velPub.publish(cmd);
+}
+
+// ============================================================================
+// SERVICE CALLBACK
+// ============================================================================
+bool NavigationControllerSS::controlSrvCb(navigation_controller::NavigationControl::Request& req,
+                                           navigation_controller::NavigationControl::Response& res) {
+    
+    mode = req.command;
+    
+    if(mode == "start") {
+        loadPathFromParameters();
+        
+        if (smooth.empty()) {
+            res.success = false;
+            res.message = "no waypoints in params";
+            return true;
+        }
+        
+        res.success = true;
+        res.message = "started";
+        ROS_INFO("NavigationControllerSS START");
+        return true;
+    }
+    
+    else if(mode == "stop") {
+        smooth.clear();
+        path.clear();
+        seg_idx = 0;
+        last_th = 0.0;
+        navigationFsm.new_state = navigation_ss::states::idle;
+        navigationFsm.set_state();
+        
+        res.success = true;
+        res.message = "stopped+cleared";
+        ROS_INFO("NavigationControllerSS STOP");
+        return true;
+    }
+    
+    else if(mode == "pause") {
+        navigationFsm.new_state = navigation_ss::states::idle;
+        navigationFsm.set_state();
+        
+        res.success = true;
+        res.message = "paused";
+        ROS_INFO("NavigationControllerSS PAUSE");
+        return true;
+    }
+    
+    else if(mode == "unpause") {
+        res.success = true;
+        res.message = "unpaused";
+        ROS_INFO("NavigationControllerSS UNPAUSE");
+        return true;
+    }
+    
+    return false;
 }
 
