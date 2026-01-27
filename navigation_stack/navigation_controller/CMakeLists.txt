@@ -96,6 +96,7 @@ target_link_libraries(navigation_controller_node
 add_executable(navigation_controller_ss_node
   src/main_ss.cpp
   src/navigation_controller_ss_node.cpp
+  src/fsm.cpp
 )
 
 add_dependencies(navigation_controller_ss_node
