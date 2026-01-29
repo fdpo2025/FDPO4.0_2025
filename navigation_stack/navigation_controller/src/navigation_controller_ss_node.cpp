@@ -121,7 +121,18 @@ double NavigationControllerSS::getPositionError() {
 }
 
 bool NavigationControllerSS::isPositionArrived() {
-    return getPositionError() <= params.end_dist_tol;
+    if (smooth.empty()) return false;
+    
+    // Verificar se já percorreu todo o caminho (seg_idx no último segmento)
+    bool path_completed = (seg_idx >= static_cast<int>(smooth.size()) - 1);
+    
+    // Verificar se está dentro da tolerância do ponto final
+    bool within_tolerance = getPositionError() <= params.end_dist_tol;
+    
+    // Chegou se: (1) percorreu todo o caminho E (2) está dentro da tolerância
+    // OU se está muito próximo do ponto final (caso especial para caminhos curtos)
+    return (path_completed && within_tolerance) || 
+           (within_tolerance && smooth.size() <= 2);  // Para caminhos muito curtos (1 waypoint)
 }
 
 double NavigationControllerSS::getDesiredYawError() {
@@ -288,6 +299,33 @@ void NavigationControllerSS::updatePathFromWaypoints(const std::vector<Point>& w
 
     // Atualiza o caminho base
     path = waypoints;
+    
+    // GARANTIR QUE HÁ PELO MENOS 2 PONTOS PARA O PATH FOLLOWER FUNCIONAR
+    // Se há apenas 1 waypoint, adicionar a posição atual como primeiro ponto
+    if (path.size() == 1) {
+        Point current_pos;
+        current_pos.x = curr_x;
+        current_pos.y = curr_y;
+        
+        // Verificar se já está no waypoint (dentro da tolerância)
+        const Point& goal = path[0];
+        double dist_to_goal = std::hypot(goal.x - curr_x, goal.y - curr_y);
+        
+        if (dist_to_goal <= params.end_dist_tol) {
+            // Já está no waypoint - não criar caminho, considerar que chegou
+            ROS_WARN("NavigationControllerSS: Already at waypoint (dist=%.3f <= tol=%.3f), skipping path creation", 
+                     dist_to_goal, params.end_dist_tol);
+            path.clear();
+            smooth.clear();
+            seg_idx = 0;
+            last_th = 0.0;
+            return;
+        }
+        
+        // Adicionar posição atual como primeiro ponto para criar um segmento válido
+        path.insert(path.begin(), current_pos);
+        ROS_INFO("NavigationControllerSS: Added current position as first point (single waypoint case)");
+    }
     
     // Gera o caminho suavizado
     smooth = smoothPath(path, params.smooth_radius, params.smooth_corner_steps);
