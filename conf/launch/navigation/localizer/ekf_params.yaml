@@ -5,7 +5,7 @@ ekf_params:
   # Initial pose in map frame
   initial_pose:
     x: -0.695            # -695mm (left of center)
-    y: -0.355            # -355mm (below center)
+    y: -0.280            # -355mm (below center)
     theta: 1.5708        # 90° 
   
   # Initial state covariance matrix P

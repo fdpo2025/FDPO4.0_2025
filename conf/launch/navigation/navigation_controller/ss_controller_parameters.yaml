@@ -1,7 +1,7 @@
 # Parâmetros do State Space Controller
 
 # Ganhos do controlador
-kx: 1.0          # Ganho de erro em x
+kx: 3.0          # Ganho de erro em x
 ky: 50.0         # Ganho de erro em y
 kth: 5.0         # Ganho de erro angular
 
@@ -11,13 +11,13 @@ w_max: 1.0       # Velocidade angular máxima (rad/s)
 v_ref: 0.2       # Velocidade de referência (m/s)
 
 # Limites de aceleração
-a_max: 0.1       # Aceleração máxima (m/s²)
-d_max: 0.1       # Desaceleração máxima (m/s²)
+a_max: 0.5       # Aceleração máxima (m/s²)
+d_max: 0.5       # Desaceleração máxima (m/s²)
 
 # Tolerâncias
-end_dist_tol: 0.03   # Tolerância de chegada ao goal (m)
+end_dist_tol: 0.2   # Tolerância de chegada ao goal (m)
 
 # Parâmetros de suavização do caminho
-smooth_radius: 0.02    # Raio de suavização dos cantos (m)
-smooth_corner_steps: 40  # Número de pontos por canto suavizado
+smooth_radius: 0.0    # Raio de suavização dos cantos (m)
+smooth_corner_steps: 01  # Número de pontos por canto suavizado
 
