@@ -2,7 +2,8 @@
 #include <cmath>
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0), 
-navigationFsm(navigation::states::idle), tfBuffer(), tfListener(tfBuffer) {
+navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::GoTo_Init), 
+k1(0.0), tfBuffer(), tfListener(tfBuffer) {
     
     mode = "idle";
 
@@ -19,6 +20,7 @@ navigationFsm(navigation::states::idle), tfBuffer(), tfListener(tfBuffer) {
     ROS_INFO("NavigationController subscribing to odometry topic: %s", odom_topic.c_str());
     rvizGoalSub = nh.subscribe("/move_base_simple/goal", 10, &NavigationController::rvizGoalCallBack, this);
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
+    lineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_lines", 1, true);  // latch=true para RViz ver imediatamente
     controlTimer = nh.createTimer(ros::Duration(1.0 / std::max(1, param.loop_rate_hz)), &NavigationController::navigationFsmRunner, this);
     controlSrv = nh.advertiseService("control", &NavigationController::controlSrvCb, this);
 
@@ -70,6 +72,15 @@ void NavigationController::loadRouteFromParameters(){
     }
 
     updateDesiredPose();
+    
+    // Reinicializar followLine FSM quando rota é carregada
+    if (route.size() >= 2) {
+        followLineFsm.new_state = navigation::followLineStates::GoTo_Init;
+        followLineFsm.set_state();
+    }
+    
+    // Publicar linhas de visualização
+    publishLineMarkers();
 
 }
 
@@ -84,9 +95,20 @@ void NavigationController::loadNavigationParams() {
     nh.param("d_max", param.d_max, 0.5);
     nh.param("kp_linear", param.kp_linear, 5.0);
     nh.param("kp_angular", param.kp_angular, 2.0/M_PI * param.w_nom);
+    nh.param("k_line", param.k_line, 1.0);  // Ganho para correção de linha (default: 2.0)
     nh.param("arrive_radius",  param.arrive_radius, 0.05);
     nh.param("yaw_tol",param.yaw_tol, 0.08);
     nh.param("loop_rate_hz", param.loop_rate_hz, 30);
+    
+    // FollowLine parameters (from Pascal code)
+    nh.param("gain_fwd", param.gain_fwd, 1.0);      // GAIN_FWD
+    nh.param("vel_lin_nom", param.vel_lin_nom, 0.3);  // VEL_LIN_NOM
+    nh.param("dist_da", param.dist_da, 0.3);       // DIST_DA
+    nh.param("tol_findist", param.tol_findist, 0.05); // TOL_FINDIST
+    nh.param("max_etf", param.max_etf, 0.2);       // MAX_ETF (rad)
+    
+    ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, gain_fwd=%.2f, vel_lin_nom=%.2f", 
+             param.v_nom, param.w_nom, param.k_line, param.gain_fwd, param.vel_lin_nom);
 
 }
 
@@ -158,6 +180,159 @@ bool NavigationController::isYawDesired() {
 
 }
 
+// ============================================================================
+// FOLLOW LINE FUNCTIONS
+// ============================================================================
+
+// Find distance from estimated position to nearest point in a line
+// Implementação exata do código Pascal
+void NavigationController::dist2Line(double xi, double yi, double xf, double yf, double xr, double yr, double& distLine) {
+    double ux, uy;
+    
+    // Vetor unitário da linha
+    double dx = xf - xi;
+    double dy = yf - yi;
+    double line_length = std::sqrt(dx * dx + dy * dy);
+    
+    if (line_length < 1e-6) {
+        distLine = std::sqrt((xr - xi) * (xr - xi) + (yr - yi) * (yr - yi));
+        k1 = 0.0;
+        return;
+    }
+    
+    ux = dx / line_length;
+    uy = dy / line_length;
+    
+    // Calcular k1 (distância perpendicular com sinal)
+    k1 = (xr * uy - yr * ux - xi * uy + yi * ux) / (ux * ux + uy * uy);
+    
+    // distLine é o valor absoluto de k1
+    distLine = std::abs(k1);
+}
+
+double NavigationController::getLineAngle(double pi_x, double pi_y, double pf_x, double pf_y) {
+    // Calcula o ângulo da linha usando atan2(pf - pi)
+    double dx = pf_x - pi_x;
+    double dy = pf_y - pi_y;
+    return std::atan2(dy, dx);
+}
+
+double NavigationController::getLineError() {
+    // Retorna a distância perpendicular do robô à linha atual
+    // A linha é definida pelo waypoint atual (pi) e o próximo waypoint (pf)
+    
+    if (route.empty()) return 0.0;
+    
+    // Se há apenas um waypoint, não há linha - retorna erro de posição
+    if (route.size() < 2) {
+        return getPositionError();
+    }
+    
+    // pi = waypoint atual (route.front())
+    // pf = próximo waypoint
+    auto it = route.begin();
+    double pi_x = it->pose.x;
+    double pi_y = it->pose.y;
+    
+    ++it;
+    double pf_x = it->pose.x;
+    double pf_y = it->pose.y;
+    
+    // Calcular distância perpendicular à linha
+    double distLine;
+    dist2Line(pi_x, pi_y, pf_x, pf_y, poseCurr.x, poseCurr.y, distLine);
+    return distLine;
+}
+
+double NavigationController::getAlignLineYawError() {
+    // Retorna o erro de orientação em relação à linha atual
+    // A linha é definida pelo waypoint atual (pi) e o próximo waypoint (pf)
+    
+    if (route.empty()) return 0.0;
+    
+    // Se há apenas um waypoint, usa o erro de alinhamento normal
+    if (route.size() < 2) {
+        return getAlignYawError();
+    }
+    
+    // pi = waypoint atual (route.front())
+    // pf = próximo waypoint
+    auto it = route.begin();
+    double pi_x = it->pose.x;
+    double pi_y = it->pose.y;
+    
+    ++it;
+    double pf_x = it->pose.x;
+    double pf_y = it->pose.y;
+    
+    // Calcular ângulo da linha
+    double line_angle = getLineAngle(pi_x, pi_y, pf_x, pf_y);
+    
+    // Se backwards, inverter direção
+    if (isBackwards()) {
+        line_angle = normalizeAngle(line_angle + M_PI);
+    }
+    
+    // Erro de orientação = diferença entre ângulo da linha e orientação atual
+    return normalizeAngle(line_angle - poseCurr.theta);
+}
+
+void NavigationController::publishLineMarkers() {
+    // Publica markers para visualizar as linhas entre waypoints no RViz
+    
+    visualization_msgs::Marker line_marker;
+    line_marker.header.frame_id = "map";
+    line_marker.header.stamp = ros::Time::now();
+    line_marker.ns = "navigation_lines";
+    line_marker.id = 0;
+    line_marker.type = visualization_msgs::Marker::LINE_LIST;
+    line_marker.action = visualization_msgs::Marker::ADD;
+    line_marker.pose.orientation.w = 1.0;
+    
+    // Propriedades visuais
+    line_marker.scale.x = 0.05;  // Espessura da linha (5 cm)
+    line_marker.color.r = 0.0;
+    line_marker.color.g = 1.0;
+    line_marker.color.b = 0.0;
+    line_marker.color.a = 1.0;  // Verde opaco
+    
+    line_marker.lifetime = ros::Duration(0);  // Sem expiração
+    
+    // Limpar pontos anteriores
+    line_marker.points.clear();
+    
+    // Se não há waypoints ou há apenas um, publicar marker vazio
+    if (route.empty() || route.size() < 2) {
+        lineMarkerPub.publish(line_marker);
+        return;
+    }
+    
+    // Criar linhas entre waypoints consecutivos
+    for (auto it = route.begin(); it != route.end(); ++it) {
+        auto next_it = std::next(it);
+        if (next_it == route.end()) break;
+        
+        // Ponto inicial (pi)
+        geometry_msgs::Point p1;
+        p1.x = it->pose.x;
+        p1.y = it->pose.y;
+        p1.z = 0.0;
+        
+        // Ponto final (pf)
+        geometry_msgs::Point p2;
+        p2.x = next_it->pose.x;
+        p2.y = next_it->pose.y;
+        p2.z = 0.0;
+        
+        // Adicionar ambos os pontos para criar a linha
+        line_marker.points.push_back(p1);
+        line_marker.points.push_back(p2);
+    }
+    
+    // Publicar marker
+    lineMarkerPub.publish(line_marker);
+}
+
 void NavigationController::updateCurrPose(const nav_msgs::Odometry::ConstPtr& msg) {
 
     poseCurr.x = msg->pose.pose.position.x;
@@ -198,6 +373,15 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
              waypoint_temp.pose.x, waypoint_temp.pose.y, waypoint_temp.pose.theta);
 
     updateDesiredPose();
+    
+    // Reinicializar followLine FSM quando nova rota é adicionada
+    if (route.size() >= 2) {
+        followLineFsm.new_state = navigation::followLineStates::GoTo_Init;
+        followLineFsm.set_state();
+    }
+    
+    // Publicar linhas de visualização
+    publishLineMarkers();
 
 }
 
@@ -349,86 +533,140 @@ void NavigationController::goToXY() {
         v_d = -v_d;
 }
 
+// Developed function to follow a line
+// Implementação exata do código Pascal
 void NavigationController::followLine() {
-
+    
     // no waypoints: stop
     if(route.empty()) {
         v_d = 0.0;
         w_d = 0.0;
+        followLineFsm.new_state = navigation::followLineStates::Stop_line;
+        followLineFsm.set_state();
         return;
     }
-
-    double position_error = getPositionError();
-    double line_error = getLineError();
-    double yaw_error = getAlignLineYawError();
-    double dt = 1.0 / param.loop_rate_hz;
-
-    // Stop if the robot reached the goal position
-    if (position_error <= param.arrive_radius) {
+    
+    // Obter pontos inicial e final da linha
+    double xi, yi, xf, yf, tf;
+    
+    if(route.size() >= 2) {
+        // Caso normal: usar waypoint atual e próximo
+        auto it = route.begin();
+        xi = it->pose.x;
+        yi = it->pose.y;
+        ++it;
+        xf = it->pose.x;
+        yf = it->pose.y;
+        tf = it->pose.theta;
+    } else if(route.size() == 1) {
+        // Quando só resta 1 waypoint: usar waypoint anterior como ponto inicial
+        xi = previousWaypoint.pose.x;
+        yi = previousWaypoint.pose.y;
+        xf = route.front().pose.x;
+        yf = route.front().pose.y;
+        tf = route.front().pose.theta;
+    } else {
+        // Sem waypoints: parar
         v_d = 0.0;
         w_d = 0.0;
         return;
     }
-
-    // -----------------------
-    //     ANGULAR CONTROL
-    // -----------------------
-    w_d = param.kp_angular * yaw_error + param.kp_angular * line_error;
-    if (w_d > param.w_nom) w_d = param.w_nom;
-    else if (w_d < -param.w_nom) w_d = -param.w_nom;
-
-    // -----------------------
-    //     LINEAR CONTROL
-    // -----------------------
-    double v_mag = 0.0;
-
-    // Keep the original condition
-    if (std::fabs(yaw_error) <= M_PI / 6.0) {
-        v_mag = param.v_nom
-                * std::cos(yaw_error)
-                * std::min<double>(1.0, param.kp_linear * position_error);
+    
+    // Calcular erros
+    double tr = std::atan2(yf - yi, xf - xi);  // ângulo da linha
+    double error_ang = normalizeAngle(tr - poseCurr.theta);
+    double error_dist = std::sqrt((xf - poseCurr.x) * (xf - poseCurr.x) + 
+                                  (yf - poseCurr.y) * (yf - poseCurr.y));
+    
+    // Calcular distância à linha (também calcula k1)
+    double distLine;
+    dist2Line(xi, yi, xf, yf, poseCurr.x, poseCurr.y, distLine);
+    
+    // Update FSM
+    followLineFsm.update_tis();
+    
+    // State machine - Transitions
+    if (followLineFsm.state == navigation::followLineStates::GoTo_Init) {
+        if (distLine < 0.1 && std::abs(error_ang) < param.max_etf) {
+            followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+            navigationFsm.new_state = navigation::states::idle;  // state := 0
+        }
     }
-
-    // -----------------------
-    //   MINIMUM SPEED ON TARGET  
-    // -----------------------
-    double v_target = v_mag;
-
-    if (v_target > 0.0 && v_target < param.v_min)
-        v_target = param.v_min;
-
-    // -----------------------
-    //   APPLY MAXIMUM SPEED LIMIT
-    // -----------------------
-    if (v_target > param.v_max)
-        v_target = param.v_max;
-
-    // -----------------------
-    //   APPLY ACCEL/DECEL LIMIT
-    // -----------------------
-    if (v_target > v_d) {
-        // Accelerate
-        v_d += param.a_max * dt;
-        if (v_d > v_target) v_d = v_target;
-    } else {
-        // Decelerate
-        v_d -= param.d_max * dt;
-        if (v_d < v_target) v_d = v_target;
+    else if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
+        if (error_dist < param.dist_da) {
+            followLineFsm.new_state = navigation::followLineStates::Approaching;
+        }
     }
-
-    // -----------------------
-    //   ENSURE MAXIMUM SPEED LIMIT (after accel/decel)
-    // -----------------------
-    if (v_d > param.v_max)
-        v_d = param.v_max;
-    if (v_d < -param.v_max)
-        v_d = -param.v_max;
-
-    // -----------------------
-    //   BACKWARDS SUPPORT
-    // -----------------------
-    if (isBackwards())
+    else if (followLineFsm.state == navigation::followLineStates::Approaching) {
+        if (error_dist < param.tol_findist) {
+            followLineFsm.new_state = navigation::followLineStates::Final_Rot;
+        }
+    }
+    else if (followLineFsm.state == navigation::followLineStates::Final_Rot) {
+        if (navigationFsm.state == navigation::states::idle) {  // state = Stop
+            followLineFsm.new_state = navigation::followLineStates::Stop_line;
+        }
+    }
+    
+    // Apply transitions
+    followLineFsm.set_state();
+    
+    // State machine - Outputs
+    if (followLineFsm.state == navigation::followLineStates::GoTo_Init) {
+        // gotoXY(xi, yi, tr) - usar waypoint inicial com orientação da linha
+        Pose saved_pose = poseDesired;
+        poseDesired.x = xi;
+        poseDesired.y = yi;
+        poseDesired.theta = tr;
+        goToXY();
+        poseDesired = saved_pose;  // Restaurar
+    }
+    else if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
+        v_d = param.vel_lin_nom;
+        w_d = 3.0 * param.gain_fwd * k1 + param.gain_fwd * error_ang;
+        
+        // Limitar velocidade angular
+        if (w_d > param.w_nom) w_d = param.w_nom;
+        else if (w_d < -param.w_nom) w_d = -param.w_nom;
+    }
+    else if (followLineFsm.state == navigation::followLineStates::Approaching) {
+        // LinDeAccel - desaceleração linear
+        double dt = 1.0 / param.loop_rate_hz;
+        double v_target = param.vel_lin_nom * (error_dist / param.dist_da);
+        if (v_target < param.v_min) v_target = param.v_min;
+        
+        if (v_target > v_d) {
+            v_d += param.a_max * dt;
+            if (v_d > v_target) v_d = v_target;
+        } else {
+            v_d -= param.d_max * dt;
+            if (v_d < v_target) v_d = v_target;
+        }
+        
+        w_d = 3.0 * param.gain_fwd * k1 + param.gain_fwd * error_ang;
+        
+        // Limitar velocidade angular
+        if (w_d > param.w_nom) w_d = param.w_nom;
+        else if (w_d < -param.w_nom) w_d = -param.w_nom;
+    }
+    else if (followLineFsm.state == navigation::followLineStates::Final_Rot) {
+        // gotoXY(xf, yf, tf) - usar waypoint final
+        Pose saved_pose = poseDesired;
+        poseDesired.x = xf;
+        poseDesired.y = yf;
+        poseDesired.theta = tf;
+        goToXY();
+        poseDesired = saved_pose;  // Restaurar
+    }
+    else if (followLineFsm.state == navigation::followLineStates::Stop_line) {
+        v_d = 0.0;
+        w_d = 0.0;
+    }
+    
+    // Backwards support
+    if (isBackwards() && v_d > 0.0) {
         v_d = -v_d;
+    }
 }
 
 
@@ -453,8 +691,17 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     else if(navigationFsm.state == navigation::states::driveToGoal && isPositionArrived() && !route.front().align && enable) {
 
+        // Guardar waypoint anterior antes de remover
+        if(!route.empty()) {
+            previousWaypoint = route.front();
+        }
+        
         route.pop_front();
         updateDesiredPose();
+        
+        // Reinicializar followLine FSM para nova linha
+        followLineFsm.new_state = navigation::followLineStates::GoTo_Init;
+        followLineFsm.set_state();
         
         // Se não há mais waypoints, ir direto para idle
         if(route.empty()) {
@@ -473,8 +720,17 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && isYawDesired() && enable) {
 
+        // Guardar waypoint anterior antes de remover
+        if(!route.empty()) {
+            previousWaypoint = route.front();
+        }
+        
         route.pop_front();
         updateDesiredPose();
+        
+        // Reinicializar followLine FSM para nova linha
+        followLineFsm.new_state = navigation::followLineStates::GoTo_Init;
+        followLineFsm.set_state();
         
         // Se não há mais waypoints, ir direto para idle
         if(route.empty()) {
@@ -501,7 +757,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     navigationFsm.set_state();
 
     // Compute Actions
-    if(navigationFsm.state == navigation::states::driveToGoal && enable) goToXY();
+    if(navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else {
         // Parar se não há waypoints ou estado inválido

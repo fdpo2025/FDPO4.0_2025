@@ -14,3 +14,11 @@ yaw_tol: 0.08
 
 kp_linear: 5.0            # ~1/lambda (lambda≈0.2)
 kp_angular: 1.0
+k_line: 2.0              # Ganho para correção de linha (followLine)
+
+# FollowLine parameters (from Pascal code)
+gain_fwd: 1.0            # GAIN_FWD - ganho forward para controlo de linha
+vel_lin_nom: 0.3         # VEL_LIN_NOM - velocidade linear nominal para seguir linha
+dist_da: 0.3             # DIST_DA - distância para começar a desacelerar
+tol_findist: 0.05        # TOL_FINDIST - tolerância de distância final
+max_etf: 0.2             # MAX_ETF - máximo erro de orientação para transição GoTo_Init -> Follow_Line (rad)

@@ -169,7 +169,7 @@ block_small(pose [-12.908  -15.226 0.000 0.000 ] )
 block_small(pose [-16.233  -15.420 0.630 0.000 0 ] )
 
 robot_0_model(
-  pose [ -0.695 -0.355 0.000 90.000 ]
+  pose [ -0.695 -0.28 0.000 90.000 ]
   name "robot_0"
   color "blue"
   obstacle_return 0 

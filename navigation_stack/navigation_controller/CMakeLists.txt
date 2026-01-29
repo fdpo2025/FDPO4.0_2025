@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   geometry_msgs
   nav_msgs
+  visualization_msgs
   tf2
   tf2_ros
   tf2_geometry_msgs
@@ -53,6 +54,7 @@ catkin_package(
     std_msgs
     geometry_msgs
     nav_msgs
+    visualization_msgs
     tf2
     tf2_ros
     tf2_geometry_msgs
