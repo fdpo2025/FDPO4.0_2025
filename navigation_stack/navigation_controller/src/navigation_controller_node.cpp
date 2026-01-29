@@ -349,6 +349,87 @@ void NavigationController::goToXY() {
         v_d = -v_d;
 }
 
+void NavigationController::followLine() {
+
+    // no waypoints: stop
+    if(route.empty()) {
+        v_d = 0.0;
+        w_d = 0.0;
+        return;
+    }
+
+    double position_error = getPositionError();
+    double line_error = getLineError();
+    double yaw_error = getAlignLineYawError();
+    double dt = 1.0 / param.loop_rate_hz;
+
+    // Stop if the robot reached the goal position
+    if (position_error <= param.arrive_radius) {
+        v_d = 0.0;
+        w_d = 0.0;
+        return;
+    }
+
+    // -----------------------
+    //     ANGULAR CONTROL
+    // -----------------------
+    w_d = param.kp_angular * yaw_error + param.kp_angular * line_error;
+    if (w_d > param.w_nom) w_d = param.w_nom;
+    else if (w_d < -param.w_nom) w_d = -param.w_nom;
+
+    // -----------------------
+    //     LINEAR CONTROL
+    // -----------------------
+    double v_mag = 0.0;
+
+    // Keep the original condition
+    if (std::fabs(yaw_error) <= M_PI / 6.0) {
+        v_mag = param.v_nom
+                * std::cos(yaw_error)
+                * std::min<double>(1.0, param.kp_linear * position_error);
+    }
+
+    // -----------------------
+    //   MINIMUM SPEED ON TARGET  
+    // -----------------------
+    double v_target = v_mag;
+
+    if (v_target > 0.0 && v_target < param.v_min)
+        v_target = param.v_min;
+
+    // -----------------------
+    //   APPLY MAXIMUM SPEED LIMIT
+    // -----------------------
+    if (v_target > param.v_max)
+        v_target = param.v_max;
+
+    // -----------------------
+    //   APPLY ACCEL/DECEL LIMIT
+    // -----------------------
+    if (v_target > v_d) {
+        // Accelerate
+        v_d += param.a_max * dt;
+        if (v_d > v_target) v_d = v_target;
+    } else {
+        // Decelerate
+        v_d -= param.d_max * dt;
+        if (v_d < v_target) v_d = v_target;
+    }
+
+    // -----------------------
+    //   ENSURE MAXIMUM SPEED LIMIT (after accel/decel)
+    // -----------------------
+    if (v_d > param.v_max)
+        v_d = param.v_max;
+    if (v_d < -param.v_max)
+        v_d = -param.v_max;
+
+    // -----------------------
+    //   BACKWARDS SUPPORT
+    // -----------------------
+    if (isBackwards())
+        v_d = -v_d;
+}
 
 
 void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
