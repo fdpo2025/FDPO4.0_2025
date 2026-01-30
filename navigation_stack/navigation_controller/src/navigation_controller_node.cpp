@@ -697,22 +697,16 @@ void NavigationController::followLine() {
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
     }
     else if (followLineFsm.state == navigation::followLineStates::Final_Rot) {
-        // gotoXY(xf, yf, tf) - usar waypoint final
-        Pose saved_pose = poseDesired;
-        poseDesired.x = xf;
-        poseDesired.y = yf;
-        poseDesired.theta = tf;
-        goToXY();
+        // Verificar se chegou ao waypoint final da linha (xf, yf)
+        // xf, yf é route[1] quando há 2+ waypoints, ou route.front() quando só resta 1
+        double dist_to_final = std::sqrt((xf - poseCurr.x) * (xf - poseCurr.x) + 
+                                         (yf - poseCurr.y) * (yf - poseCurr.y));
+        double yaw_error_final = normalizeAngle(tf - poseCurr.theta);
         
-        // Se só resta 1 waypoint, verificar se chegou ao waypoint final
-        if (route.size() == 1) {
-            // Verificar se chegou ao waypoint final (xf, yf)
-            double dist_to_final = std::sqrt((xf - poseCurr.x) * (xf - poseCurr.x) + 
-                                             (yf - poseCurr.y) * (yf - poseCurr.y));
-            double yaw_error_final = normalizeAngle(tf - poseCurr.theta);
-            
-            if (dist_to_final <= param.arrive_radius && std::fabs(yaw_error_final) <= param.yaw_tol) {
-                // Chegou ao último waypoint - remover e parar
+        if (dist_to_final <= param.arrive_radius && std::fabs(yaw_error_final) <= param.yaw_tol) {
+            // Chegou ao final da linha
+            if (route.size() == 1) {
+                // Último waypoint - remover e parar
                 ROS_INFO("followLine: Reached final waypoint (x=%.2f, y=%.2f), removing from route", xf, yf);
                 route.pop_front();
                 v_d = 0.0;
@@ -720,11 +714,28 @@ void NavigationController::followLine() {
                 followLineFsm.new_state = navigation::followLineStates::Stop_line;
                 followLineFsm.set_state();
                 navigationFsm.new_state = navigation::states::idle;
-                poseDesired = saved_pose;  // Restaurar
                 return;
+            } else if (route.size() >= 2) {
+                // Chegou ao final da linha - remover waypoint atual e continuar diretamente para a próxima linha
+                // Não fazer goToXY intermédio, pois o ponto final é o ponto inicial da próxima linha
+                ROS_INFO("followLine: Reached end of line at waypoint (x=%.2f, y=%.2f), removing current waypoint and continuing to next line", xf, yf);
+                previousWaypoint = route.front();  // Guardar waypoint atual antes de remover
+                route.pop_front();
+                updateDesiredPose();  // Atualizar poseDesired para o próximo waypoint
+                // Continuar diretamente a seguir a próxima linha - não reiniciar para GoTo_Init
+                // A FSM continuará no estado atual ou transicionará naturalmente
+                followLineFsm.new_state = navigation::followLineStates::Follow_Line;  // Continuar diretamente a seguir linha
+                followLineFsm.set_state();
+                return;  // Retornar para que a próxima iteração calcule a nova linha
             }
         }
         
+        // Se ainda não chegou, usar goToXY para ir ao waypoint final
+        Pose saved_pose = poseDesired;
+        poseDesired.x = xf;
+        poseDesired.y = yf;
+        poseDesired.theta = tf;
+        goToXY();
         poseDesired = saved_pose;  // Restaurar
     }
     else if (followLineFsm.state == navigation::followLineStates::Stop_line) {
