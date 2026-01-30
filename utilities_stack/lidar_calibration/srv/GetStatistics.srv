@@ -1,0 +1,16 @@
+# Obter estatísticas das medições recolhidas
+---
+bool success
+string message
+# Estatísticas por beacon: nome, média_r, média_theta, var_r, var_theta, num_samples
+string[] beacon_names
+float64[] mean_r
+float64[] mean_theta
+float64[] var_r
+float64[] var_theta
+int32[] num_samples
+
+
+
+
+

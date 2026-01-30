@@ -63,6 +63,7 @@ class NavigationController {
 
             double v_nom, w_nom, w_min;
             double v_min;  // Velocidade mínima constante na fase de desaceleração
+            double v_max;  // Velocidade máxima (m/s) - limite absoluto
             double a_max;  // Aceleração máxima (m/s²)
             double d_max;  // Desaceleração máxima (m/s²)
             double kp_linear, kp_angular;          

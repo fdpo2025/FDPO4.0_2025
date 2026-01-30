@@ -1,15 +1,16 @@
 loop_rate_hz: 100  # Frequência alta para evitar soluços no Pico
 
-v_nom: 0.5
-w_nom: 0.2
+v_nom: 0.4
+v_max: 0.5               # Velocidade linear máxima (m/s) - limite absoluto
+w_nom: 1.0
 w_min: 0.0 
-v_min: 0.01             
+v_min: 0.05             
 
 a_max: 0.5               # Aceleração máxima (m/s²)
 d_max: 0.5               # Desaceleração máxima (m/s²)
 
-arrive_radius: 0.05
+arrive_radius: 0.03
 yaw_tol: 0.08
 
-kp_linear: 1.0            # ~1/lambda (lambda≈0.2)
+kp_linear: 5.0            # ~1/lambda (lambda≈0.2)
 kp_angular: 1.0

@@ -69,17 +69,18 @@ void LocalizerNode::loadEKFParams() {
     P(2,2) = p_theta;
     
     // Process covariance matrix Q parameters
-    double q_xx, q_yy;
-    nh.param("ekf_params/process_covariance/position_x", q_xx, 0.0005);
-    nh.param("ekf_params/process_covariance/position_y", q_yy, 0.0005);
+    // Q is 2x2 for [v, w] input noise: [σ_v², 0; 0, σ_w²]
+    double q_vv, q_ww;
+    nh.param("ekf_params/process_covariance/velocity_linear", q_vv, 0.0005);
+    nh.param("ekf_params/process_covariance/velocity_angular", q_ww, 0.0005);
     
     Q.setZero();
-    Q(0,0) = q_xx;
-    Q(1,1) = q_yy;
+    Q(0,0) = q_vv;  // Linear velocity noise variance
+    Q(1,1) = q_ww;  // Angular velocity noise variance
     
     ROS_INFO("[LocalizerNode] EKF Parameters loaded:");
     ROS_INFO("  - Initial covariance P: [%.6f, %.6f, %.6f]", p_xx, p_yy, p_theta);
-    ROS_INFO("  - Process covariance Q: [%.6f, %.6f]", q_xx, q_yy);
+    ROS_INFO("  - Process covariance Q: [%.6f, %.6f] (v, w)", q_vv, q_ww);
 }
 
 double LocalizerNode::normalizeAngle(double theta) {
@@ -163,7 +164,14 @@ void LocalizerNode::ekf_update(const localizer::BeaconMatch::ConstPtr& msg) {
         Z_measured(1) = theta_measured;
 
         // Estimated Measures
-        Beacon beacon_fixed = beacons[beacon_measured.beacon_match_name];
+        // Check if beacon exists in map
+        auto beacon_it = beacons.find(beacon_measured.beacon_match_name);
+        if (beacon_it == beacons.end()) {
+            ROS_WARN_THROTTLE(1.0, "[EKF] Beacon '%s' not found in map, skipping update", 
+                             beacon_measured.beacon_match_name.c_str());
+            continue;
+        }
+        const Beacon& beacon_fixed = beacon_it->second;
         double x_e = X_state(0), y_e = X_state(1), theta_e = X_state(2);
 
         double dist_estimated = std::hypot(beacon_fixed.pose.x - x_e, beacon_fixed.pose.y - y_e);
@@ -173,11 +181,10 @@ void LocalizerNode::ekf_update(const localizer::BeaconMatch::ConstPtr& msg) {
         Z_estimated(0) = dist_estimated;
         Z_estimated(1) = theta_estimated;
 
-        // Measured Covariance
-        // double sigma_r  = 0.005;  
-        // double sigma_th = 1.5;
-        double sigma_r  = 0.03 + 0.02 * dist_estimated;  
-        double sigma_th = 1.5 * M_PI/180.0;
+        // Measured Covariance (calibrated from LiDAR measurements)
+        // Values from calibration: sigma_r = 0.008024 m, sigma_theta = 0.051428 rad
+        double sigma_r  = 0.008024;  // Calibrated: 0.008024 m
+        double sigma_th = 0.051428;  // Calibrated: 0.051428 rad (2.95 degrees)
 
         R(0,0) = sigma_r * sigma_r; R(0,1) = R(1,0) = 0; R(1,1) = sigma_th * sigma_th;
 

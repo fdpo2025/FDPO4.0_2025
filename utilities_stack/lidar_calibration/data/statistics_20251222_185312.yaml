@@ -1,0 +1,55 @@
+B1:
+  mean_r: 0.0
+  mean_theta: 0.0
+  var_r: 6.708253769596821e-05
+  var_theta: 0.0029618514648115804
+  std_r: 0.00819039301230217
+  std_theta: 0.05442289467504995
+  num_samples: 81437
+B2:
+  mean_r: 0.0
+  mean_theta: 0.0
+  var_r: 6.869437810108284e-05
+  var_theta: 0.0028713054862609536
+  std_r: 0.008288207170497299
+  std_theta: 0.05358456388047731
+  num_samples: 63977
+B3:
+  mean_r: 0.0
+  mean_theta: 0.0
+  var_r: 6.745116499418864e-05
+  var_theta: 0.00236898660719039
+  std_r: 0.008212865821026705
+  std_theta: 0.048672236513133335
+  num_samples: 84920
+B4:
+  mean_r: 0.0
+  mean_theta: 0.0
+  var_r: 6.858116914438995e-05
+  var_theta: 0.002299570690088693
+  std_r: 0.008281374834192083
+  std_theta: 0.04795383915901513
+  num_samples: 65197
+B5:
+  mean_r: 0.0
+  mean_theta: 0.0
+  var_r: 5.876704614234884e-05
+  var_theta: 0.0022500454984433643
+  std_r: 0.007665966745450233
+  std_theta: 0.04743464449580458
+  num_samples: 79673
+B6:
+  mean_r: 0.0
+  mean_theta: 0.0
+  var_r: 5.575022334409748e-05
+  var_theta: 0.003117138842341544
+  std_r: 0.007466607217746055
+  std_theta: 0.055831342831258714
+  num_samples: 86320
+_averages:
+  avg_var_r: 6.438775323701266e-05
+  avg_var_theta: 0.002644816431522754
+  avg_std_r: 0.008024197980920751
+  avg_std_theta: 0.051427778792426514
+  recommended_sigma_r: 0.008024197980920751
+  recommended_sigma_theta: 0.051427778792426514

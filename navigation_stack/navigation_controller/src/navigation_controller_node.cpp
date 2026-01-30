@@ -79,6 +79,7 @@ void NavigationController::loadNavigationParams() {
     nh.param("w_nom", param.w_nom, 1.2);
     nh.param("w_min", param.w_min, 0.1);
     nh.param("v_min", param.v_min, 0.07);
+    nh.param("v_max", param.v_max, 0.5);  // Limite máximo de velocidade (m/s)
     nh.param("a_max", param.a_max, 0.5);
     nh.param("d_max", param.d_max, 0.5);
     nh.param("kp_linear", param.kp_linear, 5.0);
@@ -246,6 +247,12 @@ void NavigationController::setTheta() {
 
     v_d = 0.0;
 
+    // Se não há waypoints, parar imediatamente
+    if(route.empty()) {
+        w_d = 0.0;
+        return;
+    }
+
     double yaw_error = getDesiredYawError(); 
     if(std::fabs(yaw_error) <= param.yaw_tol) {
 
@@ -262,6 +269,13 @@ void NavigationController::setTheta() {
 }
 
 void NavigationController::goToXY() {
+
+    // Se não há waypoints, parar imediatamente
+    if(route.empty()) {
+        v_d = 0.0;
+        w_d = 0.0;
+        return;
+    }
 
     double position_error = getPositionError();
     double yaw_error = getAlignYawError();
@@ -302,6 +316,12 @@ void NavigationController::goToXY() {
         v_target = param.v_min;
 
     // -----------------------
+    //   APPLY MAXIMUM SPEED LIMIT
+    // -----------------------
+    if (v_target > param.v_max)
+        v_target = param.v_max;
+
+    // -----------------------
     //   APPLY ACCEL/DECEL LIMIT
     // -----------------------
     if (v_target > v_d) {
@@ -313,6 +333,14 @@ void NavigationController::goToXY() {
         v_d -= param.d_max * dt;
         if (v_d < v_target) v_d = v_target;
     }
+
+    // -----------------------
+    //   ENSURE MAXIMUM SPEED LIMIT (after accel/decel)
+    // -----------------------
+    if (v_d > param.v_max)
+        v_d = param.v_max;
+    if (v_d < -param.v_max)
+        v_d = -param.v_max;
 
     // -----------------------
     //   BACKWARDS SUPPORT
@@ -347,7 +375,12 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         route.pop_front();
         updateDesiredPose();
         
-        navigationFsm.new_state = navigation::states::done;
+        // Se não há mais waypoints, ir direto para idle
+        if(route.empty()) {
+            navigationFsm.new_state = navigation::states::idle;
+        } else {
+            navigationFsm.new_state = navigation::states::done;
+        }
 
     }
 
@@ -362,7 +395,12 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         route.pop_front();
         updateDesiredPose();
         
-        navigationFsm.new_state = navigation::states::done;
+        // Se não há mais waypoints, ir direto para idle
+        if(route.empty()) {
+            navigationFsm.new_state = navigation::states::idle;
+        } else {
+            navigationFsm.new_state = navigation::states::done;
+        }
 
     }
 
@@ -382,9 +420,13 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     navigationFsm.set_state();
 
     // Compute Actions
-    if(navigationFsm.state == navigation::states::driveToGoal) goToXY();
+    if(navigationFsm.state == navigation::states::driveToGoal && enable) goToXY();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
-    else v_d = w_d = 0.0;
+    else {
+        // Parar se não há waypoints ou estado inválido
+        v_d = 0.0;
+        w_d = 0.0;
+    }
 
     // Affect outputs
     publishVel();

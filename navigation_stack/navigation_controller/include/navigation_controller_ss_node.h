@@ -12,11 +12,14 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <tf2/utils.h>
 #include <XmlRpcValue.h>
+#include <navigation_controller/NavigationControl.h>
+#include "fsm.h"
 
 #include <vector>
 #include <utility>
 #include <cmath>
 #include <algorithm>
+#include <string>
 
 // ============================================================================
 // MAIN CLASS - NavigationControllerSS
@@ -36,8 +39,16 @@ struct SSControllerParams {
     double w_max;
     double v_ref;
     double end_dist_tol;
+    double yaw_tol;         // Tolerância de yaw para alinhamento final
+    double a_max;           // Aceleração máxima (m/s²)
+    double d_max;           // Desaceleração máxima (m/s²)
     double smooth_radius;
     int smooth_corner_steps;
+    double slow_down_dist;  // começa a abrandar a 60 cm do goal
+    double v_final;   
+    double reverse_dist_tol;   // tolerância para "cheguei ao penúltimo"
+    double reverse_speed;
+    double time_to_reverse;
 };
 
 // ============================================================================
@@ -78,13 +89,13 @@ class NavigationControllerSS {
         ros::Subscriber rvizGoalSub;
         ros::Publisher velPub;
         ros::Timer controlTimer;
+        ros::ServiceServer controlSrv;
 
         // ====================================================================
         // CALLBACKS ROS
         // ====================================================================
         void odomCallback(const nav_msgs::Odometry::ConstPtr& msg);
         void rvizGoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
-        void controlLoop(const ros::TimerEvent&);
 
         // ====================================================================
         // DATA AVAILABLE FOR CONTROLLER
@@ -92,6 +103,19 @@ class NavigationControllerSS {
         // Colleague can use these variables in control logic
         double curr_x, curr_y, curr_theta;  // Current robot pose
         double v_d, w_d;                    // Desired velocities (output)
+        int loop_rate_hz;                   // Control loop rate (Hz)
+        Point reverse_target;
+        bool reverse_target_valid = false;
+        ros::Time reverse_start_time;
+        bool reverse_waiting = false;
+        std::vector<Point> wp_first3, wp_rest;
+
+        
+        // ====================================================================
+        // FSM AND CONTROL MODE
+        // ====================================================================
+        Fsm navigationFsm;
+        std::string mode;  // "idle" | "start" | "pause" | "stop"
         
         // ====================================================================
         // PARÂMETROS DO CONTROLADOR
@@ -108,6 +132,7 @@ class NavigationControllerSS {
         std::vector<Point> smooth;    // caminho suavizado
         int seg_idx;                  // índice do segmento atual
         double last_th;               // último theta de referência
+        bool aux=false;
         
         // Funções auxiliares
         std::pair<double,double> normalize(double vx, double vy) const;
@@ -124,6 +149,52 @@ class NavigationControllerSS {
                             const std::vector<Point>& path,
                             int seg_idx);
         void computeStateSpaceControl();
+        
+        // ====================================================================
+        // FSM LOGIC
+        // ====================================================================
+        void navigationFsmRunner(const ros::TimerEvent&);
+        void driveToGoal();
+        void turnToFinalYaw();
+        
+        // ====================================================================
+        // HELPER FUNCTIONS FOR FSM
+        // ====================================================================
+        double normalizeAngle(double theta);
+        bool isPositionArrived();
+        bool isYawDesired();
+        double getPositionError();
+        double getDesiredYawError();
+        void setReverseTargetToPenultimate();
+        double getReverseError(); 
+        bool isReverseArrived();
+        void reverseToPenultimate();
+        void splitWaypoints(
+            const std::vector<Point>& waypoints,
+            std::vector<Point>& first3,
+            std::vector<Point>& rest);
+        
+
+        // ====================================================================
+        // SERVICE CALLBACK
+        // ====================================================================
+        bool controlSrvCb(navigation_controller::NavigationControl::Request& req,
+                         navigation_controller::NavigationControl::Response& res);
 
 };
+
+// ============================================================================
+// NAMESPACE FOR FSM STATES
+// ============================================================================
+namespace navigation_ss {
+    namespace states {
+        enum {
+            idle = 0,
+            driveToGoal,
+            turnToFinalYaw,
+            reverseToPrev,
+            done
+        };
+    }
+}
 
