@@ -46,6 +46,8 @@ struct SSControllerParams {
     int smooth_corner_steps;
     double slow_down_dist;  // começa a abrandar a 60 cm do goal
     double v_final;   
+    double reverse_dist_tol;   // tolerância para "cheguei ao penúltimo"
+    double reverse_speed;
 };
 
 // ============================================================================
