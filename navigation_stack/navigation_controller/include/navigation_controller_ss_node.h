@@ -90,6 +90,7 @@ class NavigationControllerSS {
         ros::Publisher velPub;
         ros::Timer controlTimer;
         ros::ServiceServer controlSrv;
+        ros::Publisher pick_box_pub_;
 
         // ====================================================================
         // CALLBACKS ROS

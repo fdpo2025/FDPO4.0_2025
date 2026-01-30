@@ -18,6 +18,11 @@ NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_)
     ROS_INFO("NavigationControllerSS subscribing to: %s", odom_topic.c_str());
 
     // ========================================================================
+    // SUBSCRIBE TO PICK_BOX
+    // ========================================================================
+    pick_box_pub_ = nh.advertise<std_msgs::Bool>("/pick_box", 10);
+
+    // ========================================================================
     // SUBSCRIBE TO RVIZ GOAL TOPIC
     // ========================================================================
     rvizGoalSub = nh.subscribe("/move_base_simple/goal", 10, 
@@ -549,6 +554,15 @@ void NavigationControllerSS::computeStateSpaceControl() {
     w_d = w_target;
 }
 
+void sendPickBoxCommand(bool pick_box) {
+    std_msgs::Bool msg;
+    msg.data = pick_box;
+    pick_box_pub_.publish(msg);
+
+    ROS_INFO("Published pick_box=%s", pick_box ? "true" : "false");
+}
+
+
 // ============================================================================
 // FSM ACTIONS: driveToGoal
 // ============================================================================
@@ -673,6 +687,7 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
         //    navigationFsm.new_state = navigation_ss::states::done;
         //}
         if(aux == false){
+            sendPickBoxCommand(true);
             setReverseTargetToPenultimate();
 
             reverse_start_time = ros::Time::now();
@@ -681,6 +696,7 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
             navigationFsm.new_state = navigation_ss::states::reverseToPrev;
         }
         else{
+            sendPickBoxCommand(false);
             navigationFsm.new_state = navigation_ss::states::idle;
         }
         
