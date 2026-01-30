@@ -250,6 +250,7 @@ void NavigationControllerSS::loadControllerParams() {
     params.v_final = 0.0;        // velocidade perto do goal
     params.reverse_dist_tol = 0.10;   // tolerância para "cheguei ao penúltimo"
     params.reverse_speed = 0.10;
+    params.time_to_reverse = 0.5;
     
     // Carregar do ROS parameter server
     nh.param("kx", params.kx, params.kx);
@@ -268,6 +269,7 @@ void NavigationControllerSS::loadControllerParams() {
     nh.param("v_final", params.v_final, params.v_final);
     nh.param("reverse_dist_tol", params.reverse_dist_tol, params.reverse_dist_tol);
     nh.param("reverse_speed", params.reverse_speed, params.reverse_speed);
+    nh.param("time_to_reverse", params.time_to_reverse, params.time_to_reverse);
 
     
     ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f, yaw_tol=%.3f, a_max=%.2f, d_max=%.2f",
@@ -584,8 +586,22 @@ void NavigationControllerSS::reverseToPenultimate() {
         w_d = 0.0;
         return;
     }
-    
+
+    // esperar 0.5 segundos antes de começar a recuar
+    if (reverse_waiting) {
+        double elapsed = (ros::Time::now() - reverse_start_time).toSec();
+        if (elapsed < params.time_to_reverse) {
+            v_d = 0.0;
+            w_d = 0.0;
+            return;
+        } else {
+            reverse_waiting = false;  // já passou o tempo de espera
+        }
+    }
+
+    // começa o reverse
     v_d = params.reverse_speed;
+    w_d = 0.0;
     
 }
 
@@ -629,9 +645,13 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
         //} else {
         //    navigationFsm.new_state = navigation_ss::states::done;
         //}
-
         setReverseTargetToPenultimate();
+
+        reverse_start_time = ros::Time::now();
+        reverse_waiting = true;
+
         navigationFsm.new_state = navigation_ss::states::reverseToPrev;
+        
     }
 
     else if (navigationFsm.state == navigation_ss::states::reverseToPrev && isReverseArrived() && enable) {
@@ -641,6 +661,7 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
         seg_idx = 0;
         last_th = 0.0;
         reverse_target_valid = false;
+        reverse_waiting = false;
 
         navigationFsm.new_state = navigation_ss::states::idle;
     }

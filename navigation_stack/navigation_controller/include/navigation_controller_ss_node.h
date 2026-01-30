@@ -48,6 +48,7 @@ struct SSControllerParams {
     double v_final;   
     double reverse_dist_tol;   // tolerância para "cheguei ao penúltimo"
     double reverse_speed;
+    double time_to_reverse;
 };
 
 // ============================================================================
@@ -105,6 +106,9 @@ class NavigationControllerSS {
         int loop_rate_hz;                   // Control loop rate (Hz)
         Point reverse_target;
         bool reverse_target_valid = false;
+        ros::Time reverse_start_time;
+        bool reverse_waiting = false;
+
         
         // ====================================================================
         // FSM AND CONTROL MODE
@@ -163,6 +167,7 @@ class NavigationControllerSS {
         double getReverseError(); 
         bool isReverseArrived();
         void reverseToPenultimate();
+        
 
         // ====================================================================
         // SERVICE CALLBACK

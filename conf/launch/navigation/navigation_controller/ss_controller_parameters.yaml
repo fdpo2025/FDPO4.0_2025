@@ -24,6 +24,8 @@ smooth_corner_steps: 01  # Número de pontos por canto suavizado
 slow_down_dist: 0.2  
 v_final: 0.1
 
-reverse_dist_tol: 0.10   // tolerância para "cheguei ao penúltimo"
+reverse_dist_tol: 0.10   # tolerância para "cheguei ao penúltimo"
 reverse_speed: 0.10
+
+time_to_reverse: 0.5 # (s) tempo ate começar a andar para tras 
 
