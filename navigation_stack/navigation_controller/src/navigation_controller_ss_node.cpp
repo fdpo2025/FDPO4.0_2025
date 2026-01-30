@@ -500,7 +500,7 @@ void NavigationControllerSS::computeStateSpaceControl() {
     // ========================================================================
     // APLICAR LEI DE CONTROLO DE ESPAÇO DE ESTADOS
     // ========================================================================
-    double v_target = v_r * std::cos(e_theta) + params.kx * ex;
+    double v_target = v_r * std::cos(e_theta) * std::cos(e_theta) + params.kx * ex;
     double w_target = w_r + params.ky * v_r * ey + params.kth * std::sin(e_theta);
 
     // --------------------
