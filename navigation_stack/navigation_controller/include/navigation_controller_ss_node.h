@@ -102,7 +102,7 @@ class NavigationControllerSS {
         double v_d, w_d;                    // Desired velocities (output)
         int loop_rate_hz;                   // Control loop rate (Hz)
         Point reverse_target;
-        bool reverse_target_valid;
+        bool reverse_target_valid = false;
         
         // ====================================================================
         // FSM AND CONTROL MODE
@@ -157,10 +157,10 @@ class NavigationControllerSS {
         bool isYawDesired();
         double getPositionError();
         double getDesiredYawError();
-        void setReverseTargetToPenultimate()
-        double getReverseError() 
-        bool isReverseArrived()
-        void reverseToPenultimate()
+        void setReverseTargetToPenultimate();
+        double getReverseError(); 
+        bool isReverseArrived();
+        void reverseToPenultimate();
 
         // ====================================================================
         // SERVICE CALLBACK

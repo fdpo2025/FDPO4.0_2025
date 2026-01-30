@@ -575,7 +575,7 @@ double NavigationControllerSS::getReverseError() const {
 }
 
 bool NavigationControllerSS::isReverseArrived() const {
-    return reverse_target_valid && (getReverseError() <= reverse_dist_tol);
+    return reverse_target_valid && (getReverseError() <= params.reverse_dist_tol);
 }
 
 void NavigationControllerSS::reverseToPenultimate() {
