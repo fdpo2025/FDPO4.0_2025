@@ -569,12 +569,12 @@ void NavigationControllerSS::setReverseTargetToPenultimate() {
     reverse_target_valid = true;
 }
 
-double NavigationControllerSS::getReverseError() const {
+double NavigationControllerSS::getReverseError() {
     if (!reverse_target_valid) return 999.0;
     return std::hypot(reverse_target.x - curr_x, reverse_target.y - curr_y);
 }
 
-bool NavigationControllerSS::isReverseArrived() const {
+bool NavigationControllerSS::isReverseArrived() {
     return reverse_target_valid && (getReverseError() <= params.reverse_dist_tol);
 }
 
