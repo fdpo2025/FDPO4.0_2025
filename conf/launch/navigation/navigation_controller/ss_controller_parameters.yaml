@@ -21,3 +21,6 @@ end_dist_tol: 0.2   # Tolerância de chegada ao goal (m)
 smooth_radius: 0.0    # Raio de suavização dos cantos (m)
 smooth_corner_steps: 01  # Número de pontos por canto suavizado
 
+slow_down_dist: 0.05  
+v_final: 0.1
+

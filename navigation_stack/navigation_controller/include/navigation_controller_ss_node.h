@@ -44,6 +44,8 @@ struct SSControllerParams {
     double d_max;           // Desaceleração máxima (m/s²)
     double smooth_radius;
     int smooth_corner_steps;
+    double slow_down_dist;  // começa a abrandar a 60 cm do goal
+    double v_final;   
 };
 
 // ============================================================================

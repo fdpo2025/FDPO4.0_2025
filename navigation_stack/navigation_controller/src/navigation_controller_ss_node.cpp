@@ -246,6 +246,8 @@ void NavigationControllerSS::loadControllerParams() {
     params.d_max = 0.5;     // Desaceleração máxima (m/s²) - padrão igual ao navigation_controller
     params.smooth_radius = 0.01;
     params.smooth_corner_steps = 8;
+    params.slow_down_dist = 0.05;  // começa a abrandar a 60 cm do goal
+    params.v_final = 0.05;        // velocidade perto do goal
     
     // Carregar do ROS parameter server
     nh.param("kx", params.kx, params.kx);
@@ -260,6 +262,8 @@ void NavigationControllerSS::loadControllerParams() {
     nh.param("d_max", params.d_max, params.d_max);
     nh.param("smooth_radius", params.smooth_radius, params.smooth_radius);
     nh.param("smooth_corner_steps", params.smooth_corner_steps, params.smooth_corner_steps);
+    nh.param("slow_down_dist", params.slow_down_dist, params.slow_down_dist);
+    nh.param("v_final", params.v_final, params.v_final);
     
     ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f, yaw_tol=%.3f, a_max=%.2f, d_max=%.2f",
               params.kx, params.ky, params.kth, params.v_max, params.w_max, params.v_ref, 
@@ -465,11 +469,35 @@ void NavigationControllerSS::computeStateSpaceControl() {
     double v_target = v_r * std::cos(e_theta) + params.kx * ex;
     double w_target = w_r + params.ky * v_r * ey + params.kth * std::sin(e_theta);
 
+    // --------------------
+    // Slowdown perto do goal (último ponto)
+    // --------------------
+    double v_cap = params.v_max;
+
+    // Se quiseres: só aplica no último segmento
+    bool on_last_segment = (seg_idx >= static_cast<int>(smooth.size()) - 2);
+
+    if (on_last_segment) {
+        double d = dist_goal;
+
+        if (d < params.slow_down_dist) {
+            // fator 0..1
+            double alpha = d / params.slow_down_dist;
+            if (alpha < 0.0) alpha = 0.0;
+            if (alpha > 1.0) alpha = 1.0;
+
+            // v_cap vai de v_max (longe) até v_final (perto)
+            v_cap = params.v_final + (params.v_max - params.v_final) * alpha;
+        }
+    }
+
     // ========================================================================
     // SATURAÇÃO DE VELOCIDADES (limites máximos)
     // ========================================================================
-    if (v_target >  params.v_max) v_target =  params.v_max;
-    if (v_target < -params.v_max) v_target = -params.v_max;
+    if (v_target >  v_cap) v_target =  v_cap;
+    if (v_target < -v_cap) v_target = -v_cap;
+    //if (v_target >  params.v_max) v_target =  params.v_max;
+    //if (v_target < -params.v_max) v_target = -params.v_max;
     if (w_target >  params.w_max) w_target =  params.w_max;
     if (w_target < -params.w_max) w_target = -params.w_max;
 
