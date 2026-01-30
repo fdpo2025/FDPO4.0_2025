@@ -246,8 +246,8 @@ void NavigationControllerSS::loadControllerParams() {
     params.d_max = 0.5;     // Desaceleração máxima (m/s²) - padrão igual ao navigation_controller
     params.smooth_radius = 0.01;
     params.smooth_corner_steps = 8;
-    params.slow_down_dist = 0.05;  // começa a abrandar a 60 cm do goal
-    params.v_final = 0.05;        // velocidade perto do goal
+    params.slow_down_dist = 0.5;  // começa a abrandar a 60 cm do goal
+    params.v_final = 0.0;        // velocidade perto do goal
     
     // Carregar do ROS parameter server
     nh.param("kx", params.kx, params.kx);
@@ -474,11 +474,8 @@ void NavigationControllerSS::computeStateSpaceControl() {
     // --------------------
     double v_cap = params.v_max;
 
-    // Se quiseres: só aplica no último segmento
-    bool on_last_segment = (seg_idx >= static_cast<int>(smooth.size()) - 2);
-
-    if (on_last_segment) {
-        
+    bool near_goal = dist_goal < params.slow_down_dist;
+    if (near_goal) {
         v_target = params.v_final;
     }
 
