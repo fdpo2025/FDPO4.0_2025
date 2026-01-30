@@ -478,26 +478,17 @@ void NavigationControllerSS::computeStateSpaceControl() {
     bool on_last_segment = (seg_idx >= static_cast<int>(smooth.size()) - 2);
 
     if (on_last_segment) {
-        double d = dist_goal;
-
-        if (d < params.slow_down_dist) {
-            // fator 0..1
-            double alpha = d / params.slow_down_dist;
-            if (alpha < 0.0) alpha = 0.0;
-            if (alpha > 1.0) alpha = 1.0;
-
-            // v_cap vai de v_max (longe) até v_final (perto)
-            v_cap = params.v_final + (params.v_max - params.v_final) * alpha;
-        }
+        
+        v_target = params.v_final;
     }
 
     // ========================================================================
     // SATURAÇÃO DE VELOCIDADES (limites máximos)
     // ========================================================================
-    if (v_target >  v_cap) v_target =  v_cap;
-    if (v_target < -v_cap) v_target = -v_cap;
-    //if (v_target >  params.v_max) v_target =  params.v_max;
-    //if (v_target < -params.v_max) v_target = -params.v_max;
+    //if (v_target >  v_cap) v_target =  v_cap;
+    //if (v_target < -v_cap) v_target = -v_cap;
+    if (v_target >  params.v_max) v_target =  params.v_max;
+    if (v_target < -params.v_max) v_target = -params.v_max;
     if (w_target >  params.w_max) w_target =  params.w_max;
     if (w_target < -params.w_max) w_target = -params.w_max;
 
