@@ -5,8 +5,8 @@
 loop_rate_hz: 100  # Frequência do control loop (Hz)
 
 # Limites de velocidade
-v_nom: 0.4          # Velocidade linear nominal (m/s)
-v_max: 0.5          # Velocidade linear máxima (m/s) - limite absoluto
+v_nom: 0.2          # Velocidade linear nominal (m/s)
+v_max: 0.2          # Velocidade linear máxima (m/s) - limite absoluto
 v_min: 0.05         # Velocidade linear mínima (m/s)
 w_nom: 1.0          # Velocidade angular nominal (rad/s)
 w_min: 0.0          # Velocidade angular mínima (rad/s)
@@ -16,7 +16,7 @@ a_max: 0.5          # Aceleração máxima (m/s²)
 d_max: 0.5          # Desaceleração máxima (m/s²)
 
 # Tolerâncias gerais
-arrive_radius: 0.03 # Raio de chegada ao waypoint (m)
+arrive_radius: 0.01 # Raio de chegada ao waypoint (m)
 yaw_tol: 0.08       # Tolerância de orientação (rad)
 
 # ============================================================================
@@ -30,7 +30,7 @@ kp_angular: 1.0     # Ganho proporcional para controlo angular
 # PARÂMETROS followLine (seguir linha entre waypoints)
 # ============================================================================
 
-k_line: 2.0         # Ganho para correção de linha (followLine)
+k_line: 5.0         # Ganho para correção de linha (followLine)
 gain_fwd: 1.0       # GAIN_FWD - ganho forward para controlo de linha
 vel_lin_nom: 0.3    # VEL_LIN_NOM - velocidade linear nominal para seguir linha (m/s)
 dist_da: 0.3        # DIST_DA - distância para começar a desacelerar (m)

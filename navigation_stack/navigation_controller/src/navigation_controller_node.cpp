@@ -670,7 +670,7 @@ void NavigationController::followLine() {
     }
     else if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
         v_d = param.vel_lin_nom;
-        w_d = 3.0 * param.gain_fwd * k1 + param.gain_fwd * error_ang;
+        w_d = param.gain_fwd * k1 + param.gain_fwd * error_ang;
         
         // Limitar velocidade angular
         if (w_d > param.w_nom) w_d = param.w_nom;
@@ -690,7 +690,7 @@ void NavigationController::followLine() {
             if (v_d < v_target) v_d = v_target;
         }
         
-        w_d = 3.0 * param.gain_fwd * k1 + param.gain_fwd * error_ang;
+        w_d = param.gain_fwd * k1 + param.gain_fwd * error_ang;
         
         // Limitar velocidade angular
         if (w_d > param.w_nom) w_d = param.w_nom;
