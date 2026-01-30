@@ -280,6 +280,24 @@ void NavigationControllerSS::loadControllerParams() {
 // ============================================================================
 // LOAD PATH FROM PARAMETERS
 // ============================================================================
+void NavigationControllerSS::splitWaypoints(
+    const std::vector<Point>& waypoints,
+    std::vector<Point>& first3,
+    std::vector<Point>& rest)
+{
+    first3.clear();
+    rest.clear();
+
+    const size_t n = waypoints.size();
+    const size_t k = std::min<size_t>(3, n);
+
+    first3.insert(first3.end(), waypoints.begin(), waypoints.begin() + k);
+
+    if (n > k) {
+        rest.insert(rest.end(), waypoints.begin() + k, waypoints.end());
+    }
+}
+
 void NavigationControllerSS::loadPathFromParameters() {
     XmlRpc::XmlRpcValue waypoints;
     if (!nh.getParam("waypoints", waypoints)) {
@@ -307,6 +325,8 @@ void NavigationControllerSS::updatePathFromWaypoints(const std::vector<Point>& w
         ROS_WARN("NavigationControllerSS: Empty waypoints list");
         return;
     }
+   
+    splitWaypoints(waypoints, wp_first3, wp_rest);
 
     // Atualiza o caminho base
     path = waypoints;
@@ -341,6 +361,9 @@ void NavigationControllerSS::updatePathFromWaypoints(const std::vector<Point>& w
     
     // Gera o caminho suavizado
     smooth = smoothPath(path, params.smooth_radius, params.smooth_corner_steps);
+
+    smooth = wp_first3;
+
 
     ROS_INFO("smooth size = %zu, path size = %zu", smooth.size(), path.size());
     ROS_WARN("EFFECTIVE: smooth_radius=%.3f corner_steps=%d",
@@ -666,7 +689,15 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
         reverse_target_valid = false;
         reverse_waiting = false;
 
-        navigationFsm.new_state = navigation_ss::states::idle;
+        if(aux == false){
+            smooth = wp_rest;
+            aux = true;
+            navigationFsm.new_state = navigation_ss::states::driveToGoal;
+        }
+        else{
+            navigationFsm.new_state = navigation_ss::states::idle;
+        }
+       
     }
     
     else if(navigationFsm.state == navigation_ss::states::turnToFinalYaw && !isPositionArrived() && enable) {

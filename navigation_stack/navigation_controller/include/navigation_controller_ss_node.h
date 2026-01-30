@@ -108,6 +108,7 @@ class NavigationControllerSS {
         bool reverse_target_valid = false;
         ros::Time reverse_start_time;
         bool reverse_waiting = false;
+        std::vector<Point> wp_first3, wp_rest;
 
         
         // ====================================================================
@@ -131,6 +132,7 @@ class NavigationControllerSS {
         std::vector<Point> smooth;    // caminho suavizado
         int seg_idx;                  // índice do segmento atual
         double last_th;               // último theta de referência
+        bool aux=false;
         
         // Funções auxiliares
         std::pair<double,double> normalize(double vx, double vy) const;
@@ -167,6 +169,7 @@ class NavigationControllerSS {
         double getReverseError(); 
         bool isReverseArrived();
         void reverseToPenultimate();
+        void splitWaypoints();
         
 
         // ====================================================================
