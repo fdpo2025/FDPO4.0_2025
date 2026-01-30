@@ -671,12 +671,18 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
         //} else {
         //    navigationFsm.new_state = navigation_ss::states::done;
         //}
-        setReverseTargetToPenultimate();
+        if(axu == false){
+            setReverseTargetToPenultimate();
 
-        reverse_start_time = ros::Time::now();
-        reverse_waiting = true;
+            reverse_start_time = ros::Time::now();
+            reverse_waiting = true;
 
-        navigationFsm.new_state = navigation_ss::states::reverseToPrev;
+            navigationFsm.new_state = navigation_ss::states::reverseToPrev;
+        }
+        else{
+            navigationFsm.new_state = navigation_ss::states::idle;
+        }
+        
         
     }
 
