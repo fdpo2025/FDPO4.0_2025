@@ -671,7 +671,7 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
         //} else {
         //    navigationFsm.new_state = navigation_ss::states::done;
         //}
-        if(axu == false){
+        if(aux == false){
             setReverseTargetToPenultimate();
 
             reverse_start_time = ros::Time::now();
