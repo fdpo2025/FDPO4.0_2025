@@ -248,6 +248,8 @@ void NavigationControllerSS::loadControllerParams() {
     params.smooth_corner_steps = 8;
     params.slow_down_dist = 0.5;  // começa a abrandar a 60 cm do goal
     params.v_final = 0.0;        // velocidade perto do goal
+    params.reverse_dist_tol = 0.10;   // tolerância para "cheguei ao penúltimo"
+    params.reverse_speed = 0.10;
     
     // Carregar do ROS parameter server
     nh.param("kx", params.kx, params.kx);
@@ -264,6 +266,9 @@ void NavigationControllerSS::loadControllerParams() {
     nh.param("smooth_corner_steps", params.smooth_corner_steps, params.smooth_corner_steps);
     nh.param("slow_down_dist", params.slow_down_dist, params.slow_down_dist);
     nh.param("v_final", params.v_final, params.v_final);
+    nh.param("reverse_dist_tol", reverse_dist_tol, reverse_dist_tol);
+    nh.param("reverse_speed", reverse_speed, reverse_speed);
+
     
     ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f, yaw_tol=%.3f, a_max=%.2f, d_max=%.2f",
               params.kx, params.ky, params.kth, params.v_max, params.w_max, params.v_ref, 
@@ -555,6 +560,37 @@ void NavigationControllerSS::turnToFinalYaw() {
 }
 
 // ============================================================================
+// FSM ACTIONS: reverse
+// ============================================================================
+
+void NavigationControllerSS::setReverseTargetToPenultimate() {
+    
+    reverse_target = smooth[smooth.size() - 2];
+    reverse_target_valid = true;
+}
+
+double NavigationControllerSS::getReverseError() const {
+    if (!reverse_target_valid) return 999.0;
+    return std::hypot(reverse_target.x - curr_x, reverse_target.y - curr_y);
+}
+
+bool NavigationControllerSS::isReverseArrived() const {
+    return reverse_target_valid && (getReverseError() <= reverse_dist_tol);
+}
+
+void NavigationControllerSS::reverseToPenultimate() {
+    if (!reverse_target_valid) {
+        v_d = 0.0;
+        w_d = 0.0;
+        return;
+    }
+    
+    v_d = params.reverse_speed;
+    
+}
+
+
+// ============================================================================
 // FSM RUNNER
 // ============================================================================
 void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
@@ -582,17 +618,31 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
     
     else if(navigationFsm.state == navigation_ss::states::turnToFinalYaw && isYawDesired() && enable) {
         // Waypoint concluído - limpar caminho
+        //smooth.clear();
+        //path.clear();
+        //seg_idx = 0;
+        //last_th = 0.0;
+        
+        // Se não há mais waypoints, ir para idle
+        //if(smooth.empty()) {
+        //    navigationFsm.new_state = navigation_ss::states::idle;
+        //} else {
+        //    navigationFsm.new_state = navigation_ss::states::done;
+        //}
+
+        setReverseTargetToPenultimate();
+        navigationFsm.new_state = navigation_ss::states::reverseToPrev;
+    }
+
+    else if (navigationFsm.state == navigation_ss::states::reverseToPrev && isReverseArrived() && enable) {
+        // terminou reverse -> limpar caminho e idle
         smooth.clear();
         path.clear();
         seg_idx = 0;
         last_th = 0.0;
-        
-        // Se não há mais waypoints, ir para idle
-        if(smooth.empty()) {
-            navigationFsm.new_state = navigation_ss::states::idle;
-        } else {
-            navigationFsm.new_state = navigation_ss::states::done;
-        }
+        reverse_target_valid = false;
+
+        navigationFsm.new_state = navigation_ss::states::idle;
     }
     
     else if(navigationFsm.state == navigation_ss::states::turnToFinalYaw && !isPositionArrived() && enable) {
@@ -607,6 +657,9 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
     else if(navigationFsm.state == navigation_ss::states::done && !enable) {
         navigationFsm.new_state = navigation_ss::states::idle;
     }
+
+    
+
     
     // Se não há caminho durante driveToGoal ou turnToFinalYaw, ir para idle
     if ((navigationFsm.state == navigation_ss::states::driveToGoal || 
@@ -627,6 +680,9 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
     }
     else if(navigationFsm.state == navigation_ss::states::turnToFinalYaw && enable) {
         turnToFinalYaw();
+    }
+    else if(navigationFsm.state == navigation_ss::states::reverseToPrev && enable) {
+        reverseToPenultimate();
     }
     else {
         // Parar se não há caminho ou estado inválido

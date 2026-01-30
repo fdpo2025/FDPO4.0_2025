@@ -101,6 +101,7 @@ class NavigationControllerSS {
         double curr_x, curr_y, curr_theta;  // Current robot pose
         double v_d, w_d;                    // Desired velocities (output)
         int loop_rate_hz;                   // Control loop rate (Hz)
+        Point reverse_target;
         
         // ====================================================================
         // FSM AND CONTROL MODE
@@ -155,7 +156,11 @@ class NavigationControllerSS {
         bool isYawDesired();
         double getPositionError();
         double getDesiredYawError();
-        
+        void setReverseTargetToPenultimate()
+        double getReverseError() 
+        bool isReverseArrived()
+        void reverseToPenultimate()
+
         // ====================================================================
         // SERVICE CALLBACK
         // ====================================================================
@@ -173,6 +178,7 @@ namespace navigation_ss {
             idle = 0,
             driveToGoal,
             turnToFinalYaw,
+            reverseToPrev,
             done
         };
     }
