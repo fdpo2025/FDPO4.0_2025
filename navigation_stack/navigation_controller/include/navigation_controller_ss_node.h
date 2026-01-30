@@ -169,7 +169,10 @@ class NavigationControllerSS {
         double getReverseError(); 
         bool isReverseArrived();
         void reverseToPenultimate();
-        void splitWaypoints();
+        void splitWaypoints(
+            const std::vector<Point>& waypoints,
+            std::vector<Point>& first3,
+            std::vector<Point>& rest);
         
 
         // ====================================================================
