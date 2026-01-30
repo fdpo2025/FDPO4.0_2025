@@ -321,7 +321,7 @@ void NavigationControllerSS::updatePathFromWaypoints(const std::vector<Point>& w
         // Verificar se já está no waypoint (dentro da tolerância)
         const Point& goal = path[0];
         double dist_to_goal = std::hypot(goal.x - curr_x, goal.y - curr_y);
-        
+         /*
         if (dist_to_goal <= params.end_dist_tol) {
             // Já está no waypoint - não criar caminho, considerar que chegou
             ROS_WARN("NavigationControllerSS: Already at waypoint (dist=%.3f <= tol=%.3f), skipping path creation", 
@@ -332,6 +332,7 @@ void NavigationControllerSS::updatePathFromWaypoints(const std::vector<Point>& w
             last_th = 0.0;
             return;
         }
+        */
         
         // Adicionar posição atual como primeiro ponto para criar um segmento válido
         path.insert(path.begin(), current_pos);
@@ -434,12 +435,14 @@ void NavigationControllerSS::computeStateSpaceControl() {
     double dy_goal = goal.y - curr_y;
     double dist_goal = std::hypot(dx_goal, dy_goal);
 
+    /*
     if (dist_goal < params.end_dist_tol && seg_idx >= static_cast<int>(smooth.size()) - 1) {
         // Dentro da tolerância → pára
         v_d = 0.0;
         w_d = 0.0;
         return;
     }
+    */
 
     // ========================================================================
     // CALCULAR REFERÊNCIA NO CAMINHO SUAVIZADO
