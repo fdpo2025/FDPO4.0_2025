@@ -14,6 +14,7 @@
 #include <XmlRpcValue.h>
 #include <navigation_controller/NavigationControl.h>
 #include "fsm.h"
+#include <std_msgs/Bool.h>
 
 #include <vector>
 #include <utility>
@@ -174,7 +175,7 @@ class NavigationControllerSS {
             const std::vector<Point>& waypoints,
             std::vector<Point>& first3,
             std::vector<Point>& rest);
-        
+        void sendPickBoxCommand(bool pick_box);
 
         // ====================================================================
         // SERVICE CALLBACK

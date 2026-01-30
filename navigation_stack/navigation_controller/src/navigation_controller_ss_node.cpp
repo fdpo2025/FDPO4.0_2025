@@ -554,7 +554,7 @@ void NavigationControllerSS::computeStateSpaceControl() {
     w_d = w_target;
 }
 
-void sendPickBoxCommand(bool pick_box) {
+void NavigationControllerSS::sendPickBoxCommand(bool pick_box) {
     std_msgs::Bool msg;
     msg.data = pick_box;
     pick_box_pub_.publish(msg);
