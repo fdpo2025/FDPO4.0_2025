@@ -266,8 +266,8 @@ void NavigationControllerSS::loadControllerParams() {
     nh.param("smooth_corner_steps", params.smooth_corner_steps, params.smooth_corner_steps);
     nh.param("slow_down_dist", params.slow_down_dist, params.slow_down_dist);
     nh.param("v_final", params.v_final, params.v_final);
-    nh.param("reverse_dist_tol", reverse_dist_tol, reverse_dist_tol);
-    nh.param("reverse_speed", reverse_speed, reverse_speed);
+    nh.param("reverse_dist_tol", params.reverse_dist_tol, params.reverse_dist_tol);
+    nh.param("reverse_speed", params.reverse_speed, params.reverse_speed);
 
     
     ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f, yaw_tol=%.3f, a_max=%.2f, d_max=%.2f",
