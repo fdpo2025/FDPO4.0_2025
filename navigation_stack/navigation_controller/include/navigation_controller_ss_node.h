@@ -102,6 +102,7 @@ class NavigationControllerSS {
         double v_d, w_d;                    // Desired velocities (output)
         int loop_rate_hz;                   // Control loop rate (Hz)
         Point reverse_target;
+        bool reverse_target_valid;
         
         // ====================================================================
         // FSM AND CONTROL MODE
