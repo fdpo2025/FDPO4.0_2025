@@ -82,6 +82,7 @@ class NavigationController {
             double dist_da;       // DIST_DA
             double tol_findist;   // TOL_FINDIST
             double max_etf;       // MAX_ETF
+            double tol_init_line; // Tolerância de distância à linha para transição GoTo_Init -> Follow_Line (m)
 
         };
 

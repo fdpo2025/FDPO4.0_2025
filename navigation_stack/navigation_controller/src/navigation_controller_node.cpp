@@ -3,7 +3,7 @@
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0), 
 navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::GoTo_Init), 
-k1(0.0), tfBuffer(), tfListener(tfBuffer) {
+k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false}), tfBuffer(), tfListener(tfBuffer) {
     
     mode = "idle";
 
@@ -56,9 +56,11 @@ void NavigationController::loadRouteFromParameters(){
     if(!nh.getParam("waypoints", waypoints)) return;
 
     route.clear();
+    previousWaypoint.id = -1;  // Reset previousWaypoint quando rota é carregada
 
     for(int i = 0; i < static_cast<int>(waypoints.size()); ++i){
         WayPoint waypoint_temp;
+        waypoint_temp.id = i;
 
         waypoint_temp.pose.x = static_cast<double>(waypoints[i]["x"]);
         waypoint_temp.pose.y = static_cast<double>(waypoints[i]["y"]);
@@ -106,6 +108,7 @@ void NavigationController::loadNavigationParams() {
     nh.param("dist_da", param.dist_da, 0.3);       // DIST_DA
     nh.param("tol_findist", param.tol_findist, 0.05); // TOL_FINDIST
     nh.param("max_etf", param.max_etf, 0.2);       // MAX_ETF (rad)
+    nh.param("tol_init_line", param.tol_init_line, 0.1); // Tolerância de distância à linha para GoTo_Init -> Follow_Line (m)
     
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, gain_fwd=%.2f, vel_lin_nom=%.2f", 
              param.v_nom, param.w_nom, param.k_line, param.gain_fwd, param.vel_lin_nom);
@@ -546,6 +549,39 @@ void NavigationController::followLine() {
         return;
     }
     
+    // Se só resta 1 waypoint, ir diretamente para o waypoint final (não usar FSM do followLine)
+    if(route.size() == 1) {
+        double xf = route.front().pose.x;
+        double yf = route.front().pose.y;
+        double tf = route.front().pose.theta;
+        
+        double dist_to_final = std::sqrt((xf - poseCurr.x) * (xf - poseCurr.x) + 
+                                         (yf - poseCurr.y) * (yf - poseCurr.y));
+        double yaw_error_final = normalizeAngle(tf - poseCurr.theta);
+        
+        // Se já chegou ao último waypoint - remover e parar
+        if (dist_to_final <= param.arrive_radius && std::fabs(yaw_error_final) <= param.yaw_tol) {
+            ROS_INFO("followLine: Reached final waypoint (x=%.2f, y=%.2f), removing from route", xf, yf);
+            route.pop_front();
+            v_d = 0.0;
+            w_d = 0.0;
+            followLineFsm.new_state = navigation::followLineStates::Stop_line;
+            followLineFsm.set_state();
+            navigationFsm.new_state = navigation::states::idle;
+            return;
+        }
+        
+        // Se não chegou, ir diretamente para o waypoint final usando goToXY
+        // (ignorar a FSM do followLine quando só resta 1 waypoint)
+        Pose saved_pose = poseDesired;
+        poseDesired.x = xf;
+        poseDesired.y = yf;
+        poseDesired.theta = tf;
+        goToXY();
+        poseDesired = saved_pose;
+        return;
+    }
+    
     // Obter pontos inicial e final da linha
     double xi, yi, xf, yf, tf;
     
@@ -560,8 +596,19 @@ void NavigationController::followLine() {
         tf = it->pose.theta;
     } else if(route.size() == 1) {
         // Quando só resta 1 waypoint: usar waypoint anterior como ponto inicial
-        xi = previousWaypoint.pose.x;
-        yi = previousWaypoint.pose.y;
+        // Se previousWaypoint não foi inicializado (id < 0), usar posição atual
+        if(previousWaypoint.id < 0) {
+            // Usar posição atual como ponto inicial
+            xi = poseCurr.x;
+            yi = poseCurr.y;
+            ROS_WARN("followLine: Only 1 waypoint left and previousWaypoint not set, using current position as line start");
+        } else {
+            // Usar waypoint anterior guardado
+            xi = previousWaypoint.pose.x;
+            yi = previousWaypoint.pose.y;
+            ROS_INFO("followLine: Using previousWaypoint (id=%d, x=%.2f, y=%.2f) -> final waypoint (x=%.2f, y=%.2f)", 
+                     previousWaypoint.id, xi, yi, route.front().pose.x, route.front().pose.y);
+        }
         xf = route.front().pose.x;
         yf = route.front().pose.y;
         tf = route.front().pose.theta;
@@ -587,7 +634,7 @@ void NavigationController::followLine() {
     
     // State machine - Transitions
     if (followLineFsm.state == navigation::followLineStates::GoTo_Init) {
-        if (distLine < 0.1 && std::abs(error_ang) < param.max_etf) {
+        if (distLine < param.tol_init_line && std::abs(error_ang) < param.max_etf) {
             followLineFsm.new_state = navigation::followLineStates::Follow_Line;
             navigationFsm.new_state = navigation::states::idle;  // state := 0
         }
@@ -656,6 +703,28 @@ void NavigationController::followLine() {
         poseDesired.y = yf;
         poseDesired.theta = tf;
         goToXY();
+        
+        // Se só resta 1 waypoint, verificar se chegou ao waypoint final
+        if (route.size() == 1) {
+            // Verificar se chegou ao waypoint final (xf, yf)
+            double dist_to_final = std::sqrt((xf - poseCurr.x) * (xf - poseCurr.x) + 
+                                             (yf - poseCurr.y) * (yf - poseCurr.y));
+            double yaw_error_final = normalizeAngle(tf - poseCurr.theta);
+            
+            if (dist_to_final <= param.arrive_radius && std::fabs(yaw_error_final) <= param.yaw_tol) {
+                // Chegou ao último waypoint - remover e parar
+                ROS_INFO("followLine: Reached final waypoint (x=%.2f, y=%.2f), removing from route", xf, yf);
+                route.pop_front();
+                v_d = 0.0;
+                w_d = 0.0;
+                followLineFsm.new_state = navigation::followLineStates::Stop_line;
+                followLineFsm.set_state();
+                navigationFsm.new_state = navigation::states::idle;
+                poseDesired = saved_pose;  // Restaurar
+                return;
+            }
+        }
+        
         poseDesired = saved_pose;  // Restaurar
     }
     else if (followLineFsm.state == navigation::followLineStates::Stop_line) {
@@ -694,6 +763,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         // Guardar waypoint anterior antes de remover
         if(!route.empty()) {
             previousWaypoint = route.front();
+            ROS_INFO("Stored previousWaypoint (id=%d, x=%.2f, y=%.2f) before removing. Remaining waypoints: %zu", 
+                     previousWaypoint.id, previousWaypoint.pose.x, previousWaypoint.pose.y, route.size() - 1);
         }
         
         route.pop_front();
@@ -723,6 +794,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         // Guardar waypoint anterior antes de remover
         if(!route.empty()) {
             previousWaypoint = route.front();
+            ROS_INFO("Stored previousWaypoint (id=%d, x=%.2f, y=%.2f) before removing (turnToFinalYaw). Remaining waypoints: %zu", 
+                     previousWaypoint.id, previousWaypoint.pose.x, previousWaypoint.pose.y, route.size() - 1);
         }
         
         route.pop_front();
@@ -792,6 +865,7 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
     else if(mode == "stop") {
 
         route.clear();
+        previousWaypoint.id = -1;  // Reset previousWaypoint quando para
         navigationFsm.new_state = navigation::states::idle;
         poseDesired = poseCurr;
         navigationFsm.set_state();
