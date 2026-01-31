@@ -58,16 +58,30 @@ void NavigationController::loadRouteFromParameters(){
     route.clear();
     previousWaypoint.id = -1;  // Reset previousWaypoint quando rota é carregada
 
+    // Adicionar posição atual do robô como primeiro waypoint
+    // Isto garante que a primeira linha é da posição inicial até ao primeiro waypoint definido
+    WayPoint initial_waypoint;
+    initial_waypoint.id = 0;
+    initial_waypoint.pose.x = poseCurr.x;
+    initial_waypoint.pose.y = poseCurr.y;
+    initial_waypoint.pose.theta = poseCurr.theta;
+    initial_waypoint.align = false;
+    initial_waypoint.backwards = false;  // O primeiro segmento herda backwards do próximo waypoint
+    route.push_back(initial_waypoint);
+    ROS_INFO("Waypoint 0 (initial position): x=%.2f y=%.2f yaw=%.2f", 
+             initial_waypoint.pose.x, initial_waypoint.pose.y, initial_waypoint.pose.theta);
+
     for(int i = 0; i < static_cast<int>(waypoints.size()); ++i){
         WayPoint waypoint_temp;
-        waypoint_temp.id = i;
+        waypoint_temp.id = i + 1;  // IDs começam em 1 porque 0 é a posição inicial
 
         waypoint_temp.pose.x = static_cast<double>(waypoints[i]["x"]);
         waypoint_temp.pose.y = static_cast<double>(waypoints[i]["y"]);
         waypoint_temp.pose.theta = static_cast<double>(waypoints[i]["yaw"]);
         waypoint_temp.align = static_cast<bool>(waypoints[i]["align"]);
         waypoint_temp.backwards = static_cast<bool>(waypoints[i]["backwards"]);
-        ROS_INFO("Waypoint: x=%.2f y=%.2f yaw=%.2f", waypoint_temp.pose.x, waypoint_temp.pose.y, waypoint_temp.pose.theta);
+        ROS_INFO("Waypoint %d: x=%.2f y=%.2f yaw=%.2f", waypoint_temp.id, 
+                 waypoint_temp.pose.x, waypoint_temp.pose.y, waypoint_temp.pose.theta);
 
         route.push_back(waypoint_temp);
 
