@@ -621,6 +621,14 @@ void NavigationController::followLine() {
     
     // Calcular erros
     double tr = std::atan2(yf - yi, xf - xi);  // ângulo da linha
+    
+    // Suporte para backwards: quando o robô anda para trás, 
+    // deve apontar na direção oposta à linha
+    bool backwards = isBackwards();
+    if (backwards) {
+        tr = normalizeAngle(tr + M_PI);  // Inverter direção de referência
+    }
+    
     double error_ang = normalizeAngle(tr - poseCurr.theta);
     double error_dist = std::sqrt((xf - poseCurr.x) * (xf - poseCurr.x) + 
                                   (yf - poseCurr.y) * (yf - poseCurr.y));
@@ -628,6 +636,13 @@ void NavigationController::followLine() {
     // Calcular distância à linha (também calcula k1)
     double distLine;
     dist2Line(xi, yi, xf, yf, poseCurr.x, poseCurr.y, distLine);
+    
+    // Suporte para backwards: inverter k1 porque a correção angular é oposta
+    // (se k1 > 0 significa robô à esquerda da linha, a frente vira à direita,
+    //  mas a trás vira à esquerda)
+    if (backwards) {
+        k1 = -k1;
+    }
     
     // Update FSM
     followLineFsm.update_tis();
@@ -661,16 +676,17 @@ void NavigationController::followLine() {
     // State machine - Outputs
     if (followLineFsm.state == navigation::followLineStates::GoTo_Init) {
         // gotoXY(xi, yi, tr) - usar waypoint inicial com orientação da linha
+        // Nota: tr já foi ajustado para backwards acima
         Pose saved_pose = poseDesired;
         poseDesired.x = xi;
         poseDesired.y = yi;
-        poseDesired.theta = tr;
+        poseDesired.theta = tr;  // Já inclui ajuste para backwards
         goToXY();
         poseDesired = saved_pose;  // Restaurar
     }
     else if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
         v_d = param.vel_lin_nom;
-        w_d = param.gain_fwd * k1 + param.gain_fwd * error_ang;
+        w_d = param.k_line * k1 + param.gain_fwd * error_ang;
         
         // Limitar velocidade angular
         if (w_d > param.w_nom) w_d = param.w_nom;
@@ -690,7 +706,7 @@ void NavigationController::followLine() {
             if (v_d < v_target) v_d = v_target;
         }
         
-        w_d = param.gain_fwd * k1 + param.gain_fwd * error_ang;
+        w_d = param.k_line * k1 + param.gain_fwd * error_ang;
         
         // Limitar velocidade angular
         if (w_d > param.w_nom) w_d = param.w_nom;
