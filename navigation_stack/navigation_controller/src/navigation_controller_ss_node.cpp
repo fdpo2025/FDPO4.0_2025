@@ -285,6 +285,115 @@ void NavigationControllerSS::loadControllerParams() {
 // ============================================================================
 // LOAD PATH FROM PARAMETERS
 // ============================================================================
+void NavigationControllerSS::loadNextRouteFromQueue() {
+    // Ler opção de wrap (podes ler 1x no construtor também)
+    nh.param("route_wrap", route_wrap_, true);
+
+    // 1) Ler route_list
+    XmlRpc::XmlRpcValue route_list;
+    if (!nh.getParam("route_list", route_list)) {
+        ROS_WARN("No route_list parameter found.");
+        return;
+    }
+    if (route_list.getType() != XmlRpc::XmlRpcValue::TypeArray) {
+        ROS_ERROR("route_list must be an array of arrays. (YAML list of lists)");
+        return;
+    }
+    int num_routes = route_list.size();
+    if (num_routes <= 0) {
+        ROS_WARN("route_list is empty.");
+        return;
+    }
+    have_route_list_ = true;
+
+    // 2) Ajustar índice (fim da fila)
+    if (route_queue_idx_ >= num_routes) {
+        if (route_wrap_) {
+            route_queue_idx_ = 0;
+        } else {
+            ROS_WARN("No more routes in queue (route_queue_idx_=%d, num_routes=%d).",
+                     route_queue_idx_, num_routes);
+            return;
+        }
+    }
+
+    // 3) Obter a rota atual (lista de índices)
+    XmlRpc::XmlRpcValue indices_rpc = route_list[route_queue_idx_];
+    if (indices_rpc.getType() != XmlRpc::XmlRpcValue::TypeArray || indices_rpc.size() == 0) {
+        ROS_ERROR("route_list[%d] must be a non-empty array of ints.", route_queue_idx_);
+        // avança para a próxima para não ficar preso
+        route_queue_idx_++;
+        return;
+    }
+
+    std::vector<int> indices;
+    indices.reserve(indices_rpc.size());
+    for (int i = 0; i < indices_rpc.size(); ++i) {
+        // Em XmlRpc ints vêm como TypeInt
+        if (indices_rpc[i].getType() != XmlRpc::XmlRpcValue::TypeInt) {
+            ROS_ERROR("route_list[%d][%d] is not an int.", route_queue_idx_, i);
+            continue;
+        }
+        indices.push_back(static_cast<int>(indices_rpc[i]));
+    }
+
+    if (indices.empty()) {
+        ROS_ERROR("route_list[%d] produced no valid indices.", route_queue_idx_);
+        route_queue_idx_++;
+        return;
+    }
+
+    // 4) Ler points_map (idx -> {x,y})
+    XmlRpc::XmlRpcValue points_map;
+    if (!nh.getParam("points_map", points_map)) {
+        ROS_WARN("No points_map parameter found.");
+        return;
+    }
+    if (points_map.getType() != XmlRpc::XmlRpcValue::TypeStruct) {
+        ROS_ERROR("points_map must be a struct/dictionary (YAML map).");
+        return;
+    }
+
+    // 5) Construir waypoints
+    std::vector<Point> waypoint_list;
+    waypoint_list.reserve(indices.size());
+
+    for (int idx : indices) {
+        std::string key = std::to_string(idx);
+        if (!points_map.hasMember(key)) {
+            ROS_ERROR("points_map missing index %d (key '%s')", idx, key.c_str());
+            continue;
+        }
+
+        XmlRpc::XmlRpcValue p = points_map[key];
+        if (!p.hasMember("x") || !p.hasMember("y")) {
+            ROS_ERROR("points_map[%s] missing x or y", key.c_str());
+            continue;
+        }
+
+        Point wp;
+        wp.x = static_cast<double>(p["x"]);
+        wp.y = static_cast<double>(p["y"]);
+        waypoint_list.push_back(wp);
+    }
+
+    if (waypoint_list.empty()) {
+        ROS_WARN("Route %d had no valid waypoints after mapping indices->coords.", route_queue_idx_);
+        route_queue_idx_++;  // avança mesmo assim
+        return;
+    }
+
+    // 6) Atualizar caminho no teu controlador
+    ROS_INFO("Loading route %d/%d (indices=%zu, waypoints=%zu)",
+             route_queue_idx_ + 1, num_routes, indices.size(), waypoint_list.size());
+
+    updatePathFromWaypoints(waypoint_list);
+
+    // 7) “Tirar da fila”: avançar cursor para a próxima chamada
+    route_queue_idx_++;
+}
+
+
 void NavigationControllerSS::splitWaypoints(
     const std::vector<Point>& waypoints,
     std::vector<Point>& first3,
@@ -368,7 +477,7 @@ void NavigationControllerSS::updatePathFromWaypoints(const std::vector<Point>& w
     //smooth = smoothPath(path, params.smooth_radius, params.smooth_corner_steps);
     smooth = path;
 
-    smooth = wp_first3;
+    //smooth = wp_first3;
 
 
     ROS_INFO("smooth size = %zu, path size = %zu", smooth.size(), path.size());
@@ -665,7 +774,7 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
     // ========================================================================
     // COMPUTE TRANSITIONS
     // ========================================================================
-    if(navigationFsm.state == navigation_ss::states::idle && enable) {
+    if(navigationFsm.state == navigation_ss::states::idle && enable) {        
         navigationFsm.new_state = navigation_ss::states::driveToGoal;
     }
     
@@ -688,19 +797,19 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
         //}
         if(aux == false){
             sendPickBoxCommand(true);
-            setReverseTargetToPenultimate();
-
-            reverse_start_time = ros::Time::now();
-            reverse_waiting = true;
-
-            navigationFsm.new_state = navigation_ss::states::reverseToPrev;
+            
         }
         else{
             sendPickBoxCommand(false);
-            navigationFsm.new_state = navigation_ss::states::idle;
+            //navigationFsm.new_state = navigation_ss::states::idle;
         }
         
-        
+        setReverseTargetToPenultimate();
+
+        reverse_start_time = ros::Time::now();
+        reverse_waiting = true;
+
+        navigationFsm.new_state = navigation_ss::states::reverseToPrev;
     }
 
     else if (navigationFsm.state == navigation_ss::states::reverseToPrev && isReverseArrived() && enable) {
@@ -713,11 +822,14 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
         reverse_waiting = false;
 
         if(aux == false){
-            smooth = wp_rest;
+            //smooth = wp_rest;
+            loadNextRouteFromQueue();
             aux = true;
             navigationFsm.new_state = navigation_ss::states::driveToGoal;
         }
         else{
+            loadNextRouteFromQueue();
+            aux = false;
             navigationFsm.new_state = navigation_ss::states::idle;
         }
        
@@ -790,8 +902,9 @@ bool NavigationControllerSS::controlSrvCb(navigation_controller::NavigationContr
     mode = req.command;
     
     if(mode == "start") {
-        loadPathFromParameters();
-        
+        //loadPathFromParameters();
+        loadNextRouteFromQueue();
+                
         if (smooth.empty()) {
             res.success = false;
             res.message = "no waypoints in params";

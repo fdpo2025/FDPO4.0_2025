@@ -145,6 +145,11 @@ class NavigationControllerSS {
         // Carregamento de waypoints
         void loadPathFromParameters();
         void updatePathFromWaypoints(const std::vector<Point>& waypoints);
+        void loadNextRouteFromQueue();
+
+        int route_queue_idx_ = 0;
+        bool route_wrap_ = true;  // lê do param "route_wrap"
+        bool have_route_list_ = false;
         
         // Controlo
         RefState computeRef(double x, double y, double theta,
