@@ -86,6 +86,8 @@ public:
      */
     bool errorStatus() const;
 
+    void flushInput();
+
     /**
      * Close the serial device
      * \throws boost::system::system_error if any error

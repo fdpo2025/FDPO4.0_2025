@@ -35,6 +35,7 @@
 #include <mutex>
 #include <boost/bind.hpp>
 #include <boost/shared_array.hpp>
+#include <termios.h>  // (não o asm/termios.h)
 
 #define termios asmtermios
 #define termio asmtermio
@@ -141,6 +142,13 @@ void AsyncSerial::close()
         throw(boost::system::system_error(boost::system::error_code(),
                 "Error while closing the device"));
     }
+}
+
+void AsyncSerial::flushInput()
+{
+  if(!isOpen()) return;
+  auto fd = pimpl->port.native_handle();
+  ::tcflush(fd, TCIFLUSH);
 }
 
 void AsyncSerial::write(const char *data, size_t size)
