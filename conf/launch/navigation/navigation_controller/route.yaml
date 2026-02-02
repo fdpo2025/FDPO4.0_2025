@@ -20,82 +20,77 @@ waypoints:
 # - { id: 7, x: 0.0, y: -0.5, yaw: 1.57, align: false, backwards: false}
 # - { id: 8, x: -0.695, y: -0.5, yaw: 1.57, align: true, backwards: false}
 
- - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
- - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 2, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 3, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 4, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 5, x: 0.695, y: 0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 6, x: 0.35, y: 0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 7, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 8, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 9, x: -0.35, y: -0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 10, x: -0.695, y: -0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
- - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 2, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 3, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 4, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 5, x: 0.695, y: 0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 6, x: 0.3, y: 0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 7, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 8, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 9, x: -0.3, y: -0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 10, x: -0.695, y: -0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
- - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 2, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 3, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 4, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 5, x: 0.695, y: 0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 6, x: 0.3, y: 0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 7, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 8, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 9, x: -0.3, y: -0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 10, x: -0.695, y: -0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
- - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 2, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 3, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 4, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 5, x: 0.695, y: 0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 6, x: 0.3, y: 0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 7, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 8, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 9, x: -0.3, y: -0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 10, x: -0.695, y: -0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
- - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 2, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 3, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 4, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 5, x: 0.695, y: 0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 6, x: 0.3, y: 0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 7, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 8, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
- - { id: 9, x: -0.3, y: -0.5, yaw: 1.57, align: false, backwards: false}
- - { id: 10, x: -0.695, y: -0.5, yaw: 1.57, align: false, backwards: false}
+#  - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
+#  - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 2, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 3, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 4, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 5, x: 0.695, y: 0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 6, x: 0.35, y: 0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 7, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 8, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 9, x: -0.35, y: -0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 10, x: -0.695, y: -0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
+#  - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 2, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 3, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 4, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 5, x: 0.695, y: 0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 6, x: 0.3, y: 0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 7, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 8, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 9, x: -0.3, y: -0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 10, x: -0.695, y: -0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
+#  - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 2, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 3, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 4, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 5, x: 0.695, y: 0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 6, x: 0.3, y: 0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 7, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 8, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 9, x: -0.3, y: -0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 10, x: -0.695, y: -0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
+#  - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 2, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 3, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 4, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 5, x: 0.695, y: 0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 6, x: 0.3, y: 0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 7, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 8, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 9, x: -0.3, y: -0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 10, x: -0.695, y: -0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
+#  - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 2, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 3, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 4, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 5, x: 0.695, y: 0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 6, x: 0.3, y: 0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 7, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 8, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
+#  - { id: 9, x: -0.3, y: -0.4, yaw: 1.57, align: false, backwards: false}
+#  - { id: 10, x: -0.695, y: -0.4, yaw: 1.57, align: false, backwards: false}
 
-
-
-# - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false}
-# - { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false}
-# - { id: 2, x: -0.695, y: 0.47, yaw: 1.57, align: false, backwards: false}
-# - { id: 3, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: true}
-# - { id: 4, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false}
-# - { id: 5, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false}
-# - { id: 2, x: -0.695, y: 0.355, yaw: 1.57, align: false, backwards: false}
-# - { id: 3, x: 0.0, y: 0.355, yaw: 1.57, align: false, backwards: false}
-# - { id: 4, x: 0.0, y: -0.280, yaw: 1.57, align: false, backwards: false}
-# - { id: 5, x: 0.695, y: -0.280, yaw: 1.57, align: false, backwards: false}
-
-
-
-
-
-
-
-
+- { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 1, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 2, x: -0.695, y: 0.47, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 1.0}
+- { id: 3, x: -0.695, y: 0.3, yaw: 1.57, align: false, backwards: true, line_switch_ratio: 0.75}
+- { id: 4, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 5, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 6, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 7, x: 0.695, y: -0.3, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 8, x: 0.695, y: 0.4, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 9, x: 0.35, y: 0.4, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 10, x: 0.0, y: 0.3, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 11, x: 0.0, y: -0.3, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 12, x: -0.35, y: -0.4, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 13, x: -0.695, y: -0.4, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
+- { id: 14, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 1.0}
 
 #waypoints:
 #  - { id: 0, x: -0.695, y: -0.200, yaw: 1.57, align: false, backwards: false}

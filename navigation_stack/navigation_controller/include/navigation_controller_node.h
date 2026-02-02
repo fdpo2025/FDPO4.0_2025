@@ -38,6 +38,7 @@ struct WayPoint {
     Pose pose;
     bool align;
     bool backwards;
+    double line_switch_ratio;  // % da linha para mudar para próxima (0.9 = 90%), -1 = usar global
 
 };
 

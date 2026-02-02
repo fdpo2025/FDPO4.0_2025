@@ -65,6 +65,7 @@ void NavigationController::loadRouteFromParameters(){
     previousWaypoint.pose.theta = poseCurr.theta;
     previousWaypoint.align = false;
     previousWaypoint.backwards = false;
+    previousWaypoint.line_switch_ratio = -1.0;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
     for(int i = 0; i < static_cast<int>(waypoints.size()); ++i){
@@ -76,7 +77,18 @@ void NavigationController::loadRouteFromParameters(){
         waypoint_temp.pose.theta = static_cast<double>(waypoints[i]["yaw"]);
         waypoint_temp.align = static_cast<bool>(waypoints[i]["align"]);
         waypoint_temp.backwards = static_cast<bool>(waypoints[i]["backwards"]);
-        ROS_INFO("Waypoint: x=%.2f y=%.2f yaw=%.2f", waypoint_temp.pose.x, waypoint_temp.pose.y, waypoint_temp.pose.theta);
+        
+        // line_switch_ratio: se não definido, usar -1 (significa usar parâmetro global)
+        if (waypoints[i].hasMember("line_switch_ratio")) {
+            waypoint_temp.line_switch_ratio = static_cast<double>(waypoints[i]["line_switch_ratio"]);
+        } else {
+            waypoint_temp.line_switch_ratio = -1.0;  // Usar parâmetro global
+        }
+        
+        ROS_INFO("Waypoint %d: x=%.2f y=%.2f yaw=%.2f backwards=%d line_switch=%.0f%%", 
+                 waypoint_temp.id, waypoint_temp.pose.x, waypoint_temp.pose.y, waypoint_temp.pose.theta,
+                 waypoint_temp.backwards, 
+                 waypoint_temp.line_switch_ratio > 0 ? waypoint_temp.line_switch_ratio * 100 : param.line_switch_ratio * 100);
 
         route.push_back(waypoint_temp);
 
@@ -299,6 +311,7 @@ double NavigationController::getAlignLineYawError() {
 
 void NavigationController::publishLineMarkers() {
     // Publica markers para visualizar as linhas entre waypoints no RViz
+    // Verde = forward, Azul = backwards
     
     visualization_msgs::Marker line_marker;
     line_marker.header.frame_id = "map";
@@ -311,15 +324,14 @@ void NavigationController::publishLineMarkers() {
     
     // Propriedades visuais
     line_marker.scale.x = 0.05;  // Espessura da linha (5 cm)
-    line_marker.color.r = 0.0;
-    line_marker.color.g = 1.0;
-    line_marker.color.b = 0.0;
-    line_marker.color.a = 1.0;  // Verde opaco
+    // Cor default não é usada quando colors está preenchido
+    line_marker.color.a = 1.0;
     
     line_marker.lifetime = ros::Duration(0);  // Sem expiração
     
-    // Limpar pontos anteriores
+    // Limpar pontos e cores anteriores
     line_marker.points.clear();
+    line_marker.colors.clear();
     
     // Se não há waypoints ou há apenas um, publicar marker vazio
     if (route.empty() || route.size() < 2) {
@@ -344,9 +356,28 @@ void NavigationController::publishLineMarkers() {
         p2.y = next_it->pose.y;
         p2.z = 0.0;
         
-        // Adicionar ambos os pontos para criar a linha
+        // Cor da linha baseada no backwards do pf (next_it)
+        // Verde = forward, Azul = backwards
+        std_msgs::ColorRGBA line_color;
+        if (next_it->backwards) {
+            // Azul para backwards
+            line_color.r = 0.0;
+            line_color.g = 0.5;
+            line_color.b = 1.0;
+            line_color.a = 1.0;
+        } else {
+            // Verde para forward
+            line_color.r = 0.0;
+            line_color.g = 1.0;
+            line_color.b = 0.0;
+            line_color.a = 1.0;
+        }
+        
+        // Adicionar pontos e cores (2 cores por linha, uma para cada vértice)
         line_marker.points.push_back(p1);
         line_marker.points.push_back(p2);
+        line_marker.colors.push_back(line_color);
+        line_marker.colors.push_back(line_color);
     }
     
     // Publicar marker
@@ -386,6 +417,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
         previousWaypoint.pose.theta = poseCurr.theta;
         previousWaypoint.align = false;
         previousWaypoint.backwards = false;
+        previousWaypoint.line_switch_ratio = -1.0;
         ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
     }
 
@@ -397,6 +429,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
     waypoint_temp.pose.theta = tf2::getYaw(poseInMap.pose.orientation);
     waypoint_temp.align = true;
     waypoint_temp.backwards = false;
+    waypoint_temp.line_switch_ratio = -1.0;  // Usar parâmetro global
 
     route.push_back(waypoint_temp);
     ROS_INFO("RViz goal added: x=%.2f y=%.2f yaw=%.2f (map frame)", 
@@ -583,13 +616,24 @@ void NavigationController::followLine() {
     
     // error calc.
     double tr = std::atan2(line.pf.pose.y - line.pi.pose.y, line.pf.pose.x - line.pi.pose.x);  // Line Angle
+    // Se backwards, seguir a linha no sentido oposto
+    if (isBackwards()) {
+        tr = normalizeAngle(tr + M_PI);
+    }
+
     double error_ang = normalizeAngle(tr - poseCurr.theta);
     double error_dist = std::sqrt((line.pf.pose.x - poseCurr.x) * (line.pf.pose.x - poseCurr.x) + 
                                   (line.pf.pose.y - poseCurr.y) * (line.pf.pose.y - poseCurr.y));
+
     // Line dist
     double distLine;
     dist2Line(line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y, poseCurr.x, poseCurr.y, distLine);
     
+    double k1_eff = k1;
+    if (isBackwards()) {
+        k1_eff = -k1;
+    }
+
     // Update tis
     followLineFsm.update_tis();
     
@@ -607,7 +651,8 @@ void NavigationController::followLine() {
     // State machine - Outputs
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
         
-        w_d = param.k_line * k1 + param.gain_fwd * error_ang;
+
+        w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
 
         double A = -param.vel_lin_nom/(param.w_nom*param.w_nom);
         v_d = std::max(A * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
@@ -622,7 +667,7 @@ void NavigationController::followLine() {
         if (v_target < param.v_min) v_target = param.v_min;
         v_d = v_target;
         
-        w_d = param.k_line * k1 + param.gain_fwd * error_ang;
+        w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
         
         // Limitar velocidade angular
         if (w_d > param.w_nom) w_d = param.w_nom;
@@ -664,31 +709,33 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     }
 
     // Quando align=false: usar line_progress para mudar de linha mais cedo (suaviza transições)
-    else if(navigationFsm.state == navigation::states::driveToGoal && 
-            line_progress >= param.line_switch_ratio && !route.front().align && enable) {
-
-        // Guardar waypoint anterior antes de remover
-        if(!route.empty()) {
+    // Usar line_switch_ratio do waypoint se definido (>0), senão usar parâmetro global
+    else if(navigationFsm.state == navigation::states::driveToGoal && !route.front().align && enable) {
+        
+        double switch_ratio = (route.front().line_switch_ratio > 0) ? 
+                               route.front().line_switch_ratio : param.line_switch_ratio;
+        
+        if (line_progress >= switch_ratio) {
+            // Guardar waypoint anterior antes de remover
             previousWaypoint = route.front();
-            ROS_INFO("Line switch at %.0f%% (line_progress=%.2f): waypoint (id=%d, x=%.2f, y=%.2f). Remaining: %zu", 
-                     line_progress * 100, line_progress,
+            ROS_INFO("Line switch at %.0f%% (threshold=%.0f%%): waypoint (id=%d, x=%.2f, y=%.2f). Remaining: %zu", 
+                     line_progress * 100, switch_ratio * 100,
                      previousWaypoint.id, previousWaypoint.pose.x, previousWaypoint.pose.y, route.size() - 1);
+        
+            route.pop_front();
+            updateDesiredPose();
+            
+            // Reinicializar followLine FSM para nova linha
+            followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+            followLineFsm.set_state();
+            
+            // Se não há mais waypoints, ir direto para idle
+            if(route.empty()) {
+                navigationFsm.new_state = navigation::states::idle;
+            } else {
+                navigationFsm.new_state = navigation::states::done;
+            }
         }
-        
-        route.pop_front();
-        updateDesiredPose();
-        
-        // Reinicializar followLine FSM para nova linha
-        followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-        followLineFsm.set_state();
-        
-        // Se não há mais waypoints, ir direto para idle
-        if(route.empty()) {
-            navigationFsm.new_state = navigation::states::idle;
-        } else {
-            navigationFsm.new_state = navigation::states::done;
-        }
-
     }
 
     else if (navigationFsm.state == navigation::states::turnToFinalYaw && enable && !isPositionArrived()) {
