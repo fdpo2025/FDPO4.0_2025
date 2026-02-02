@@ -873,6 +873,12 @@ void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
     }
     else if(navigationFsm.state == navigation_ss::states::reverseToPrev && enable) {
         reverseToPenultimate();
+        ROS_INFO_THROTTLE(0.2, "REV: err=%.3f tol=%.3f curr(%.2f,%.2f,%.2f) target(%.2f,%.2f) v=%.2f",
+                  getReverseError(), params.reverse_dist_tol,
+                  curr_x, curr_y, curr_theta,
+                  reverse_target.x, reverse_target.y,
+                  v_d);
+
     }
     else {
         // Parar se não há caminho ou estado inválido
