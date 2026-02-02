@@ -257,7 +257,7 @@ void NavigationControllerSS::loadControllerParams() {
     params.reverse_speed = 0.10;
     params.time_to_reverse = 0.5;
     params.sigma = 0.25;
-    params.ky_final = 75.0
+    params.ky_final = 75.0;
     params.kth_final = 0;
 
     
