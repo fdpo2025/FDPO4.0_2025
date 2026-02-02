@@ -616,7 +616,7 @@ void NavigationControllerSS::computeStateSpaceControl() {
     // ========================================================================
     // APLICAR LEI DE CONTROLO DE ESPAÇO DE ESTADOS
     // ========================================================================
-
+    
     double yaw_err = std::fabs(e_theta);
     //double sigma = 0.25;                 // controla agressividade
     double gate = std::exp(-(yaw_err*yaw_err)/(2*params.sigma*params.sigma));
@@ -632,10 +632,10 @@ void NavigationControllerSS::computeStateSpaceControl() {
     // Slowdown perto do goal (último ponto)
     // --------------------
     double v_cap = params.v_max;
-
+    
     bool near_goal = dist_goal < params.slow_down_dist;
     if (near_goal) {
-        v_target = params.v_final;
+        v_target = gate * params.v_final;
     }
 
     // ========================================================================
