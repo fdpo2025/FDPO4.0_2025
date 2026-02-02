@@ -19,6 +19,7 @@ d_max: 0.5       # Desaceleração máxima (m/s²)
 
 # Tolerâncias
 end_dist_tol: 0.05   # Tolerância de chegada ao goal (m)
+yaw_tol: 0.2
 
 # Parâmetros de suavização do caminho
 smooth_radius: 0.0    # Raio de suavização dos cantos (m)
