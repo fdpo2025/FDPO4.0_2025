@@ -51,6 +51,8 @@ struct SSControllerParams {
     double reverse_speed;
     double time_to_reverse;
     double sigma;
+    double ky_final;
+    double kth_final;
 };
 
 // ============================================================================

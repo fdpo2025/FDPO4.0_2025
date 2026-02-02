@@ -257,6 +257,9 @@ void NavigationControllerSS::loadControllerParams() {
     params.reverse_speed = 0.10;
     params.time_to_reverse = 0.5;
     params.sigma = 0.25;
+    params.ky_final = 75.0
+    params.kth_final = 0;
+
     
     // Carregar do ROS parameter server
     nh.param("kx", params.kx, params.kx);
@@ -277,6 +280,8 @@ void NavigationControllerSS::loadControllerParams() {
     nh.param("reverse_speed", params.reverse_speed, params.reverse_speed);
     nh.param("time_to_reverse", params.time_to_reverse, params.time_to_reverse);
     nh.param("sigma", params.sigma, params.sigma);
+    nh.param("ky_final", params.ky_final, params.ky_final);
+    nh.param("kth_final", params.kth_final, params.kth_final);
 
     
     ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f, yaw_tol=%.3f, a_max=%.2f, d_max=%.2f",
@@ -636,6 +641,7 @@ void NavigationControllerSS::computeStateSpaceControl() {
     bool near_goal = dist_goal < params.slow_down_dist;
     if (near_goal) {
         v_target = gate * params.v_final;
+        w_target = w_r + params.ky_final * v_r * ey + params.kth_final * std::sin(e_theta);
     }
 
     // ========================================================================
