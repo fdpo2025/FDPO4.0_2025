@@ -616,7 +616,7 @@ void NavigationControllerSS::computeStateSpaceControl() {
     // ========================================================================
     double v_target = v_r * std::cos(e_theta) * std::cos(e_theta) + params.kx * ex;
 
-    if(cos(e_theta)<0.9){
+    if(cos(e_theta)<0.995){
         v_target = 0;
     }
 
