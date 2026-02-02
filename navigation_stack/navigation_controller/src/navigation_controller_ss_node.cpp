@@ -623,7 +623,7 @@ void NavigationControllerSS::computeStateSpaceControl() {
     
     double v_raw = v_r + params.kx * ex;
     if (v_raw < 0.0) v_raw = 0.0;
-    v_target = gate * v_raw;   
+    double v_target = gate * v_raw;   
     
     //double v_target = v_r * std::cos(e_theta) * std::cos(e_theta) + params.kx * ex;
     double w_target = w_r + params.ky * v_r * ey + params.kth * std::sin(e_theta);
