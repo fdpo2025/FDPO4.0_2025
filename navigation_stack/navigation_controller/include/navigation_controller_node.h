@@ -41,6 +41,13 @@ struct WayPoint {
 
 };
 
+struct Line{
+
+    WayPoint pi;
+    WayPoint pf;
+    
+};
+
 class NavigationController {
 
     public:
@@ -56,33 +63,35 @@ class NavigationController {
         std::string mode; // "start" | "pause" | "unpause" | "stop""
 
         Fsm navigationFsm;
-        Fsm followLineFsm;  // FSM para followLine
+        Fsm followLineFsm;  // followLine fsm
         // both with respect to the map frame
         Pose poseCurr, poseDesired;
         double v_d, w_d;
-        double k1;  // Variável calculada em dist2Line, usada em followLine
-        WayPoint previousWaypoint;  // Guarda o waypoint anterior para criar linha quando só resta 1
+        double k1;  // dist2Line result (perpendicular distance with sign)
+        double line_progress;  // dist2Line result (0 = at pi, 1 = at pf, >1 = past pf)
+        WayPoint currentWaypoint, previousWaypoint;  // currentWaypoint: pi; previousWaypoint: pf
         
         struct Parameters {
 
             double v_nom, w_nom, w_min;
-            double v_min;  // Velocidade mínima constante na fase de desaceleração
-            double v_max;  // Velocidade máxima (m/s) - limite absoluto
-            double a_max;  // Aceleração máxima (m/s²)
-            double d_max;  // Desaceleração máxima (m/s²)
+            double v_min;  
+            double v_max;  
+            double a_max;  
+            double d_max;  
             double kp_linear, kp_angular;
-            double k_line;  // Ganho para correção de linha (followLine)
+            double k_line;  
             double arrive_radius, yaw_tol;
             int loop_rate_hz;
-            bool invert_odom_theta;  // Se true, inverte o theta do odom (corrige frame invertido)
+            bool invert_odom_theta;  
             
-            // FollowLine parameters (from Pascal code)
+            // FollowLine parameters 
             double gain_fwd;      // GAIN_FWD
             double vel_lin_nom;   // VEL_LIN_NOM
             double dist_da;       // DIST_DA
             double tol_findist;   // TOL_FINDIST
             double max_etf;       // MAX_ETF
-            double tol_init_line; // Tolerância de distância à linha para transição GoTo_Init -> Follow_Line (m)
+            double tol_init_line; // (m) tolerance to GoTo_Init -> Follow_Line
+            double line_switch_ratio;  // Ratio of line to switch to next (0.9 = 90%)
 
         };
 
@@ -158,11 +167,8 @@ namespace navigation {
     namespace followLineStates {
         
         enum {
-            GoTo_Init = 0,
-            Follow_Line,
-            Approaching,
-            Final_Rot,
-            Stop_line
+            Follow_Line = 0,
+            Approaching
         };
     }
 
