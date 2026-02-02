@@ -5,6 +5,9 @@ kx: 0.0          # Ganho de erro em x
 ky: 50.0         # Ganho de erro em y
 kth: 1.0         # Ganho de erro angular
 
+ky_final: 75.0         # Ganho de erro em y
+kth_final: 0.0  
+
 # Limites de velocidade
 v_max: 0.2       # Velocidade linear máxima (m/s)
 w_max: 1.0       # Velocidade angular máxima (rad/s)
