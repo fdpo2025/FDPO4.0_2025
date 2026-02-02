@@ -256,6 +256,7 @@ void NavigationControllerSS::loadControllerParams() {
     params.reverse_dist_tol = 0.10;   // tolerância para "cheguei ao penúltimo"
     params.reverse_speed = 0.10;
     params.time_to_reverse = 0.5;
+    params.sigma = 0.25;
     
     // Carregar do ROS parameter server
     nh.param("kx", params.kx, params.kx);
@@ -275,6 +276,7 @@ void NavigationControllerSS::loadControllerParams() {
     nh.param("reverse_dist_tol", params.reverse_dist_tol, params.reverse_dist_tol);
     nh.param("reverse_speed", params.reverse_speed, params.reverse_speed);
     nh.param("time_to_reverse", params.time_to_reverse, params.time_to_reverse);
+    nh.param("sigma", params.sigma, params.sigma);
 
     
     ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f, yaw_tol=%.3f, a_max=%.2f, d_max=%.2f",
@@ -614,12 +616,16 @@ void NavigationControllerSS::computeStateSpaceControl() {
     // ========================================================================
     // APLICAR LEI DE CONTROLO DE ESPAÇO DE ESTADOS
     // ========================================================================
-    double v_target = v_r * std::cos(e_theta) * std::cos(e_theta) + params.kx * ex;
 
-    if(cos(e_theta)<0.98){
-        v_target = 0;
-    }
-
+    double yaw_err = std::fabs(e_theta);
+    //double sigma = 0.25;                 // controla agressividade
+    double gate = std::exp(-(yaw_err*yaw_err)/(2*params.sigma*params.sigma));
+    
+    double v_raw = v_r + params.kx * ex;
+    if (v_raw < 0.0) v_raw = 0.0;
+    v_target = gate * v_raw;   
+    
+    //double v_target = v_r * std::cos(e_theta) * std::cos(e_theta) + params.kx * ex;
     double w_target = w_r + params.ky * v_r * ey + params.kth * std::sin(e_theta);
 
     // --------------------

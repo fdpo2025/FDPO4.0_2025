@@ -29,3 +29,5 @@ reverse_speed: -0.10
 
 time_to_reverse: 0.5 # (s) tempo ate começar a andar para tras 
 
+costheta: 0.866
+

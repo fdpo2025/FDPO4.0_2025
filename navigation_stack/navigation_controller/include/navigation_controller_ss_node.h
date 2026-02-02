@@ -50,6 +50,7 @@ struct SSControllerParams {
     double reverse_dist_tol;   // tolerância para "cheguei ao penúltimo"
     double reverse_speed;
     double time_to_reverse;
+    double sigma;
 };
 
 // ============================================================================
