@@ -6,9 +6,9 @@ ky: 50.0         # Ganho de erro em y
 kth: 1.0         # Ganho de erro angular
 
 # Limites de velocidade
-v_max: 0.3       # Velocidade linear máxima (m/s)
+v_max: 0.2       # Velocidade linear máxima (m/s)
 w_max: 1.0       # Velocidade angular máxima (rad/s)
-v_ref: 0.2       # Velocidade de referência (m/s)
+v_ref: 0.15       # Velocidade de referência (m/s)
 
 # Limites de aceleração
 a_max: 0.5       # Aceleração máxima (m/s²)
