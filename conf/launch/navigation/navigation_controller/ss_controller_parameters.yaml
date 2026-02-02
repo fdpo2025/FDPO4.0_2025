@@ -6,7 +6,7 @@ ky: 50.0         # Ganho de erro em y
 kth: 1.0         # Ganho de erro angular
 
 ky_final: 75.0         # Ganho de erro em y
-kth_final: 0.0  
+kth_final: 1.0  
 
 # Limites de velocidade
 v_max: 0.2       # Velocidade linear máxima (m/s)
@@ -25,7 +25,7 @@ smooth_radius: 0.0    # Raio de suavização dos cantos (m)
 smooth_corner_steps: 01  # Número de pontos por canto suavizado
 
 slow_down_dist: 0.2  
-v_final: 0.15
+v_final: 0.07
 
 reverse_dist_tol: 0.10   # tolerância para "cheguei ao penúltimo"
 reverse_speed: -0.10
