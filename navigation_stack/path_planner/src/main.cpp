@@ -1,5 +1,5 @@
 #include <ros/ros.h>
-#include "path_planner/path_planner_node.h"
+#include "path_planner_node.h"
 
 int main(int argc, char** argv)
 {
