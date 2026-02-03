@@ -20,7 +20,7 @@ include_directories(
 
 add_executable(path_planner_node
   src/path_planner_node.cpp
-  src/path_planner.cpp
+  src/main.cpp
 )
 
 target_link_libraries(path_planner_node
