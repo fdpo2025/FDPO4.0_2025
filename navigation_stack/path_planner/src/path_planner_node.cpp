@@ -139,7 +139,7 @@ PathPlannerNode::PathPlannerNode(ros::NodeHandle& nh)
   nh_.param<std::string>("frame_id", frame_id_, std::string("map"));
 
   color_seq_sub_ = nh_.subscribe("/color_sequence", 1, &PathPlannerNode::onColorSequence, this);
-  planned_paths_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/planned_paths", 1, true);
+  planned_paths_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/planned_paths", 100, true);
 
 
   coords_ = buildCoords();
