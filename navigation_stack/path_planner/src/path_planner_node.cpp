@@ -260,7 +260,9 @@ void PathPlannerNode::runPlanner(const std::string& comb)
 
   unordered_set<int> usedWarehouse;
 
-  Robot rb{ .pos = 21 };
+  Robot rb;
+  rb.pos = 21;
+
 
   auto isFreeNode = [&](int node) -> bool {
       return boxesAt.find(node) == boxesAt.end();
