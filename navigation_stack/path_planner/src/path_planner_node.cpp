@@ -448,7 +448,10 @@ void PathPlannerNode::runPlanner(const std::string& comb)
           doDrop();
       }
 
-      if ((int)usedWarehouse.size() == 4 && !rb.carrying) break;
+      if ((int)usedWarehouse.size() == 4 && !rb.carrying) {
+      ROS_WARN("Armazem cheio, mas continuo a executar enquanto houver caixas.");
+      // NÃO dar break aqui
+      }
   }
 }
 
