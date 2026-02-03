@@ -1,15 +1,13 @@
-#include "path_planner_node.h"
 #include <ros/ros.h>
+#include "path_planner/path_planner_node.h"
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "path_planner_node");
-    ros::NodeHandle nh("~");
+  ros::init(argc, argv, "path_planner_node");
+  ros::NodeHandle nh("~");
 
-    PathPlanner planner(nh);
-    ROS_INFO("Path Planner initialization...");
+  PathPlannerNode node(nh);
 
-    ros::spin();
-
-    return 0;
+  ros::spin();
+  return 0;
 }

@@ -6,11 +6,13 @@ add_compile_options(-std=c++11)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
+  nav_msgs
+  geometry_msgs
 )
 
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS roscpp std_msgs
+  CATKIN_DEPENDS roscpp std_msgs nav_msgs geometry_msgs
 )
 
 include_directories(
@@ -19,8 +21,8 @@ include_directories(
 )
 
 add_executable(path_planner_node
-  src/path_planner_node.cpp
   src/main.cpp
+  src/path_planner_node.cpp
 )
 
 target_link_libraries(path_planner_node
