@@ -1,4 +1,4 @@
-#include "path_planner/path_planner_node.h"
+#include "path_planner_node.h"
 
 #include <iostream>
 #include <vector>
