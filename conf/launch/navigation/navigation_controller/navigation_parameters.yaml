@@ -29,7 +29,7 @@ kp_angular: 1.0     # Ganho proporcional para controlo angular
 # ============================================================================
 # PARÂMETROS followLine (seguir linha entre waypoints)
 # ============================================================================
-k_line: 7.0              # Ganho para correção de linha (followLine)
+k_line: 9.0              # Ganho para correção de linha (followLine)
 gain_fwd: 1.0            # GAIN_FWD - ganho forward para controlo de linha
 vel_lin_nom: 0.2         # VEL_LIN_NOM - velocidade linear nominal para seguir linha (m/s)
 dist_da: 0.3             # DIST_DA - distância para começar a desacelerar (m)
