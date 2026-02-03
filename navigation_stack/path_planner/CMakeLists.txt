@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(meu_pacote)
+project(path_planner)
 
 add_compile_options(-std=c++11)
 
