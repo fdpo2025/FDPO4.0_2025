@@ -39,6 +39,7 @@ struct WayPoint {
     bool align;
     bool backwards;
     double line_switch_ratio;  // % da linha para mudar para próxima (0.9 = 90%), -1 = usar global
+    double vel_lin_nom;        // Velocidade linear nominal para esta linha, -1 = usar global
 
 };
 
@@ -137,6 +138,7 @@ class NavigationController {
         
         ros::Publisher lineMarkerPub;
         void publishLineMarkers();
+        void skipNearbyWaypoints();  // Skip waypoints se já estamos perto deles
 
         ros::Timer controlTimer;
         void navigationFsmRunner(const ros::TimerEvent&);

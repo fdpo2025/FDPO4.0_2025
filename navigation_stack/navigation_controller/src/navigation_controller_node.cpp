@@ -3,7 +3,7 @@
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0), 
 navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line), 
-k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false}), tfBuffer(), tfListener(tfBuffer) {
+k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0}), tfBuffer(), tfListener(tfBuffer) {
     
     mode = "idle";
 
@@ -66,6 +66,7 @@ void NavigationController::loadRouteFromParameters(){
     previousWaypoint.align = false;
     previousWaypoint.backwards = false;
     previousWaypoint.line_switch_ratio = -1.0;
+    previousWaypoint.vel_lin_nom = -1.0;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
     for(int i = 0; i < static_cast<int>(waypoints.size()); ++i){
@@ -85,10 +86,19 @@ void NavigationController::loadRouteFromParameters(){
             waypoint_temp.line_switch_ratio = -1.0;  // Usar parâmetro global
         }
         
-        ROS_INFO("Waypoint %d: x=%.2f y=%.2f yaw=%.2f backwards=%d line_switch=%.0f%%", 
+        // vel_lin_nom: se não definido, usar -1 (significa usar parâmetro global)
+        if (waypoints[i].hasMember("vel_lin_nom")) {
+            waypoint_temp.vel_lin_nom = static_cast<double>(waypoints[i]["vel_lin_nom"]);
+        } else {
+            waypoint_temp.vel_lin_nom = -1.0;  // Usar parâmetro global
+        }
+        
+        double effective_vel = waypoint_temp.vel_lin_nom > 0 ? waypoint_temp.vel_lin_nom : param.vel_lin_nom;
+        ROS_INFO("Waypoint %d: x=%.2f y=%.2f yaw=%.2f backwards=%d switch=%.0f%% vel=%.2f", 
                  waypoint_temp.id, waypoint_temp.pose.x, waypoint_temp.pose.y, waypoint_temp.pose.theta,
                  waypoint_temp.backwards, 
-                 waypoint_temp.line_switch_ratio > 0 ? waypoint_temp.line_switch_ratio * 100 : param.line_switch_ratio * 100);
+                 waypoint_temp.line_switch_ratio > 0 ? waypoint_temp.line_switch_ratio * 100 : param.line_switch_ratio * 100,
+                 effective_vel);
 
         route.push_back(waypoint_temp);
 
@@ -101,6 +111,10 @@ void NavigationController::loadRouteFromParameters(){
     if (!route.empty()) {
         followLineFsm.new_state = navigation::followLineStates::Follow_Line;
         followLineFsm.set_state();
+        
+        // Verificar se já estamos perto do primeiro waypoint (skip inicial)
+        // Se line_progress >= switch_ratio, avançar para a próxima linha
+        skipNearbyWaypoints();
     }
     
     // Publicar linhas de visualização
@@ -384,6 +398,58 @@ void NavigationController::publishLineMarkers() {
     lineMarkerPub.publish(line_marker);
 }
 
+void NavigationController::skipNearbyWaypoints() {
+    // Se já estamos perto de waypoints (align=false), skip para a próxima linha
+    // Isto evita criar linhas muito curtas quando o robô já está perto do waypoint inicial
+    
+    while (route.size() >= 2 && !route.front().align) {
+        // Calcular line_progress para a linha atual
+        double pi_x = previousWaypoint.pose.x;
+        double pi_y = previousWaypoint.pose.y;
+        double pf_x = route.front().pose.x;
+        double pf_y = route.front().pose.y;
+        
+        double line_length = std::sqrt((pf_x - pi_x) * (pf_x - pi_x) + (pf_y - pi_y) * (pf_y - pi_y));
+        
+        if (line_length < 0.01) {
+            // Linha muito curta, skip direto
+            previousWaypoint = route.front();
+            route.pop_front();
+            ROS_INFO("Skipped waypoint (line too short): id=%d", previousWaypoint.id);
+            continue;
+        }
+        
+        // Vetor da linha (normalizado)
+        double line_dx = (pf_x - pi_x) / line_length;
+        double line_dy = (pf_y - pi_y) / line_length;
+        
+        // Vetor do ponto inicial até posição atual
+        double robot_dx = poseCurr.x - pi_x;
+        double robot_dy = poseCurr.y - pi_y;
+        
+        // Projeção da posição do robô na linha
+        double projection = robot_dx * line_dx + robot_dy * line_dy;
+        double progress = projection / line_length;
+        
+        // Obter switch_ratio para este waypoint
+        double switch_ratio = (route.front().line_switch_ratio > 0) ? 
+                               route.front().line_switch_ratio : param.line_switch_ratio;
+        
+        if (progress >= switch_ratio) {
+            // Já estamos além do switch_ratio, avançar para próxima linha
+            previousWaypoint = route.front();
+            route.pop_front();
+            ROS_INFO("Skipped nearby waypoint: id=%d (progress=%.0f%% >= threshold=%.0f%%)", 
+                     previousWaypoint.id, progress * 100, switch_ratio * 100);
+        } else {
+            // Ainda não chegámos ao threshold, parar de skipar
+            break;
+        }
+    }
+    
+    updateDesiredPose();
+}
+
 void NavigationController::updateCurrPose(const nav_msgs::Odometry::ConstPtr& msg) {
 
     poseCurr.x = msg->pose.pose.position.x;
@@ -418,6 +484,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
         previousWaypoint.align = false;
         previousWaypoint.backwards = false;
         previousWaypoint.line_switch_ratio = -1.0;
+        previousWaypoint.vel_lin_nom = -1.0;
         ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
     }
 
@@ -430,6 +497,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
     waypoint_temp.align = true;
     waypoint_temp.backwards = false;
     waypoint_temp.line_switch_ratio = -1.0;  // Usar parâmetro global
+    waypoint_temp.vel_lin_nom = -1.0;        // Usar parâmetro global
 
     route.push_back(waypoint_temp);
     ROS_INFO("RViz goal added: x=%.2f y=%.2f yaw=%.2f (map frame)", 
@@ -612,7 +680,10 @@ void NavigationController::followLine() {
     currentWaypoint = route.front();
     line.pf = currentWaypoint;
     line.pi = previousWaypoint;
-
+    
+    // Velocidade linear nominal efetiva (do waypoint se definida, senão global)
+    double vel_lin_nom_eff = (currentWaypoint.vel_lin_nom > 0) ? 
+                              currentWaypoint.vel_lin_nom : param.vel_lin_nom;
     
     // error calc.
     double tr = std::atan2(line.pf.pose.y - line.pi.pose.y, line.pf.pose.x - line.pi.pose.x);  // Line Angle
@@ -654,7 +725,7 @@ void NavigationController::followLine() {
 
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
 
-        double A = -param.vel_lin_nom/(param.w_nom*param.w_nom);
+        double A = -vel_lin_nom_eff/(param.w_nom*param.w_nom);
         v_d = std::max(A * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
         
         // Limitar velocidade angular
@@ -663,7 +734,7 @@ void NavigationController::followLine() {
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
         // LinDeAccel desaceleração linear proporcional à distância
-        double v_target = param.vel_lin_nom * (error_dist / param.dist_da);
+        double v_target = vel_lin_nom_eff * (error_dist / param.dist_da);
         if (v_target < param.v_min) v_target = param.v_min;
         v_d = v_target;
         
