@@ -1,12 +1,12 @@
+cmake_minimum_required(VERSION 3.0.2)
+project(wifi_driver)
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
 )
 
-catkin_package(
-  INCLUDE_DIRS include
-  CATKIN_DEPENDS roscpp std_msgs
-)
+catkin_package()
 
 include_directories(
   include
