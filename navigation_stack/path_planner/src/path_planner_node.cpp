@@ -248,6 +248,10 @@ void PathPlannerNode::runPlanner(const std::string& comb)
   Robot rb;
   rb.pos = 21;
 
+  std::vector<int> full_path;
+  full_path.reserve(512);           // opcional
+  full_path.push_back(rb.pos);      // começa no nó inicial do robô
+
 
   auto isFreeNode = [&](int node) -> bool {
       return boxesAt.find(node) == boxesAt.end();
@@ -296,17 +300,28 @@ void PathPlannerNode::runPlanner(const std::string& comb)
   };
 
   auto moveRobot = [&](int to) -> bool {
-      auto path = shortestPathBFS(adj, rb.pos, to);
-      if (path.empty()) return false;
+    // se já estás no sítio, não há caminho para anexar
+    if (to == rb.pos) return true;
 
-      auto simp = simplifyPath(path, coords, forced);
+    auto path = shortestPathBFS(adj, rb.pos, to);
+    if (path.empty()) return false;
 
-      // ✅ AQUI é onde "sempre que obtenho um path eu publico"
-      publishPlannedPath(simp);
+    auto simp = simplifyPath(path, coords, forced);
 
-      rb.pos = to;
-      return true;
+    // anexar simp ao full_path evitando duplicar o nó de ligação
+    if (!simp.empty()) {
+        size_t start_i = 0;
+        if (!full_path.empty() && full_path.back() == simp.front())
+            start_i = 1;  // evita repetir o nó
+
+        for (size_t i = start_i; i < simp.size(); ++i)
+            full_path.push_back(simp[i]);
+    }
+
+    rb.pos = to;
+    return true;
   };
+
 
   auto doPick = [&](int node) {
       auto it = boxesAt.find(node);
@@ -453,6 +468,9 @@ void PathPlannerNode::runPlanner(const std::string& comb)
       // NÃO dar break aqui
       }
   }
+  ROS_INFO("A publicar caminho final com %zu nos", full_path.size());
+  publishPlannedPath(full_path);
+
 }
 
 // =================== coords/forced ===================
