@@ -93,12 +93,43 @@ waypoints:
 #- { id: 13, x: -0.695, y: -0.4, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75}
 #- { id: 14, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 1.0}
 # ---------------------------------------------------------------------------------------------------
+# -------------- Move 2 boxes -------------------
  - { id: 0, x: -0.695, y: -0.355, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2}
  - { id: 0, x: 0.0, y: -0.355, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75,  vel_lin_nom: 0.2 }
- - { id: 0, x: 0.0, y: 0.2, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2 }
- - { id: 0, x: -0.695, y: 0.2, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2 }
- - { id: 0, x: -0.695, y: 0.47, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 1.0, vel_lin_nom: 0.1 }
- - { id: 0, x: -0.695, y: 0.2, yaw: 1.57, align: false, backwards: true, line_switch_ratio: 0.75, vel_lin_nom: 0.2 }
+ - { id: 0, x: 0.0, y: 0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2 }
+ - { id: 0, x: -0.695, y: 0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2 }
+ - { id: 0, x: -0.695, y: 0.48, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 1.0, vel_lin_nom: 0.1 }
+ - { id: 0, x: -0.695, y: 0.235, yaw: 1.57, align: false, backwards: true, line_switch_ratio: 0.75, vel_lin_nom: 0.2 }
+ - { id: 0, x: 0.0, y: 0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2 }
+ - { id: 0, x: 0.0, y: -0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2 }
+ - { id: 0, x: 0.245, y: -0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2 }
+ - { id: 0, x: 0.245, y: -0.48, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 1.0, vel_lin_nom: 0.1 }
+ - { id: 0, x: 0.245, y: -0.235, yaw: 1.57, align: false, backwards: true, line_switch_ratio: 0.75, vel_lin_nom: 0.2 }
+ # go to 2nd box
+ - { id: 0, x: 0.695, y: -0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2}
+ - { id: 0, x: 0.695, y: 0.355, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2}
+ - { id: 0, x: 0.227, y: 0.355, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2}
+ - { id: 0, x: -0.227, y: 0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2}
+ - { id: 0, x: -0.545, y: 0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2}
+ - { id: 0, x: -0.545, y: 0.48, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 1.0, vel_lin_nom: 0.1}
+ - { id: 0, x: -0.545, y: 0.235, yaw: 1.57, align: false, backwards: true, line_switch_ratio: 0.75, vel_lin_nom: 0.2}
+ - { id: 0, x: 0.0, y: 0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2}
+ - { id: 0, x: 0.0, y: -0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2}
+ - { id: 0, x: 0.395, y: -0.235, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 0.75, vel_lin_nom: 0.2}
+ - { id: 0, x: 0.395, y: -0.48, yaw: 1.57, align: false, backwards: false, line_switch_ratio: 1.0, vel_lin_nom: 0.1}
+ - { id: 0, x: 0.395, y: -0.235, yaw: 1.57, align: false, backwards: true, line_switch_ratio: 1.0, vel_lin_nom: 0.2}
+
+
+
+
+
+
+
+
+
+
+
+
 # 
 
 #waypoints:
