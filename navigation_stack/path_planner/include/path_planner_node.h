@@ -2,8 +2,7 @@
 
 #include <ros/ros.h>
 #include <std_msgs/String.h>
-#include <nav_msgs/Path.h>
-#include <geometry_msgs/PoseStamped.h>
+#include <std_msgs/Int32MultiArray.h>
 
 #include <string>
 #include <unordered_map>

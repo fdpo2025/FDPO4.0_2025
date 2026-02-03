@@ -139,7 +139,8 @@ PathPlannerNode::PathPlannerNode(ros::NodeHandle& nh)
   nh_.param<std::string>("frame_id", frame_id_, std::string("map"));
 
   color_seq_sub_ = nh_.subscribe("/color_sequence", 1, &PathPlannerNode::onColorSequence, this);
-  planned_paths_pub_ = nh_.advertise<nav_msgs::Path>("/planned_paths", 1, true); // latched
+  planned_paths_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/planned_paths", 1, true);
+
 
   coords_ = buildCoords();
   forced_keep_ = buildForcedKeep();
@@ -192,27 +193,11 @@ void PathPlannerNode::onColorSequence(const std_msgs::String::ConstPtr& msg)
 
 void PathPlannerNode::publishPlannedPath(const std::vector<int>& node_path)
 {
-  nav_msgs::Path msg;
-  msg.header.stamp = ros::Time::now();
-  msg.header.frame_id = frame_id_;
+  std_msgs::Int32MultiArray msg;
+  msg.data.reserve(node_path.size());
 
-  msg.poses.reserve(node_path.size());
-
-  for (int node : node_path)
-  {
-    auto it = coords_.find(node);
-    if (it == coords_.end())
-      throw std::runtime_error("Falta coordenada para nó " + std::to_string(node));
-
-    geometry_msgs::PoseStamped ps;
-    ps.header = msg.header;
-    ps.pose.position.x = it->second.x;
-    ps.pose.position.y = it->second.y;
-    ps.pose.position.z = 0.0;
-    ps.pose.orientation.w = 1.0;
-
-    msg.poses.push_back(ps);
-  }
+  for (int n : node_path)
+    msg.data.push_back(n);
 
   planned_paths_pub_.publish(msg);
 }
