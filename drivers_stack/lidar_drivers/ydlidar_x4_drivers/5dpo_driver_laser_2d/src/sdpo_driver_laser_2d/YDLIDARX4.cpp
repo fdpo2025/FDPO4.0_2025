@@ -1,6 +1,8 @@
 #include "sdpo_driver_laser_2d/YDLIDARX4.h"
 
 #include "sdpo_driver_laser_2d/utils.h"
+#include <thread>
+#include <chrono>
 
 namespace sdpo_driver_laser_2d {
 
@@ -16,12 +18,27 @@ YDLIDARX4::~YDLIDARX4() {
   closeSerial();
 }
 
-void YDLIDARX4::start() {
-  char start_scan_cmd[2];
-  start_scan_cmd[0] = (char) 0xA5;
-  start_scan_cmd[1] = (char) 0x60;
+static inline void sleep_ms(int ms){
+  std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
 
-  serial_async_->write(start_scan_cmd, 2);
+void YDLIDARX4::start() {
+  // 1) STOP
+  char stop_cmd[2] = {(char)0xA5, (char)0x65};
+  serial_async_->write(stop_cmd, 2);
+  sleep_ms(50);
+  serial_async_->flushInput();
+
+  // 2) RESTART/RESET
+  char rst_cmd[2] = {(char)0xA5, (char)0x80};
+  serial_async_->write(rst_cmd, 2);
+  sleep_ms(200);
+  serial_async_->flushInput();
+
+  // 3) START SCAN
+  char start_cmd[2] = {(char)0xA5, (char)0x60};
+  serial_async_->write(start_cmd, 2);
+  sleep_ms(50);
 }
 
 void YDLIDARX4::stop() {
