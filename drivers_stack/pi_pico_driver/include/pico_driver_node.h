@@ -41,7 +41,6 @@ namespace Communication {
             Pose odom_pos;
             double v_linear;
             double w_angular;
-            bool box_detection; // w/ ToF mesaure processed at the pico
 
         };
 
@@ -89,9 +88,6 @@ class PiPicoDriver {
 
         ros::Publisher posePub;
         void pubOdom();
-
-        ros::Publisher detectBoxPub;
-        void pubBoxDetection();
 
         tf::TransformBroadcaster tf_broadcaster;
 

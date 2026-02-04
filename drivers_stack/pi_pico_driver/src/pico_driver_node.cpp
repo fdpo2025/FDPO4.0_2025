@@ -12,7 +12,6 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   messageToReceive.odom_pos.theta = 0.0;
   messageToReceive.v_linear = 0.0;
   messageToReceive.w_angular = 0.0;
-  messageToReceive.box_detection = false;
 
   // ----------------------- ROS init -----------------------
   // -> Subs
@@ -20,7 +19,6 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   pickBoxSub = nh.subscribe("/pick_box", 10, &PiPicoDriver::pickBoxCallBack, this);
   // -> Pubs
   posePub = nh.advertise<nav_msgs::Odometry>("/odom", 10);
-  detectBoxPub = nh.advertise<std_msgs::Bool>("/box_detection", 10);
   // -> Timer (100 Hz para evitar watchdog timeout no Pico)
   commTimer = nh.createTimer(ros::Duration(0.01), &PiPicoDriver::commTick, this);
 
@@ -132,13 +130,6 @@ void PiPicoDriver::pubOdom() {
 
 }
 
-void PiPicoDriver::pubBoxDetection(){
-    
-  std_msgs::Bool msg;
-  msg.data = messageToReceive.box_detection;
-  detectBoxPub.publish(msg);
-    
-}
 
 std::string PiPicoDriver::syncCall(const std::string& cmd, int timeout_ms) {
   if (serial_fd_ < 0) {
@@ -188,42 +179,23 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
     
     double x=0, y=0, theta=0;
     double v=0.0, w=0.0;
-    int tof = 0;
 
     int n = std::sscanf(
       pos_part.c_str(),
-      "POS: %lf, %lf, %lf, V: %lf, W: %lf, TOF: %d",
-      &x, &y, &theta, &v, &w, &tof
+      "POS: %lf, %lf, %lf, V: %lf, W: %lf",
+      &x, &y, &theta, &v, &w
     );
 
-    if (n == 6) {
+    if (n == 5) {
       messageToReceive.odom_pos = {x, y, theta};
       messageToReceive.v_linear = v;
       messageToReceive.w_angular = w;
-      messageToReceive.box_detection = (tof != 0);
-      pubBoxDetection();
       pubOdom();
       return;
     }
 
-    ROS_WARN_THROTTLE(5.0, "Mensagem POS mal formatada (esperado x,y,theta,V,W,TOF): %s", pos_part.c_str());
-    ROS_WARN_THROTTLE(5.0, "Erro ao fazer parse da mensagem POS: %s", pos_part.c_str());
+    ROS_WARN_THROTTLE(5.0, "Mensagem POS mal formatada (esperado x,y,theta,V,W): %s", pos_part.c_str());
     return;
-  }
-
-  size_t tof_idx = msg.find("TOF:");
-  if (tof_idx != std::string::npos) {
-    // Extrair só a parte TOF
-    std::string tof_part = msg.substr(tof_idx + 4);
-    tof_part.erase(0, tof_part.find_first_not_of(" \t"));
-    
-    int flag = 0;
-    std::istringstream iss(tof_part);
-    if (iss >> flag) {
-      messageToReceive.box_detection = (flag != 0);
-      pubBoxDetection();
-      return;
-    }
   }
 
   // Ignora ACK e mensagens vazias/curtas
