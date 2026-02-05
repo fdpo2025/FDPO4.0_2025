@@ -12,6 +12,9 @@
 	<arg name="use_navigation" default="true"/>
 	<arg name="use_hmi" default="true"/>
 	<arg name="use_rviz" default="false" doc="Ativar RViz automaticamente"/>
+	<arg name="use_planner" default="true" />
+	<arg name="planner_node_name" default="path_planner_node" />
+	<arg name="use_wifi" default="true" />
 
 	<!-- HAL: Hardware Abstraction Layer (LiDAR, etc) -->
 	<include if="$(arg use_hal)" file="$(find conf)/system/hal.xml">
@@ -32,6 +35,14 @@
 		<arg name="map_file" value="$(arg map_file)"/>
 		<arg name="rviz_config" value="$(arg rviz_config)"/>
 		<arg name="use_rviz" value="$(arg use_rviz)"/>
+	</include>
+
+	<include if="$(arg use_planner)" file="$(find conf)/system/planner.xml">
+		<arg name="node_name" value="$(arg planner_node_name)" />
+	</include>
+		
+	<include file="$(find conf)/system/wifi.xml">
+		<arg name="enable" value="$(arg use_wifi)" />
 	</include>
 
 </launch>
