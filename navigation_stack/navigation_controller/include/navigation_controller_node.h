@@ -42,6 +42,7 @@ struct WayPoint {
     bool backwards;
     double line_switch_ratio;  // % da linha para mudar para próxima (0.9 = 90%), -1 = usar global
     double vel_lin_nom;        // Velocidade linear nominal para esta linha, -1 = usar global
+    bool pick_box;             // Se é warehouse de pick (true) ou drop (false)
 
 };
 
@@ -143,6 +144,10 @@ class NavigationController {
         
         ros::Publisher navCompletionFeedbackPub;
         bool completion_feedback_sent;  // Para enviar feedback apenas uma vez por linha
+        
+        // Estado para pick box forward
+        ros::Time pick_box_forward_start_time;
+        bool in_pick_box_forward;  // Se está no estado de andar para frente após pick
         void skipNearbyWaypoints();  // Skip waypoints se já estamos perto deles
 
         ros::Timer controlTimer;
@@ -173,6 +178,7 @@ namespace navigation {
             idle = 0,
             driveToGoal,
             turnToFinalYaw,
+            pickBoxForward,  // Estado para andar para frente após chegar a warehouse de pick
             done
 
         }; 
