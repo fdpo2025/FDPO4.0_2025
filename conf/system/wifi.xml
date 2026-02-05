@@ -1,0 +1,7 @@
+<launch>
+  <arg name="enable" default="true" />
+
+  <include if="$(arg enable)"
+           file="$(find wifi_driver)/launch/wifi_driver.launch" />
+</launch>
+

@@ -1,0 +1,9 @@
+<launch>
+  <!-- Argumentos repassáveis (opcional) -->
+  <arg name="node_name" default="path_planner_node" />
+
+  <!-- Sobe o planner -->
+  <include file="$(find path_planner)/launch/path_planner.launch">
+    <arg name="node_name" value="$(arg node_name)" />
+  </include>
+</launch>
