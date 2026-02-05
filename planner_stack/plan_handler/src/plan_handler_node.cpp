@@ -151,15 +151,15 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             has_box  = !has_box;
             point.should_pub = true;
             
-            // Se há um ponto anterior, garantir que ele tenha line_switch_ratio = 1.0
-            // (para completar 100% da linha antes de chegar à warehouse)
+            // Se há um ponto anterior, garantir que ele tenha line_switch_ratio = 0.90
+            // (para completar 90% da linha antes de chegar à warehouse)
             if (!control_points.empty()) {
-                control_points.back().line_switch_ratio = 1.0;
-                ROS_INFO("PlanHandlerNode: Set line_switch_ratio=1.0 for previous point (before warehouse)");
+                control_points.back().line_switch_ratio = 0.90;
+                ROS_INFO("PlanHandlerNode: Set line_switch_ratio=0.90 for previous point (before warehouse)");
             }
             // Também atualizar no plan_stack se não estiver vazio
             if (!plan_stack.empty()) {
-                plan_stack.back().line_switch_ratio = 1.0;
+                plan_stack.back().line_switch_ratio = 0.90;
             }
 
         } else {
