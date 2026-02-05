@@ -13,7 +13,7 @@ k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0}), tfBuffer()
     //load RViz parameters
     nh.param("rviz_append", rvizGoalAppend, false);
 
-    // Parâmetro para controlar se carrega route do YAML
+    // load from YAML or from /nav_plan
     nh.param("load_from_route", load_from_route, false);
     
     // ros init
@@ -26,6 +26,8 @@ k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0}), tfBuffer()
     ROS_INFO("NavigationController subscribing to /nav_plan (load_from_route=%s)", load_from_route ? "true" : "false");
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
     lineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_lines", 1, true);  // latch=true para RViz ver imediatamente
+    navCompletionFeedbackPub = nh.advertise<plan_handler::CompletionFeedback>("/nav_completion_feedback", 10);
+    completion_feedback_sent = false;
     controlTimer = nh.createTimer(ros::Duration(1.0 / std::max(1, param.loop_rate_hz)), &NavigationController::navigationFsmRunner, this);
     controlSrv = nh.advertiseService("control", &NavigationController::controlSrvCb, this);
 
@@ -121,6 +123,9 @@ void NavigationController::loadRouteFromParameters(){
         // Se line_progress >= switch_ratio, avançar para a próxima linha
         skipNearbyWaypoints();
     }
+    
+    // Reset completion feedback flag quando nova rota é carregada
+    completion_feedback_sent = false;
     
     // Publicar linhas de visualização
     publishLineMarkers();
@@ -723,6 +728,22 @@ void NavigationController::followLine() {
     
     // Apply transitions
     followLineFsm.set_state();
+    
+    // Publicar feedback de conclusão quando >70% da linha for completada (apenas uma vez por linha)
+    if (line_progress > 0.7 && !completion_feedback_sent) {
+        plan_handler::CompletionFeedback feedback;
+        feedback.x = line.pf.pose.x;
+        feedback.y = line.pf.pose.y;
+        navCompletionFeedbackPub.publish(feedback);
+        completion_feedback_sent = true;
+        ROS_INFO("NavigationController: Published completion feedback for waypoint (%.3f, %.3f) at %.1f%% progress", 
+                 feedback.x, feedback.y, line_progress * 100.0);
+    }
+    
+    // Reset flag quando mudar de linha (quando line_progress < 0.7 novamente ou quando avançar para próximo waypoint)
+    if (line_progress < 0.7) {
+        completion_feedback_sent = false;
+    }
 
     // State machine - Outputs
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
@@ -805,6 +826,9 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             followLineFsm.new_state = navigation::followLineStates::Follow_Line;
             followLineFsm.set_state();
             
+            // Reset completion feedback flag para nova linha
+            completion_feedback_sent = false;
+            
             // Se não há mais waypoints, ir direto para idle
             if(route.empty()) {
                 navigationFsm.new_state = navigation::states::idle;
@@ -830,6 +854,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         }
         
         route.pop_front();
+        // Reset completion feedback flag para nova linha
+        completion_feedback_sent = false;
         updateDesiredPose();
         
         // Reinicializar followLine FSM para nova linha
@@ -1018,6 +1044,9 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     
     // Publicar linhas de visualização
     publishLineMarkers();
+    
+    // Reset completion feedback flag quando nova rota é carregada
+    completion_feedback_sent = false;
     
     ROS_INFO("NavigationController: Route loaded from NavPlan with %zu waypoints", route.size());
 }

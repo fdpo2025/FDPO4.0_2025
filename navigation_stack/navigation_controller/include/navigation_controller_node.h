@@ -22,6 +22,7 @@
 #include <boost/bind.hpp>
 #include <visualization_msgs/Marker.h>
 #include <plan_handler/NavPlan.h>
+#include <plan_handler/CompletionFeedback.h>
 
 
 #include "fsm.h"
@@ -139,6 +140,9 @@ class NavigationController {
         
         ros::Publisher lineMarkerPub;
         void publishLineMarkers();
+        
+        ros::Publisher navCompletionFeedbackPub;
+        bool completion_feedback_sent;  // Para enviar feedback apenas uma vez por linha
         void skipNearbyWaypoints();  // Skip waypoints se já estamos perto deles
 
         ros::Timer controlTimer;

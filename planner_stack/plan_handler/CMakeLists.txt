@@ -54,6 +54,7 @@ add_message_files(
   FILES
   ControllerPoint.msg
   NavPlan.msg
+  CompletionFeedback.msg
 )
 
 ## Generate services in the 'srv' folder

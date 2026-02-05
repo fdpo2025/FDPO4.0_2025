@@ -106,13 +106,18 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
 
     // State variables
     fe_warehouse_coordinate = has_box = is_last_warehouse = is_current_warehouse = false;
+    last_pick_box_state = false;  // Estado inicial do pick_box
 
     // ROS subscribers e publishers
     plannedPathsSub = nh.subscribe(planned_paths_topic, queue_size, &PlanHandlerNode::plannedPathsCallback, this);
+    navCompletionFeedbackSub = nh.subscribe("/nav_completion_feedback", 10, &PlanHandlerNode::navCompletionFeedbackCallback, this);
     navPlanPub = nh.advertise<plan_handler::NavPlan>("/nav_plan", 10);
+    pickBoxPub = nh.advertise<std_msgs::Bool>("/pick_box", 10);
     
     ROS_INFO("PlanHandlerNode subscribing to: %s (queue_size: %d)", planned_paths_topic.c_str(), queue_size);
+    ROS_INFO("PlanHandlerNode subscribing to: /nav_completion_feedback");
     ROS_INFO("PlanHandlerNode publishing to: /nav_plan");
+    ROS_INFO("PlanHandlerNode publishing to: /pick_box");
     ROS_INFO("PlanHandlerNode instance created");
 }
 
@@ -142,14 +147,16 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             point.backwards = false;
             point.vel_lin_nom = 0.1;
 
-            pick_box = !has_box; 
+            point.pick_box = !has_box; 
             has_box  = !has_box;
+            point.should_pub = true;
 
         } else {
 
-            point.line_switch_ratio = 1.0 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
+            point.line_switch_ratio = 0.75;
             point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
-            point.vel_lin_nom = 0.2;            
+            point.vel_lin_nom = 0.2;     
+            point.should_pub = false;       
 
         }
 
@@ -185,5 +192,48 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
         
         navPlanPub.publish(nav_plan);
         ROS_INFO("PlanHandlerNode: Published %zu control points to /nav_plan", control_points.size());
+    }
+}
+
+void PlanHandlerNode::navCompletionFeedbackCallback(const plan_handler::CompletionFeedback::ConstPtr& msg)
+{
+    ROS_INFO("PlanHandlerNode: Received completion feedback for point (%.3f, %.3f)", msg->x, msg->y);
+    
+    // Tolerância para comparação de coordenadas (devido a erros de ponto flutuante)
+    const double tolerance = 0.01; // 1cm
+    
+    // Procurar e remover o primeiro ponto no plan_stack com essas coordenadas
+    bool found = false;
+    for (auto it = plan_stack.begin(); it != plan_stack.end(); ++it) {
+        double dx = it->x - msg->x;
+        double dy = it->y - msg->y;
+        double dist = std::sqrt(dx * dx + dy * dy);
+        
+        if (dist < tolerance) {
+            // Encontrou o ponto - remover e publicar pick_box apenas se o estado mudou
+            ControllerPoint removed_point = *it;
+            plan_stack.erase(it);
+            
+            // Publicar no tópico /pick_box apenas se o estado mudou
+            if (removed_point.pick_box != last_pick_box_state && removed_point.should_pub) {
+                std_msgs::Bool pick_box_msg;
+                pick_box_msg.data = removed_point.pick_box;
+                pickBoxPub.publish(pick_box_msg);
+                last_pick_box_state = removed_point.pick_box;
+                
+                ROS_INFO("PlanHandlerNode: Removed point (%.3f, %.3f) from plan_stack. Published pick_box=%d (state changed). Remaining points: %zu", 
+                         removed_point.x, removed_point.y, pick_box_msg.data ? 1 : 0, plan_stack.size());
+            } else {
+                ROS_INFO("PlanHandlerNode: Removed point (%.3f, %.3f) from plan_stack. pick_box=%d (no state change). Remaining points: %zu", 
+                         removed_point.x, removed_point.y, removed_point.pick_box ? 1 : 0, plan_stack.size());
+            }
+            
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        ROS_WARN("PlanHandlerNode: Could not find point (%.3f, %.3f) in plan_stack to remove", msg->x, msg->y);
     }
 }
