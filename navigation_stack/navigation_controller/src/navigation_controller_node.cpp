@@ -715,6 +715,14 @@ void NavigationController::followLine() {
         k1_eff = k1;
     }
 
+    // Reduzir velocidade nominal para metade se erro de linha > 3cm
+    const double line_error_threshold = 0.03; // 3cm
+    if (std::abs(k1) > line_error_threshold) {
+        vel_lin_nom_eff = vel_lin_nom_eff * 0.5;
+        ROS_INFO_THROTTLE(1.0, "NavigationController: Line error %.3fm > %.3fm, reducing velocity to %.3f m/s", 
+                         std::abs(k1), line_error_threshold, vel_lin_nom_eff);
+    }
+
     // Update tis
     followLineFsm.update_tis();
     
@@ -759,17 +767,44 @@ void NavigationController::followLine() {
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-        // LinDeAccel desaceleração linear proporcional à distância
-        double v_target = vel_lin_nom_eff * (error_dist / param.dist_da);
-        if (v_target < param.v_min) v_target = param.v_min;
-        v_d = v_target;
-        
+
+        // -----------------------
+        //   ANGULAR CONTROL
+        // -----------------------
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
-        
+
         // Limitar velocidade angular
-        if (w_d > param.w_nom) w_d = param.w_nom;
+        if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
+
+        // -----------------------
+        //   LINEAR CONTROL (Solução 2)
+        // -----------------------
+
+        // Envelope de velocidade imposto pelo controlo lateral
+        double A = -vel_lin_nom_eff / (param.w_nom * param.w_nom);
+        double v_line_limit = std::max(
+            A * (w_d - param.w_nom) * (w_d + param.w_nom),
+            0.0
+        );
+
+        // Normalizar distância ao waypoint (0 → chegou, 1 → início do Approaching)
+        double s = error_dist / param.dist_da;
+        if (s > 1.0) s = 1.0;
+        if (s < 0.0) s = 0.0;
+
+        // Perfil quadrático suave (v → 0 quando error_dist → 0)
+        double v_profile = vel_lin_nom_eff * s * s;
+
+        // Aplicar envelope lateral + velocidade mínima
+        double v_target = std::min(v_profile, v_line_limit);
+
+        if (v_target < param.v_min)
+            v_target = param.v_min;
+
+        v_d = v_target;
     }
+
     
     // Backwards support
     if (isBackwards() && v_d > 0.0) {

@@ -20,7 +20,7 @@
 #include <dynamic_reconfigure/server.h>
 #include <navigation_controller/NavigationConfig.h>  
 #include <boost/bind.hpp>
-#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/Marker.h>                            
 #include <plan_handler/NavPlan.h>
 #include <plan_handler/CompletionFeedback.h>
 
