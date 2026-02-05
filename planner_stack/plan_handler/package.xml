@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>plan_handler</name>
+  <version>0.0.0</version>
+  <description>The plan_handler package - handles planned paths from planner</description>
+
+  <maintainer email="afonso@todo.todo">afonso</maintainer>
+  <license>BSD</license>
+
+  <!-- Build tools -->
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Build-time deps -->
+  <build_depend>roscpp</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>message_generation</build_depend>
+
+  <!-- Exported to consumers at build -->
+  <build_export_depend>roscpp</build_export_depend>
+  <build_export_depend>std_msgs</build_export_depend>
+  <build_export_depend>geometry_msgs</build_export_depend>
+  <build_export_depend>message_runtime</build_export_depend>
+
+  <!-- Runtime deps -->
+  <exec_depend>roscpp</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
+
+  <export/>
+</package>

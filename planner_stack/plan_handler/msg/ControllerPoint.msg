@@ -1,0 +1,9 @@
+# ControllerPoint message
+# Representa um ponto de controlo com coordenadas e parâmetros de navegação
+
+float64 x                    # Coordenada x
+float64 y                    # Coordenada y
+float64 line_switch_ratio    # Ratio da linha para mudar para próxima (0.75 = 75%)
+float64 vel_lin_nom          # Velocidade linear nominal para esta linha
+bool backwards               # Se deve ir para trás neste ponto
+
