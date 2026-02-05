@@ -130,18 +130,47 @@ void PathPlannerNode::runPlanner(const std::string& comb) {
         current_pos = to;
     };
 
+    auto pathLen = [&](int a, int b) -> int {
+        auto p = shortestPathBFS(a, b);
+        return p.empty() ? INT_MAX : (int)p.size();
+    };
+
+    auto hasValidDestination = [&](char t) -> bool {
+        if (t == 'B') {
+            for (int out : {35,36,37,38})
+                if (!usedWarehouse.count(out)) return true;
+            return false;
+        }
+        if (t == 'R') {
+            for (int proc : {17, 24}) {
+                if (!proc_in_nodes_.count(proc)) continue;
+                if (!spawn_map_.count(proc)) continue;
+                int sp = spawn_map_[proc];
+                if (boxesAt.find(sp) == boxesAt.end()) return true; // spawn livre
+            }
+            return false;
+        }
+        if (t == 'G') {
+            for (int proc : {13, 20}) {
+                if (!proc_in_nodes_.count(proc)) continue;
+                if (!spawn_map_.count(proc)) continue;
+                int sp = spawn_map_[proc];
+                if (boxesAt.find(sp) == boxesAt.end()) return true;
+            }
+            return false;
+        }
+        return false;
+    };
+
+
     while (!boxesAt.empty() || carrying) {
         if (!carrying) {
             // Escolher sempre a caixa mais próxima (menor caminho BFS)
-            auto pathLen = [&](int a, int b) -> int {
-                auto p = shortestPathBFS(a, b);
-                return p.empty() ? INT_MAX : (int)p.size();
-            };
-
             int bestNode = -1;
             int bestDist = INT_MAX;
 
             for (auto const& [node, type] : boxesAt) {
+                if (!hasValidDestination(type)) continue;   // <- evita deadlock
                 int d = pathLen(current_pos, node);
                 if (d < bestDist) {
                     bestDist = d;
@@ -149,13 +178,14 @@ void PathPlannerNode::runPlanner(const std::string& comb) {
                 }
             }
 
-            if (bestNode == -1) break; // sem caixas alcançáveis
+            if (bestNode == -1) break; // não há caixas entregáveis agora
 
             moveRobot(bestNode);
             carry_type = boxesAt[bestNode];
             carrying = true;
             boxesAt.erase(bestNode);
-            
+
+
         } else {
             int target = -1;
 
