@@ -89,23 +89,21 @@ bool WifiDriverNode::recvMsg(std::string& out)
   char buffer[1024];
   std::memset(buffer, 0, sizeof(buffer));
 
-  socklen_t addr_len = sizeof(server_addr_);
-  int n = recvfrom(sock_fd_, buffer, sizeof(buffer) - 1, 0,
-                   (sockaddr*)&server_addr_, &addr_len);
+  sockaddr_in from;
+  socklen_t from_len = sizeof(from);
 
-  if (n < 0)
-  {
-    // timeout ou erro
-    return false;
-  }
+  int n = recvfrom(sock_fd_, buffer, sizeof(buffer) - 1, 0,
+                   (sockaddr*)&from, &from_len);
+
+  if (n < 0) return false;
 
   out = std::string(buffer);
-  // trim \r\n / espaços
   while (!out.empty() && (out.back() == '\n' || out.back() == '\r' || out.back() == ' '))
     out.pop_back();
 
   return true;
 }
+
 
 void WifiDriverNode::doPingPong()
 {
@@ -183,36 +181,41 @@ void WifiDriverNode::timerCb(const ros::TimerEvent&)
     return;
   }
 
-  // --- 1) CTL SEMPRE ---
-  if (!sendMsg("CTL"))
+  // Se ainda não chegaste ao ponto (T < 600), só faz CTL
+  if (!iwp_active_ && !have_sequence_)
   {
-    ROS_WARN_THROTTLE(3.0, "Falha ao enviar CTL.");
-    return;
+    if (!sendMsg("CTL"))
+    {
+      ROS_WARN_THROTTLE(3.0, "Falha ao enviar CTL.");
+      return;
+    }
+
+    std::string resp_ctl;
+    if (!recvMsg(resp_ctl))
+    {
+      ROS_WARN_THROTTLE(3.0, "Timeout à espera de resposta a CTL.");
+      return;
+    }
+
+    int tval = -1;
+    if (!parseTxxx(resp_ctl, tval))
+    {
+      ROS_WARN_THROTTLE(3.0, "[RX] Esperava T### de CTL, recebi: '%s'", resp_ctl.c_str());
+      return;
+    }
+
+    ROS_INFO_THROTTLE(2.0, "[RX] %s (=%d)", resp_ctl.c_str(), tval);
+
+    if (tval < 600)
+    {
+      iwp_active_ = true;
+      ROS_INFO("T < 600. Vou começar a mandar IWP.");
+    }
+
+    return; // IMPORTANTÍSSIMO: neste tick só fizeste CTL
   }
 
-  std::string resp_ctl;
-  if (!recvMsg(resp_ctl))
-  {
-    ROS_WARN_THROTTLE(3.0, "Timeout à espera de resposta a CTL.");
-    return;
-  }
-
-  int tval = -1;
-  if (!parseTxxx(resp_ctl, tval))
-  {
-    ROS_WARN("[RX] Esperava T### de CTL, recebi: '%s'", resp_ctl.c_str());
-    return;
-  }
-
-  ROS_INFO_THROTTLE(2.0, "[RX] %s (=%d)", resp_ctl.c_str(), tval);
-
-  // --- 2) Só começa IWP quando T < 600 ---
-  if (!have_sequence_ && tval < 600)
-  {
-    iwp_active_ = true;
-  }
-
-  // --- 3) Enquanto iwp_active_ e sem sequência, manda IWP ---
+  // Se já estás em modo IWP (T < 600) e ainda não tens sequência, só faz IWP
   if (iwp_active_ && !have_sequence_)
   {
     if (!sendMsg("IWP"))
@@ -232,10 +235,10 @@ void WifiDriverNode::timerCb(const ros::TimerEvent&)
     {
       color_sequence_ = resp_iwp;
       have_sequence_ = true;
-      iwp_active_ = false; // --- 4) PARA DE MANDAR IWP ---
-      ROS_INFO("[RX] Sequencia recebida via IWP: %s (vou parar de pedir IWP)", color_sequence_.c_str());
+      iwp_active_ = false; // para de mandar IWP
 
-      // Publicar imediatamente (já estamos em modo <600 porque só aí ativaste IWP)
+      ROS_INFO("[RX] Sequencia recebida: %s (vou parar de pedir IWP)", color_sequence_.c_str());
+
       if (color_sequence_ != last_published_)
       {
         std_msgs::String msg;
@@ -245,11 +248,21 @@ void WifiDriverNode::timerCb(const ros::TimerEvent&)
         ROS_INFO("[PUB] /color_sequence = %s", color_sequence_.c_str());
       }
     }
+    else if (resp_iwp == "STOP")
+    {
+      ROS_INFO_THROTTLE(3.0, "[RX] STOP recebido. Continuo a tentar IWP.");
+    }
     else
     {
       ROS_WARN_THROTTLE(3.0, "[RX] Resposta invalida a IWP: '%s'", resp_iwp.c_str());
     }
+
+    return;
   }
+
+  // Se já tens sequência, aqui decides o que fazer:
+  // - ou não fazes mais nada,
+  // - ou continuas a mandar CTL por monitorização.
 }
 
 
@@ -267,6 +280,9 @@ bool WifiDriverNode::startIwpCb(std_srvs::SetBool::Request& req,
     // timer_.start();  // só se você tinha parado antes
     res.success = true;
     res.message = "IWP enabled";
+    have_sequence_ = false;
+    iwp_active_ = false;
+    color_sequence_.clear();
   }
   else
   {
