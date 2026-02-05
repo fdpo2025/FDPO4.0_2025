@@ -35,6 +35,11 @@ private:
   ros::ServiceServer start_iwp_srv_;
   bool iwp_enabled_ = false;
 
+  bool have_sequence_ = false;
+  bool iwp_active_ = false;      // estamos a tentar obter sequência?
+  std::string color_sequence_;
+
+
   bool startIwpCb(std_srvs::SetBool::Request& req,
                   std_srvs::SetBool::Response& res);
 
@@ -46,4 +51,9 @@ private:
 
   void doPingPong();
   void doIWP();
+
+  bool parseTxxx(const std::string& s, int& out_val);
+  bool isColorSeq4(const std::string& s);
+
+  
 };

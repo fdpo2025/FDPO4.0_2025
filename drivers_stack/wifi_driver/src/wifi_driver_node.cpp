@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <iostream>
+#include <cctype>
 
 WifiDriverNode::WifiDriverNode(ros::NodeHandle& nh)
   : nh_(nh)
@@ -176,20 +177,81 @@ void WifiDriverNode::doIWP()
 
 void WifiDriverNode::timerCb(const ros::TimerEvent&)
 {
-  if (!connected_)
-  {
-    doPingPong();
-    return;
-  }
-
   if (!iwp_enabled_)
   {
-    ROS_INFO_THROTTLE(5.0, "Conectado, mas IWP desativado. Aguardando service start_iwp.");
+    ROS_INFO_THROTTLE(5.0, "Desativado. Aguardando service start_iwp.");
     return;
   }
 
-  doIWP();
+  // --- 1) CTL SEMPRE ---
+  if (!sendMsg("CTL"))
+  {
+    ROS_WARN_THROTTLE(3.0, "Falha ao enviar CTL.");
+    return;
+  }
+
+  std::string resp_ctl;
+  if (!recvMsg(resp_ctl))
+  {
+    ROS_WARN_THROTTLE(3.0, "Timeout à espera de resposta a CTL.");
+    return;
+  }
+
+  int tval = -1;
+  if (!parseTxxx(resp_ctl, tval))
+  {
+    ROS_WARN("[RX] Esperava T### de CTL, recebi: '%s'", resp_ctl.c_str());
+    return;
+  }
+
+  ROS_INFO_THROTTLE(2.0, "[RX] %s (=%d)", resp_ctl.c_str(), tval);
+
+  // --- 2) Só começa IWP quando T < 600 ---
+  if (!have_sequence_ && tval < 600)
+  {
+    iwp_active_ = true;
+  }
+
+  // --- 3) Enquanto iwp_active_ e sem sequência, manda IWP ---
+  if (iwp_active_ && !have_sequence_)
+  {
+    if (!sendMsg("IWP"))
+    {
+      ROS_WARN_THROTTLE(3.0, "Falha ao enviar IWP.");
+      return;
+    }
+
+    std::string resp_iwp;
+    if (!recvMsg(resp_iwp))
+    {
+      ROS_WARN_THROTTLE(3.0, "Timeout à espera de resposta a IWP.");
+      return;
+    }
+
+    if (isColorSeq4(resp_iwp))
+    {
+      color_sequence_ = resp_iwp;
+      have_sequence_ = true;
+      iwp_active_ = false; // --- 4) PARA DE MANDAR IWP ---
+      ROS_INFO("[RX] Sequencia recebida via IWP: %s (vou parar de pedir IWP)", color_sequence_.c_str());
+
+      // Publicar imediatamente (já estamos em modo <600 porque só aí ativaste IWP)
+      if (color_sequence_ != last_published_)
+      {
+        std_msgs::String msg;
+        msg.data = color_sequence_;
+        color_pub_.publish(msg);
+        last_published_ = color_sequence_;
+        ROS_INFO("[PUB] /color_sequence = %s", color_sequence_.c_str());
+      }
+    }
+    else
+    {
+      ROS_WARN_THROTTLE(3.0, "[RX] Resposta invalida a IWP: '%s'", resp_iwp.c_str());
+    }
+  }
 }
+
 
 
 bool WifiDriverNode::startIwpCb(std_srvs::SetBool::Request& req,
@@ -214,4 +276,20 @@ bool WifiDriverNode::startIwpCb(std_srvs::SetBool::Request& req,
   }
 
   return true;
+}
+
+bool WifiDriverNode::parseTxxx(const std::string& s, int& out_val)
+{
+  if (s.size() != 4) return false;
+  if (s[0] != 'T') return false;
+  if (!isdigit(s[1]) || !isdigit(s[2]) || !isdigit(s[3])) return false;
+  out_val = (s[1]-'0')*100 + (s[2]-'0')*10 + (s[3]-'0');
+  return true;
+}
+
+bool WifiDriverNode::isColorSeq4(const std::string& s)
+{
+  if (s.size() != 4) return false;
+  auto ok = [](char c){ return c=='R' || c=='G' || c=='B'; };
+  return ok(s[0]) && ok(s[1]) && ok(s[2]) && ok(s[3]);
 }
