@@ -6,7 +6,7 @@ loop_rate_hz: 100  # Frequência do control loop (Hz)
 
 # Limites de velocidade
 v_nom: 0.2          # Velocidade linear nominal (m/s)
-v_max: 0.5          # Velocidade linear máxima (m/s) - limite absoluto
+v_max: 0.2          # Velocidade linear máxima (m/s) - limite absoluto
 v_min: 0.05         # Velocidade linear mínima (m/s)
 w_nom: 1.0          # Velocidade angular nominal (rad/s)
 w_min: 0.0          # Velocidade angular mínima (rad/s)
