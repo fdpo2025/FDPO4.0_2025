@@ -712,7 +712,7 @@ void NavigationController::followLine() {
     
     double k1_eff = k1;
     if (isBackwards()) {
-        k1_eff = -k1;
+        k1_eff = k1;
     }
 
     // Update tis
@@ -896,7 +896,20 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     }
 
     // Affect outputs
-    publishVel();
+    // Se route está vazia, publicar zeros explicitamente para parar o robô
+    if (route.empty() && (v_d == 0.0 && w_d == 0.0)) {
+        geometry_msgs::Twist cmd;
+        cmd.linear.x  = 0.0;
+        cmd.linear.y  = 0.0;
+        cmd.linear.z  = 0.0;
+        cmd.angular.x = 0.0;
+        cmd.angular.y = 0.0;
+        cmd.angular.z = 0.0;
+        velPub.publish(cmd);
+        ROS_INFO_THROTTLE(1.0, "NavigationController: Route empty, publishing stop command");
+    } else {
+        publishVel();
+    }
 
 }
 
