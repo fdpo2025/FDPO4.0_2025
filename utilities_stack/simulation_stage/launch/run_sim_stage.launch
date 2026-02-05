@@ -3,6 +3,10 @@
   <arg name="conf_root" default="$(find conf)"/>
   <arg name="map_file" default="$(find conf)/launch/hmi/maps/factory_map.yaml"/>
 
+  <arg name="use_planner" default="true" />
+  <arg name="planner_node_name" default="path_planner_node" />
+  <arg name="use_wifi" default="true" />
+
   <!-- Choose simulation mode -->
   <arg name="perfect_localization" default="false" 
        doc="If true: Stage with GPS (perfect localization) + navigation controller only (no EKF/beacons). If false: Stage with odom + full navigation stack (EKF + beacons + controller)."/>
@@ -42,10 +46,7 @@
        <arg name="enable" value="$(arg use_wifi)" />
   </include>
 
-  <arg name="use_planner" default="true" />
-  <arg name="planner_node_name" default="path_planner_node" />
-  <arg name="use_wifi" default="true" />
-
+  
 </launch>
 
 
