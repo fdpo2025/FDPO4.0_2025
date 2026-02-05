@@ -21,6 +21,7 @@
   <build_depend>tf2_geometry_msgs</build_depend>
   <build_depend>message_generation</build_depend>
   <build_depend>dynamic_reconfigure</build_depend>
+  <build_depend>plan_handler</build_depend>
 
   <!-- Exported to consumers at build -->
   <build_export_depend>roscpp</build_export_depend>
@@ -33,6 +34,7 @@
   <build_export_depend>tf2_geometry_msgs</build_export_depend>
   <build_export_depend>message_runtime</build_export_depend>
   <build_export_depend>dynamic_reconfigure</build_export_depend>
+  <build_export_depend>plan_handler</build_export_depend>
 
   <!-- Runtime deps -->
   <exec_depend>roscpp</exec_depend>
@@ -45,6 +47,7 @@
   <exec_depend>tf2_geometry_msgs</exec_depend>
   <exec_depend>message_runtime</exec_depend>
   <exec_depend>dynamic_reconfigure</exec_depend>
+  <exec_depend>plan_handler</exec_depend>
 
   <export/>
 </package>

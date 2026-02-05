@@ -13,12 +13,17 @@ k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0}), tfBuffer()
     //load RViz parameters
     nh.param("rviz_append", rvizGoalAppend, false);
 
+    // Parâmetro para controlar se carrega route do YAML
+    nh.param("load_from_route", load_from_route, false);
+    
     // ros init
     std::string odom_topic;
     nh.param("odom_topic", odom_topic, std::string("/odometry/filtered"));
     odomSub = nh.subscribe(odom_topic, 10, &NavigationController::updateCurrPose, this);
     ROS_INFO("NavigationController subscribing to odometry topic: %s", odom_topic.c_str());
     rvizGoalSub = nh.subscribe("/move_base_simple/goal", 10, &NavigationController::rvizGoalCallBack, this);
+    navPlanSub = nh.subscribe("/nav_plan", 10, &NavigationController::navPlanCallback, this);
+    ROS_INFO("NavigationController subscribing to /nav_plan (load_from_route=%s)", load_from_route ? "true" : "false");
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
     lineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_lines", 1, true);  // latch=true para RViz ver imediatamente
     controlTimer = nh.createTimer(ros::Duration(1.0 / std::max(1, param.loop_rate_hz)), &NavigationController::navigationFsmRunner, this);
@@ -875,11 +880,21 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
 
     if(mode == "start") {
 
-        loadRouteFromParameters();
-
-        if (route.empty()) {
-            res.success = false; res.message = "no waypoints in params";
-            return true;
+        // Só carregar route do YAML se load_from_route for true
+        if (load_from_route) {
+            loadRouteFromParameters();
+            
+            if (route.empty()) {
+                res.success = false; res.message = "no waypoints in params";
+                return true;
+            }
+        } else {
+            // Se não carregar do route, esperar por /nav_plan
+            if (route.empty()) {
+                res.success = false; res.message = "no route loaded, waiting for /nav_plan";
+                ROS_WARN("NavigationController: No route loaded. Waiting for /nav_plan message.");
+                return true;
+            }
         }
 
         res.success = true;  res.message = "started";
@@ -923,4 +938,86 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
     
     return false;
 
+}
+
+void NavigationController::navPlanCallback(const plan_handler::NavPlan::ConstPtr& msg) {
+    ROS_INFO("NavigationController: Received NavPlan with %zu points", msg->points.size());
+    loadRouteFromNavPlan(msg);
+}
+
+void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg) {
+    if (msg->points.empty()) {
+        ROS_WARN("NavigationController: Received empty NavPlan, ignoring");
+        return;
+    }
+
+    route.clear();
+    
+    // Inicializar previousWaypoint com posição atual do robô
+    previousWaypoint.id = 0;
+    previousWaypoint.pose.x = poseCurr.x;
+    previousWaypoint.pose.y = poseCurr.y;
+    previousWaypoint.pose.theta = poseCurr.theta;
+    previousWaypoint.align = false;
+    previousWaypoint.backwards = false;
+    previousWaypoint.line_switch_ratio = -1.0;
+    previousWaypoint.vel_lin_nom = -1.0;
+    ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
+
+    // Converter NavPlan points para WayPoints
+    for (size_t i = 0; i < msg->points.size(); ++i) {
+        const plan_handler::ControllerPoint& cp = msg->points[i];
+        WayPoint waypoint_temp;
+        waypoint_temp.id = static_cast<int>(i);
+        
+        waypoint_temp.pose.x = cp.x;
+        waypoint_temp.pose.y = cp.y;
+        // Calcular theta baseado na direção para o próximo ponto (ou usar 0 se for o último)
+        if (i < msg->points.size() - 1) {
+            double dx = msg->points[i + 1].x - cp.x;
+            double dy = msg->points[i + 1].y - cp.y;
+            waypoint_temp.pose.theta = std::atan2(dy, dx);
+        } else {
+            // Último ponto: manter direção do penúltimo ou usar theta atual
+            if (i > 0) {
+                double dx = cp.x - msg->points[i - 1].x;
+                double dy = cp.y - msg->points[i - 1].y;
+                waypoint_temp.pose.theta = std::atan2(dy, dx);
+            } else {
+                waypoint_temp.pose.theta = poseCurr.theta;
+            }
+        }
+        
+        waypoint_temp.align = false;  // NavPlan não tem campo align, usar false
+        waypoint_temp.backwards = cp.backwards;
+        
+        // Usar valores do NavPlan se definidos, senão usar -1 (global)
+        waypoint_temp.line_switch_ratio = (cp.line_switch_ratio > 0) ? cp.line_switch_ratio : -1.0;
+        waypoint_temp.vel_lin_nom = (cp.vel_lin_nom > 0) ? cp.vel_lin_nom : -1.0;
+        
+        double effective_vel = waypoint_temp.vel_lin_nom > 0 ? waypoint_temp.vel_lin_nom : param.vel_lin_nom;
+        ROS_INFO("Waypoint %d: x=%.2f y=%.2f yaw=%.2f backwards=%d switch=%.0f%% vel=%.2f", 
+                 waypoint_temp.id, waypoint_temp.pose.x, waypoint_temp.pose.y, waypoint_temp.pose.theta,
+                 waypoint_temp.backwards, 
+                 waypoint_temp.line_switch_ratio > 0 ? waypoint_temp.line_switch_ratio * 100 : param.line_switch_ratio * 100,
+                 effective_vel);
+
+        route.push_back(waypoint_temp);
+    }
+
+    updateDesiredPose();
+    
+    // Reinicializar followLine FSM quando rota é carregada
+    if (!route.empty()) {
+        followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+        followLineFsm.set_state();
+        
+        // Verificar se já estamos perto do primeiro waypoint (skip inicial)
+        skipNearbyWaypoints();
+    }
+    
+    // Publicar linhas de visualização
+    publishLineMarkers();
+    
+    ROS_INFO("NavigationController: Route loaded from NavPlan with %zu waypoints", route.size());
 }

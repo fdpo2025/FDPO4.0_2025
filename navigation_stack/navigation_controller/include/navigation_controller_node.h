@@ -20,7 +20,8 @@
 #include <dynamic_reconfigure/server.h>
 #include <navigation_controller/NavigationConfig.h>  
 #include <boost/bind.hpp>
-#include <visualization_msgs/Marker.h>                            
+#include <visualization_msgs/Marker.h>
+#include <plan_handler/NavPlan.h>
 
 
 #include "fsm.h"
@@ -146,6 +147,12 @@ class NavigationController {
         bool rvizGoalAppend;
         ros::Subscriber rvizGoalSub;
         void rvizGoalCallBack(const geometry_msgs::PoseStamped::ConstPtr& msg);
+
+        ros::Subscriber navPlanSub;
+        void navPlanCallback(const plan_handler::NavPlan::ConstPtr& msg);
+        void loadRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg);
+        
+        bool load_from_route;  // Se deve carregar waypoints do route.yaml
 
         // Services        
         ros::ServiceServer controlSrv; 

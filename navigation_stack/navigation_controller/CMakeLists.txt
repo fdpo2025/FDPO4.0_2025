@@ -20,6 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_geometry_msgs
   message_generation
   dynamic_reconfigure
+  plan_handler
 )
 
 ## -------------------------
