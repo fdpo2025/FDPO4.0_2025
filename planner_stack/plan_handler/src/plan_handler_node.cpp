@@ -162,6 +162,17 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                 if (!plan_stack.empty()) {
                     plan_stack.back().line_switch_ratio = 1.0;
                 }
+            } else {
+                // Se é warehouse de drop (pick_box = false), garantir que o ponto anterior tenha line_switch_ratio = 0.60
+                // (para completar 60% da linha antes de chegar à warehouse de drop)
+                if (!control_points.empty()) {
+                    control_points.back().line_switch_ratio = 0.60;
+                    ROS_INFO("PlanHandlerNode: Set line_switch_ratio=0.60 for previous point (before drop warehouse)");
+                }
+                // Também atualizar no plan_stack se não estiver vazio
+                if (!plan_stack.empty()) {
+                    plan_stack.back().line_switch_ratio = 0.60;
+                }
             }
 
         } else {
