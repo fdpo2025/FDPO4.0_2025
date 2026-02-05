@@ -193,12 +193,7 @@ void PathPlannerNode::runPlanner(const std::string& comb) {
                 int sp = spawn_map_[proc];
                 return boxesAt.find(sp) == boxesAt.end(); // só permite se o spawn estiver livre
             };
-
-            auto pathLen = [&](int a, int b) -> int {
-                auto p = shortestPathBFS(a, b);
-                return p.empty() ? INT_MAX : (int)p.size();
-            };
-
+            
             if (carry_type == 'B') {
                 // Azuis -> armazém 35..38 (primeiro livre)
                 for (int out : {35, 36, 37, 38}) {
