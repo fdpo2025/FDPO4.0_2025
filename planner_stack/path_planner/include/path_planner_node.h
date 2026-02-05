@@ -3,14 +3,19 @@
 #include <ros/ros.h>
 #include <std_msgs/String.h>
 #include <std_msgs/Int32MultiArray.h>
+#include <xmlrpcpp/XmlRpcValue.h> // Necessário para processar o dicionário do YAML
 
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <map>
 #include <vector>
 #include <mutex>
+#include <thread>
+#include <algorithm>
+#include <queue>
 
-struct P { int x, y; };
+struct P { long long x, y; }; // Alterado para long long para manter precisão com coordenadas do YAML
 
 class PathPlannerNode
 {
@@ -26,20 +31,32 @@ private:
   std::string frame_id_ = "map";
 
   std::mutex mtx_;
-  bool running_ = false;          // evita correr dois planners ao mesmo tempo
-  std::string last_sequence_;     // evita repetir a mesma sequência
+  bool running_ = false;          
+  std::string last_sequence_;     
 
+  // Estruturas de Dados do Grafo
   std::unordered_map<int, P> coords_;
+  std::unordered_map<int, std::vector<int>> adj_;
   std::unordered_set<int> forced_keep_;
 
-  void onColorSequence(const std_msgs::String::ConstPtr& msg);
+  // Mapeamento de Funções dos Nós (carregado via YAML)
+  std::unordered_set<int> input_nodes_;   // Nós 0, 1, 2, 3
+  std::unordered_set<int> output_nodes_;  // Nós 35, 36, 37, 38
+  std::unordered_set<int> proc_in_nodes_; // Nós 13, 17, 20, 24
+  std::unordered_map<int, int> spawn_map_; // 17 -> 18, 13 -> 14, etc.
 
-  // corre o teu algoritmo (adaptado do teu main antigo)
+  void onColorSequence(const std_msgs::String::ConstPtr& msg);
+  
+  // Carrega toda a configuração do factory_graph.yaml
+  void loadConfig();
+
+  // Executa o algoritmo de planeamento
   void runPlanner(const std::string& comb);
 
-  // publica um path (nós -> nav_msgs/Path)
-  void publishPlannedPath(const std::vector<int>& node_path);
+  // Auxiliares de navegação
+  std::vector<int> shortestPathBFS(int start, int goal);
+  std::vector<int> simplifyPath(const std::vector<int>& path);
 
-  static std::unordered_map<int, P> buildCoords();
-  static std::unordered_set<int> buildForcedKeep();
+  // Publica o caminho final
+  void publishPlannedPath(const std::vector<int>& node_path);
 };

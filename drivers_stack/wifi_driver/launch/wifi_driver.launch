@@ -1,0 +1,5 @@
+<launch>
+  <node pkg="wifi_driver" type="wifi_driver_node" name="wifi_driver_node" output="screen">
+    <rosparam command="load" file="$(find wifi_driver)/launch/wifi_driver.yaml" />
+  </node>
+</launch>

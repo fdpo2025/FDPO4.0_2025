@@ -5,6 +5,8 @@
 
 #include <string>
 #include <netinet/in.h>
+#include <std_srvs/SetBool.h>
+
 
 class WifiDriverNode
 {
@@ -29,6 +31,12 @@ private:
   std::string last_published_;
 
   ros::Timer timer_;
+
+  ros::ServiceServer start_iwp_srv_;
+  bool iwp_enabled_ = false;
+
+  bool startIwpCb(std_srvs::SetBool::Request& req,
+                  std_srvs::SetBool::Response& res);
 
   void timerCb(const ros::TimerEvent&);
 

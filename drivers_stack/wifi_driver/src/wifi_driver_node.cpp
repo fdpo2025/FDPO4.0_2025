@@ -9,9 +9,18 @@
 WifiDriverNode::WifiDriverNode(ros::NodeHandle& nh)
   : nh_(nh)
 {
-  nh_.param<std::string>("server_ip", server_ip_, std::string("192.168.50.241"));
-  nh_.param<int>("port", port_, 44832);
-  nh_.param<double>("timeout", timeout_s_, 1.0);
+    // Defaults
+  server_ip_ = "192.168.50.241";
+  port_ = 44832;
+  timeout_s_ = 1.0;
+
+  // Carregar do parameter server (sobrescreve se existir)
+  nh_.param("server_ip", server_ip_, server_ip_);
+  nh_.param("port", port_, port_);
+  nh_.param("timeout", timeout_s_, timeout_s_);
+
+  ROS_INFO("Config: server_ip=%s port=%d timeout=%.2f",
+          server_ip_.c_str(), port_, timeout_s_);
 
   // publica sequencia de cores
   color_pub_ = nh_.advertise<std_msgs::String>("/color_sequence", 10, true);
@@ -25,6 +34,10 @@ WifiDriverNode::WifiDriverNode(ros::NodeHandle& nh)
 
   // Timer: evita bloquear o ROS
   timer_ = nh_.createTimer(ros::Duration(1.0), &WifiDriverNode::timerCb, this);
+
+  start_iwp_srv_ = nh_.advertiseService("start_iwp", &WifiDriverNode::startIwpCb, this);
+  ROS_INFO("Service 'start_iwp' advertised. Call with data:=true to start IWP.");
+
 
   ROS_INFO("WifiDriverNode pronto. Vai publicar em /color_sequence quando receber != STOP");
 }
@@ -151,6 +164,9 @@ void WifiDriverNode::doIWP()
 
     last_published_ = resp;
     ROS_INFO("[PUB] /color_sequence = %s", resp.c_str());
+
+    timer_.stop();
+    ROS_INFO("Sequencia recebida. Vou parar de pedir IWP.");
   }
   else
   {
@@ -166,5 +182,36 @@ void WifiDriverNode::timerCb(const ros::TimerEvent&)
     return;
   }
 
+  if (!iwp_enabled_)
+  {
+    ROS_INFO_THROTTLE(5.0, "Conectado, mas IWP desativado. Aguardando service start_iwp.");
+    return;
+  }
+
   doIWP();
+}
+
+
+bool WifiDriverNode::startIwpCb(std_srvs::SetBool::Request& req,
+                               std_srvs::SetBool::Response& res)
+{
+  iwp_enabled_ = req.data;
+
+  if (iwp_enabled_)
+  {
+    ROS_INFO("IWP ENABLED by service (start).");
+    // opcional: reset estado
+    // last_published_.clear();
+    // timer_.start();  // só se você tinha parado antes
+    res.success = true;
+    res.message = "IWP enabled";
+  }
+  else
+  {
+    ROS_INFO("IWP DISABLED by service (stop).");
+    res.success = true;
+    res.message = "IWP disabled";
+  }
+
+  return true;
 }
