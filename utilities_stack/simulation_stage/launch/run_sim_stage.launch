@@ -34,6 +34,18 @@
       <arg name="map_file" value="$(arg map_file)"/>
   </include>
 
+  <include if="$(arg use_planner)" file="$(find conf)/system/planner.xml">
+       <arg name="node_name" value="$(arg planner_node_name)" />
+  </include>
+          
+  <include file="$(find conf)/system/wifi.xml">
+       <arg name="enable" value="$(arg use_wifi)" />
+  </include>
+
+  <arg name="use_planner" default="true" />
+  <arg name="planner_node_name" default="path_planner_node" />
+  <arg name="use_wifi" default="true" />
+
 </launch>
 
 
