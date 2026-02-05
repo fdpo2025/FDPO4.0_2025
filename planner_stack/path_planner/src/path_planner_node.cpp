@@ -132,20 +132,30 @@ void PathPlannerNode::runPlanner(const std::string& comb) {
 
     while (!boxesAt.empty() || carrying) {
         if (!carrying) {
-            // Escolher melhor caixa (prioridade B > R > G)
+            // Escolher sempre a caixa mais próxima (menor caminho BFS)
+            auto pathLen = [&](int a, int b) -> int {
+                auto p = shortestPathBFS(a, b);
+                return p.empty() ? INT_MAX : (int)p.size();
+            };
+
             int bestNode = -1;
-            for (char p : {'B', 'R', 'G'}) {
-                for (auto const& [node, type] : boxesAt) {
-                    if (type == p) { bestNode = node; break; }
+            int bestDist = INT_MAX;
+
+            for (auto const& [node, type] : boxesAt) {
+                int d = pathLen(current_pos, node);
+                if (d < bestDist) {
+                    bestDist = d;
+                    bestNode = node;
                 }
-                if (bestNode != -1) break;
             }
 
-            if (bestNode == -1) break; 
+            if (bestNode == -1) break; // sem caixas alcançáveis
+
             moveRobot(bestNode);
             carry_type = boxesAt[bestNode];
             carrying = true;
             boxesAt.erase(bestNode);
+            
         } else {
             int target = -1;
 
