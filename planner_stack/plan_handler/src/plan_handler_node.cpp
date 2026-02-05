@@ -14,9 +14,9 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     // ========================================================================
     // FACTORY COORDINATES: hardcoded (dps mudar para extrair de parametrois)
     // ========================================================================
-    factory_coordinates[0] = {-0.695, 0.468};
+    factory_coordinates[0] = {-0.687, 0.468};
     factory_coordinates[1] = {-0.545, 0.468};
-    factory_coordinates[2] = {-0.395, 0.468};
+    factory_coordinates[2] = {-0.386, 0.468};
     factory_coordinates[3] = {-0.245, 0.468};
     factory_coordinates[4] = {0.0, 0.355};
     factory_coordinates[5] = {0.227, 0.355};
