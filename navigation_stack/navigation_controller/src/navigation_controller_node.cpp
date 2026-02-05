@@ -712,7 +712,7 @@ void NavigationController::followLine() {
     
     double k1_eff = k1;
     if (isBackwards()) {
-        k1_eff = -k1;
+        k1_eff = k1;
     }
 
     // Update tis
