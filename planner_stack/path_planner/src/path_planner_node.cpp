@@ -147,31 +147,72 @@ void PathPlannerNode::runPlanner(const std::string& comb) {
             carrying = true;
             boxesAt.erase(bestNode);
         } else {
-            // Decidir destino baseado no tipo
             int target = -1;
+
+            auto spawnFree = [&](int proc) {
+                int sp = spawn_map_[proc];
+                return boxesAt.find(sp) == boxesAt.end(); // só permite se o spawn estiver livre
+            };
+
+            auto pathLen = [&](int a, int b) -> int {
+                auto p = shortestPathBFS(a, b);
+                return p.empty() ? INT_MAX : (int)p.size();
+            };
+
             if (carry_type == 'B') {
+                // Azuis -> armazém 35..38 (primeiro livre)
                 for (int out : {35, 36, 37, 38}) {
                     if (!usedWarehouse.count(out)) { target = out; break; }
                 }
-            } else {
-                // Procurar processamento disponível
-                for (int pin : proc_in_nodes_) {
-                    if (boxesAt.find(spawn_map_[pin]) == boxesAt.end()) { target = pin; break; }
+            } 
+            else if (carry_type == 'R') {
+                // Vermelhas -> 17 ou 24, mas só se 18/25 respetivamente estiver livre
+                std::vector<int> candidates = {17, 24};
+
+                int best = INT_MAX;
+                for (int proc : candidates) {
+                    if (!proc_in_nodes_.count(proc)) continue;          // segurança
+                    if (!spawn_map_.count(proc)) continue;              // segurança
+                    if (!spawnFree(proc)) continue;                     // regra crítica
+
+                    int d = pathLen(current_pos, proc);
+                    if (d < best) { best = d; target = proc; }
+                }
+            }
+            else if (carry_type == 'G') {
+                // Verdes -> 13 ou 20, mas só se 14/21 respetivamente estiver livre
+                std::vector<int> candidates = {13, 20};
+
+                int best = INT_MAX;
+                for (int proc : candidates) {
+                    if (!proc_in_nodes_.count(proc)) continue;
+                    if (!spawn_map_.count(proc)) continue;
+                    if (!spawnFree(proc)) continue;
+
+                    int d = pathLen(current_pos, proc);
+                    if (d < best) { best = d; target = proc; }
                 }
             }
 
-            if (target == -1) break; // Deadlock ou fim
+            if (target == -1) break; // sem destinos válidos (deadlock)
             moveRobot(target);
-            
+
             if (output_nodes_.count(target)) {
                 usedWarehouse.insert(target);
             } else if (proc_in_nodes_.count(target)) {
-                // Lógica de transformação: R -> G, G -> B
-                char nextType = (carry_type == 'R') ? 'G' : 'B';
-                boxesAt[spawn_map_[target]] = nextType;
+                // Transformação depende do tipo carregado
+                char nextType = '?';
+                if (carry_type == 'R') nextType = 'G';
+                else if (carry_type == 'G') nextType = 'B';
+
+                if (nextType != '?') {
+                    boxesAt[spawn_map_[target]] = nextType;
+                }
             }
+
             carrying = false;
         }
+
     }
 
     publishPlannedPath(full_path);
