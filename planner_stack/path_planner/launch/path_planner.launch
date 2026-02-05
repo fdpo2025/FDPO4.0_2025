@@ -1,0 +1,10 @@
+<launch>
+  <arg name="node_name" default="path_planner_node" />
+
+  <node name="$(arg node_name)" pkg="path_planner" type="path_planner_node" output="screen">
+
+    <rosparam command="load" file="$(find path_planner)/launch/factory_graph.yaml" />
+
+    <param name="frame_id" value="map" />
+  </node>
+</launch>
