@@ -14,8 +14,7 @@ SdpoDriverLaser2DROS::SdpoDriverLaser2DROS() {
     readParam();
     laser_->setSerialPortParam(serial_port_name_, baud_rate_);
     laser_->setPubLaserData(
-        std::bind(&SdpoDriverLaser2DROS::pubLaserData, this));
-    laser_->openSerial();
+        std::bind(&SdpoDriverLaser2DROS::pubLaserData, this));    
   } catch (std::exception& e) {
     ROS_FATAL("[sdpo_driver_laser_2d] Error reading the node parameters (%s)",
               e.what());
@@ -27,7 +26,8 @@ SdpoDriverLaser2DROS::SdpoDriverLaser2DROS() {
 }
 
 void SdpoDriverLaser2DROS::start() {
-  laser_->start();
+  laser_->openSerial();
+  laser_->start();  
 }
 
 void SdpoDriverLaser2DROS::readParam() {
@@ -55,6 +55,7 @@ void SdpoDriverLaser2DROS::readParam() {
 
   if (model_ == "ydlidarx4" || model_ == "ydlidar_x4") {
     laser_.reset(new YDLIDARX4_SDK());
+    ROS_INFO("[sdpo_driver_laser_2d] Using YDLidar SDK driver");
   } else if (model_ == kSdpoDriverLaser2DRPLIDARS2Str) {
     laser_.reset(new RPLIDARS2());
   } else {
