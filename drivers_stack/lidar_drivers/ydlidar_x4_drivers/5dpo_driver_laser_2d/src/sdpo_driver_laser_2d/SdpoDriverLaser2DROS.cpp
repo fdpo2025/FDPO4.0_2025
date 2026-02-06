@@ -5,6 +5,7 @@
 #include "sdpo_driver_laser_2d/utils.h"
 #include "sdpo_driver_laser_2d/RPLIDARS2.h"
 #include "sdpo_driver_laser_2d/YDLIDARX4_SDK.h"
+#include "sdpo_driver_laser_2d/YDLIDARX4.h"
 
 
 namespace sdpo_driver_laser_2d {
