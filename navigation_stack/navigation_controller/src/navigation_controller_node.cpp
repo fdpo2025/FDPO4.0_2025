@@ -161,6 +161,8 @@ void NavigationController::loadNavigationParams() {
     nh.param("max_etf", param.max_etf, 0.2);       // MAX_ETF (rad)
     nh.param("tol_init_line", param.tol_init_line, 0.1); // Tolerância de distância à linha para GoTo_Init -> Follow_Line (m)
     nh.param("line_switch_ratio", param.line_switch_ratio, 0.9); // Ratio da linha para mudar para próxima (0.9 = 90%)
+    nh.param("approaching_line_progress", param.approaching_line_progress, 0.60); // Progresso da linha para entrar em Approaching (0.60 = 60%)
+    nh.param("approaching_vel", param.approaching_vel, 0.05); // Velocidade constante no estado Approaching (m/s)
     
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f", 
              param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
@@ -737,9 +739,10 @@ void NavigationController::followLine() {
     
     // State machine - Transitions
     // Apenas 2 estados: Follow_Line e Approaching
-    // Vai para Approaching se o ponto final for uma warehouse OU se estiver saindo de uma warehouse (backwards=true)
+    // Vai para Approaching quando tiver percorrido approaching_line_progress da linha E
+    // (o ponto final for uma warehouse OU se estiver saindo de uma warehouse (backwards=true))
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        if (error_dist < param.dist_da && (line.pf.is_warehouse || isBackwards())) {
+        if (line_progress >= param.approaching_line_progress && (line.pf.is_warehouse || isBackwards())) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
         }
     }
@@ -791,25 +794,8 @@ void NavigationController::followLine() {
         // -----------------------
         //   LINEAR CONTROL 
         // -----------------------
-
-        double A = -vel_lin_nom_eff / (param.w_nom * param.w_nom);
-        double v_line_limit = std::max(
-            A * (w_d - param.w_nom) * (w_d + param.w_nom),
-            0.0
-        );
-
-        double s = error_dist / param.dist_da;
-        if (s > 1.0) s = 1.0;
-        if (s < 0.0) s = 0.0;
-
-        double v_profile = vel_lin_nom_eff * s * s;
-
-        double v_target = std::min(v_profile, v_line_limit);
-
-        if (v_target < param.v_min)
-            v_target = param.v_min;
-
-        v_d = v_target;
+        // Velocidade constante no estado Approaching
+        v_d = param.approaching_vel;
     }
 
     // Zerar velocidade linear se erro angular > 93°
