@@ -4,7 +4,6 @@
 #include <atomic>
 #include <thread>
 
-// YDLidar SDK
 #include "CYdLidar.h"
 
 namespace sdpo_driver_laser_2d {
@@ -16,7 +15,6 @@ public:
 
   void openSerial() override;
   void closeSerial() override;
-
   void start() override;
   void stop() override;
 
@@ -26,7 +24,7 @@ private:
   std::atomic<bool> running_{false};
   std::thread worker_;
 
-  ydlidar::CYdLidar lidar_;
+  ydlidar::CYdLidar lidar_;   // <-- TEM de se chamar lidar_
 };
 
 } // namespace sdpo_driver_laser_2d

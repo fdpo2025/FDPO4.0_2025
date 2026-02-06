@@ -14,24 +14,19 @@ YDLIDARX4_SDK::~YDLIDARX4_SDK() {
 }
 
 void YDLIDARX4_SDK::openSerial() {
-  // Porta
   lidar_.setlidaropt(ydlidar::LidarPropSerialPort,
                      serial_port_name_.c_str(),
                      serial_port_name_.size());
 
-  // Baudrate
   int baud = baud_rate_;
   lidar_.setlidaropt(ydlidar::LidarPropSerialBaudrate, &baud, sizeof(int));
 
-  // Tipo de lidar: X4 é triangulation
   int lidar_type = ydlidar::TYPE_TRIANGLE;
   lidar_.setlidaropt(ydlidar::LidarPropLidarType, &lidar_type, sizeof(int));
 
-  // Frequência (podes parametrizar depois)
   float scan_freq = 5.0f;
   lidar_.setlidaropt(ydlidar::LidarPropScanFrequency, &scan_freq, sizeof(float));
 
-  // Inicializa
   if (!lidar_.initialize()) {
     throw std::runtime_error("YDLidar-SDK: initialize() failed");
   }
@@ -55,27 +50,27 @@ void YDLIDARX4_SDK::start() {
 
 void YDLIDARX4_SDK::stop() {
   if (!running_) return;
+
   running_ = false;
   if (worker_.joinable()) worker_.join();
+
   lidar_.turnOff();
 }
 
 void YDLIDARX4_SDK::loop() {
-  ydlidar::LaserScan scan;
+  ydlidar::LaserScan scan;   // <-- TEM de existir aqui
 
   while (running_) {
-    if (!lidar_.doProcessSimple(scan)) {
+    if (!lidar_.doProcessSimple(scan)) {  // <-- lidar_ é membro da classe
       continue;
     }
 
     data_count = 0;
 
-    // Dependendo da versão, pode ser scan.points ou scan.ranges.
-    // O mais comum nesta SDK é scan.points.
     for (const auto &p : scan.points) {
       if (data_count >= dist_data.size()) break;
-      dist_data[data_count] = p.range; // normalmente em metros
-      ang_data[data_count]  = p.angle; // normalmente em rad
+      dist_data[data_count] = p.range;
+      ang_data[data_count]  = p.angle;
       data_count++;
     }
 
@@ -83,4 +78,4 @@ void YDLIDARX4_SDK::loop() {
   }
 }
 
-} // namespace
+} // namespace sdpo_driver_laser_2d
