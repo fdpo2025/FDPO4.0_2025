@@ -171,13 +171,6 @@ target_link_libraries(${PROJECT_NAME}_YDLIDARX4
   pthread
 )
 
-target_link_libraries(${PROJECT_NAME}_node
-  ${catkin_LIBRARIES}
-  ${PROJECT_NAME}_YDLIDARX4
-  ${PROJECT_NAME}_RPLIDARS2
-  pthread
-)
-
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
