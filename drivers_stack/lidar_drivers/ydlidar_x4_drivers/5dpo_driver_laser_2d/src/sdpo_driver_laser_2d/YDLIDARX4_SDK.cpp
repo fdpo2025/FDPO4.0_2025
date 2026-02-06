@@ -1,5 +1,6 @@
 #include "sdpo_driver_laser_2d/YDLIDARX4_SDK.h"
 #include "sdpo_driver_laser_2d/utils.h"
+#include "sdpo_driver_laser_2d/YDLIDARX4.h"
 
 #include <cmath>
 #include <stdexcept>
