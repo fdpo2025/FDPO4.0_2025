@@ -1,4 +1,5 @@
 #include "sdpo_driver_laser_2d/YDLIDARX4_SDK.h"
+#include "sdpo_driver_laser_2d/utils.h"
 #include <stdexcept>
 
 namespace sdpo_driver_laser_2d {
@@ -76,6 +77,27 @@ void YDLIDARX4_SDK::loop() {
 
     if (pubLaserData) pubLaserData();
   }
+}
+
+void YDLIDARX4_SDK::restart() {
+  stop();
+  start();
+}
+
+void YDLIDARX4_SDK::processSerialData(unsigned char& /*ch*/) {
+  // Not used: SDK handles decoding internally
+}
+
+void YDLIDARX4_SDK::processLaserData() {
+  // Not used: SDK handles decoding internally
+}
+
+void YDLIDARX4_SDK::printPkgDataInfo() const {
+  // Not used
+}
+
+void YDLIDARX4_SDK::printLaserData() const {
+  // Not used
 }
 
 } // namespace sdpo_driver_laser_2d

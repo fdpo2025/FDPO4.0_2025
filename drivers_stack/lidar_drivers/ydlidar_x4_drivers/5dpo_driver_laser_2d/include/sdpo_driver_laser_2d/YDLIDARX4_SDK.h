@@ -25,6 +25,13 @@ private:
   std::thread worker_;
 
   CYdLidar lidar_;   // <-- TEM de se chamar lidar_
+    // Methods required by SdpoDriverLaser2D (not used in SDK mode)
+  void restart() override;
+  void processSerialData(unsigned char& ch) override;
+  void processLaserData() override;
+  void printPkgDataInfo() const override;
+  void printLaserData() const override;
+
 };
 
 } // namespace sdpo_driver_laser_2d
