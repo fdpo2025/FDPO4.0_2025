@@ -1,51 +1,61 @@
 <launch>
-  <!-- Porta e baud (ajusta conforme o teu setup) -->
+  <!-- =========================
+       Configuração geral
+       ========================= -->
   <arg name="port" default="/dev/ttyUSB0"/>
   <arg name="baud" default="128000"/>
 
-  <!-- Tópicos (ajusta se o teu stack espera nomes diferentes) -->
   <arg name="scan_topic" default="/scan"/>
   <arg name="cloud_topic" default="/laser_scan_point_cloud"/>
 
-  <!-- Frame do Laser (tem de existir no TF; idealmente laser ou base_link) -->
+  <!-- Frame do laser -->
   <arg name="frame_id" default="laser"/>
 
   <!-- =========================
-       1) Driver do SDK (LaserScan)
+       Pose do laser no robô
+       (METROS e RADIANOS)
+       ========================= -->
+  <arg name="laser_x" default="0.0"/>
+  <arg name="laser_y" default="0.0"/>
+  <arg name="laser_z" default="0.0"/>
+
+  <!-- 180 graus = pi rad -->
+  <arg name="laser_yaw"   default="3.14159265"/>
+  <arg name="laser_pitch" default="0.0"/>
+  <arg name="laser_roll"  default="0.0"/>
+
+  <!-- =========================
+       1) Driver YDLidar X4 (SDK)
        ========================= -->
   <node pkg="sdpo_driver_laser_2d"
         type="ydlidar_x4_sdk_node"
         name="ydlidar_x4"
         output="screen">
 
-    <!-- Se o teu node do SDK lê params, mete-os aqui (depende do teu código) -->
     <param name="port" value="$(arg port)"/>
     <param name="baudrate" value="$(arg baud)"/>
     <param name="frame_id" value="$(arg frame_id)"/>
 
-    <!-- Garante que o LaserScan sai no tópico que queres -->
-    <!-- Se o teu SDK já publica /scan, deixa assim -->
+    <!-- Se o teu node publica LaserScan -->
     <remap from="/scan" to="$(arg scan_topic)"/>
   </node>
 
   <!-- =========================
-       2) (Opcional) LaserScan -> PointCloud
-       Só se o teu stack precisar /laser_scan_point_cloud
+       2) TF estático base_link → laser
+       (ISTO É O QUE FALTAVA)
        ========================= -->
-
-  <!-- Opção A: se já tens um node no teu workspace que faz isto
-       (ex.: pointcloud_converter). Tens de ajustar "type" e nomes de tópicos.
-       Vou deixar um template seguro para tu preencheres. -->
-
-  <!--
-  <node pkg="pointcloud_converter"
-        type="scan_to_cloud_node"
-        name="scan_to_cloud"
-        output="screen">
-    <remap from="/scan" to="$(arg scan_topic)"/>
-    <remap from="/cloud" to="$(arg cloud_topic)"/>
-    <param name="target_frame" value="$(arg frame_id)"/>
-  </node>
-  -->
+  <node pkg="tf"
+        type="static_transform_publisher"
+        name="base_link_to_laser_tf"
+        args="
+          $(arg laser_x)
+          $(arg laser_y)
+          $(arg laser_z)
+          $(arg laser_yaw)
+          $(arg laser_pitch)
+          $(arg laser_roll)
+          base_link
+          $(arg frame_id)
+          100" />
 
 </launch>
