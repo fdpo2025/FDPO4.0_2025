@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-pproject(sdpo_driver_laser_2d C CXX)
+project(sdpo_driver_laser_2d C CXX)
 
 file(GLOB_RECURSE PROGRAM_SOURCES RELATIVE ${PROJECT_SOURCE_DIR}
   "src/sdpo_driver_laser_2d/*.cpp"
