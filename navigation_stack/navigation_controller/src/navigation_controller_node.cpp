@@ -749,7 +749,7 @@ void NavigationController::followLine() {
     // Vai para Approaching quando tiver percorrido approaching_line_progress da linha E
     // (o ponto final for uma warehouse OU se estiver saindo de uma warehouse (backwards=true))
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        if (line_progress >= param.approaching_line_progress && (line.pf.is_warehouse || isBackwards())) {
+        if (error_dist < param.dist_da && (line.pf.is_warehouse || isBackwards())) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
         }
     }
