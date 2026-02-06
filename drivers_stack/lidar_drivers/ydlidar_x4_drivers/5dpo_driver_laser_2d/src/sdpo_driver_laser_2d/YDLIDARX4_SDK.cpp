@@ -4,8 +4,8 @@
 namespace sdpo_driver_laser_2d {
 
 YDLIDARX4_SDK::YDLIDARX4_SDK() {
-  dist_data.resize(kLaserScanMaxNumSamplesYDLIDARX4);
-  ang_data.resize(kLaserScanMaxNumSamplesYDLIDARX4);
+  dist_data.resize(2000);
+  ang_data.resize(2000);
 }
 
 YDLIDARX4_SDK::~YDLIDARX4_SDK() {
@@ -21,8 +21,8 @@ void YDLIDARX4_SDK::openSerial() {
   int baud = baud_rate_;
   lidar_.setlidaropt(ydlidar::LidarPropSerialBaudrate, &baud, sizeof(int));
 
-  int lidar_type = ydlidar::TYPE_TRIANGLE;
-  lidar_.setlidaropt(ydlidar::LidarPropLidarType, &lidar_type, sizeof(int));
+  int lidar_type = TYPE_TRIANGLE;
+  lidar_.setlidaropt(LidarPropLidarType, &lidar_type, sizeof(int));
 
   float scan_freq = 5.0f;
   lidar_.setlidaropt(ydlidar::LidarPropScanFrequency, &scan_freq, sizeof(float));
@@ -58,7 +58,7 @@ void YDLIDARX4_SDK::stop() {
 }
 
 void YDLIDARX4_SDK::loop() {
-  ydlidar::LaserScan scan;   // <-- TEM de existir aqui
+  LaserScan scan;   // <-- TEM de existir aqui
 
   while (running_) {
     if (!lidar_.doProcessSimple(scan)) {  // <-- lidar_ é membro da classe

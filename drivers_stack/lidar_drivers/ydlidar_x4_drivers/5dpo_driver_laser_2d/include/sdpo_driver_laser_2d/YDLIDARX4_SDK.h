@@ -13,8 +13,8 @@ public:
   YDLIDARX4_SDK();
   ~YDLIDARX4_SDK() override;
 
-  void openSerial() override;
-  void closeSerial() override;
+  void openSerial();
+  void closeSerial();
   void start() override;
   void stop() override;
 
@@ -24,7 +24,7 @@ private:
   std::atomic<bool> running_{false};
   std::thread worker_;
 
-  ydlidar::CYdLidar lidar_;   // <-- TEM de se chamar lidar_
+  CYdLidar lidar_;   // <-- TEM de se chamar lidar_
 };
 
 } // namespace sdpo_driver_laser_2d
