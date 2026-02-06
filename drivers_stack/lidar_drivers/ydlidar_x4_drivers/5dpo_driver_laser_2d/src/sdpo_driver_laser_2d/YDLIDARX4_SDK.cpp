@@ -14,18 +14,18 @@ YDLIDARX4_SDK::~YDLIDARX4_SDK() {
 }
 
 void YDLIDARX4_SDK::openSerial() {
-  lidar_.setlidaropt(ydlidar::LidarPropSerialPort,
+  lidar_.setlidaropt(LidarPropSerialPort,
                      serial_port_name_.c_str(),
                      serial_port_name_.size());
 
   int baud = baud_rate_;
-  lidar_.setlidaropt(ydlidar::LidarPropSerialBaudrate, &baud, sizeof(int));
+  lidar_.setlidaropt(LidarPropSerialBaudrate, &baud, sizeof(int));
 
   int lidar_type = TYPE_TRIANGLE;
   lidar_.setlidaropt(LidarPropLidarType, &lidar_type, sizeof(int));
 
   float scan_freq = 5.0f;
-  lidar_.setlidaropt(ydlidar::LidarPropScanFrequency, &scan_freq, sizeof(float));
+  lidar_.setlidaropt(LidarPropScanFrequency, &scan_freq, sizeof(float));
 
   if (!lidar_.initialize()) {
     throw std::runtime_error("YDLidar-SDK: initialize() failed");
