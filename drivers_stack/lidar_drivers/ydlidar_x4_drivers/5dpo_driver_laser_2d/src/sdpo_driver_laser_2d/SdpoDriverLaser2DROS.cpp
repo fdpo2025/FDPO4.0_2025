@@ -52,7 +52,8 @@ void SdpoDriverLaser2DROS::readParam() {
   nh_private.getParam("model", model_);
   ROS_INFO("[sdpo_driver_laser_2d] Model of the 2D laser scanner: %s",
            model_.c_str());
-  if (model_ == kSdpoDriverLaser2DYDLIDARXStr) {
+
+  if (model_ == "ydlidar_x4") {
     laser_.reset(new YDLIDARX4_SDK());
   } else if (model_ == kSdpoDriverLaser2DRPLIDARS2Str) {
     laser_.reset(new RPLIDARS2());
@@ -61,6 +62,7 @@ void SdpoDriverLaser2DROS::readParam() {
         "[SdpoDriverLaser2DROS.cpp] SdpoDriverLaser2DROS::readParam: "
         "invalid 2D laser model (check documentation for supported ones)");
   }
+
 
   print_is_default_param_set("serial_port_name");
   nh_private.param<std::string>("serial_port_name", serial_port_name_,
