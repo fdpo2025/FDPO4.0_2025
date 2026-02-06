@@ -150,6 +150,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             point.pick_box = !has_box; 
             has_box  = !has_box;
             point.should_pub = true;
+            point.is_warehouse = true;
             
             // Se é warehouse de pick (pick_box = true), garantir que o ponto anterior tenha line_switch_ratio = 1.0
             // (para completar 100% da linha antes de chegar à warehouse de pick)
@@ -180,7 +181,8 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             point.line_switch_ratio = 1.0 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
             point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
             point.vel_lin_nom =  0.1 * fe_warehouse_coordinate + 0.2 * !fe_warehouse_coordinate; // if backwards deac.   
-            point.should_pub = false;       
+            point.should_pub = false;
+            point.is_warehouse = false;
 
         }
 
@@ -213,6 +215,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             nav_plan.points[i].vel_lin_nom = cp.vel_lin_nom;
             nav_plan.points[i].backwards = cp.backwards;
             nav_plan.points[i].pick_box = cp.pick_box;
+            nav_plan.points[i].is_warehouse = cp.is_warehouse;
         }
         
         navPlanPub.publish(nav_plan);

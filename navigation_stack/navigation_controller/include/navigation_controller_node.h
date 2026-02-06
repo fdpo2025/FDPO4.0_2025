@@ -43,6 +43,7 @@ struct WayPoint {
     double line_switch_ratio;  // % da linha para mudar para próxima (0.9 = 90%), -1 = usar global
     double vel_lin_nom;        // Velocidade linear nominal para esta linha, -1 = usar global
     bool pick_box;             // Se é warehouse de pick (true) ou drop (false)
+    bool is_warehouse;          // Se o ponto final é uma warehouse
 
 };
 

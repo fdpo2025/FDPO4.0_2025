@@ -20,8 +20,9 @@ struct ControllerPoint {
     double line_switch_ratio = 0.75;
     double vel_lin_nom = 0.1;
     bool backwards = false;
-    bool pick_box = false; // if falss: drops box
+    bool pick_box = false; // if false: drops box
     bool should_pub = false;
+    bool is_warehouse = false; // Se o ponto final é uma warehouse
    
 };
 

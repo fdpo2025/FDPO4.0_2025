@@ -76,6 +76,7 @@ void NavigationController::loadRouteFromParameters(){
     previousWaypoint.line_switch_ratio = -1.0;
     previousWaypoint.vel_lin_nom = -1.0;
     previousWaypoint.pick_box = false;  // route.yaml não tem pick_box, usar false
+    previousWaypoint.is_warehouse = false;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
     for(int i = 0; i < static_cast<int>(waypoints.size()); ++i){
@@ -88,6 +89,7 @@ void NavigationController::loadRouteFromParameters(){
         waypoint_temp.align = static_cast<bool>(waypoints[i]["align"]);
         waypoint_temp.backwards = static_cast<bool>(waypoints[i]["backwards"]);
         waypoint_temp.pick_box = false;  // route.yaml não tem pick_box, usar false
+        waypoint_temp.is_warehouse = false;  // route.yaml não tem is_warehouse, usar false
         
         // line_switch_ratio: se não definido, usar -1 (significa usar parâmetro global)
         if (waypoints[i].hasMember("line_switch_ratio")) {
@@ -498,6 +500,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
         previousWaypoint.backwards = false;
         previousWaypoint.line_switch_ratio = -1.0;
         previousWaypoint.vel_lin_nom = -1.0;
+        previousWaypoint.is_warehouse = false;
         ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
     }
 
@@ -731,8 +734,9 @@ void NavigationController::followLine() {
     
     // State machine - Transitions
     // Apenas 2 estados: Follow_Line e Approaching
+    // Só vai para Approaching se o ponto final for uma warehouse
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        if (error_dist < param.dist_da) {
+        if (error_dist < param.dist_da && line.pf.is_warehouse) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
         }
     }
@@ -1110,6 +1114,7 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     previousWaypoint.line_switch_ratio = -1.0;
     previousWaypoint.vel_lin_nom = -1.0;
     previousWaypoint.pick_box = false;
+    previousWaypoint.is_warehouse = false;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
     // Converter NavPlan points para WayPoints
@@ -1139,6 +1144,7 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
         waypoint_temp.align = false;  // NavPlan não tem campo align, usar false
         waypoint_temp.backwards = cp.backwards;
         waypoint_temp.pick_box = cp.pick_box;  // Copiar pick_box do NavPlan
+        waypoint_temp.is_warehouse = cp.is_warehouse;  // Copiar is_warehouse do NavPlan
         
         // Usar valores do NavPlan se definidos, senão usar -1 (global)
         waypoint_temp.line_switch_ratio = (cp.line_switch_ratio > 0) ? cp.line_switch_ratio : -1.0;
