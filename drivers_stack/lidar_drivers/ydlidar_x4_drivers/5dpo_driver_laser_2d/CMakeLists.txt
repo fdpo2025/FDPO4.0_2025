@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(sdpo_driver_laser_2d)
+pproject(sdpo_driver_laser_2d C CXX)
 
 file(GLOB_RECURSE PROGRAM_SOURCES RELATIVE ${PROJECT_SOURCE_DIR}
   "src/sdpo_driver_laser_2d/*.cpp"
@@ -140,11 +140,16 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+set(YDLIDAR_CJSON
+  ${PROJECT_SOURCE_DIR}/third_party/YDLidar-SDK/core/json/cJSON.c
+)
 
 file(GLOB_RECURSE YDLIDAR_SDK_SOURCES
   ${PROJECT_SOURCE_DIR}/third_party/YDLidar-SDK/src/*.cpp
   ${PROJECT_SOURCE_DIR}/third_party/YDLidar-SDK/core/*.cpp
 )
+
+list(APPEND YDLIDAR_SDK_SOURCES ${YDLIDAR_CJSON})
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME}_YDLIDARX4
