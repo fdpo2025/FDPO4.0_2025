@@ -4,7 +4,8 @@
 
 #include "sdpo_driver_laser_2d/utils.h"
 #include "sdpo_driver_laser_2d/RPLIDARS2.h"
-#include "sdpo_driver_laser_2d/YDLIDARX4.h"
+#include "sdpo_driver_laser_2d/YDLIDARX4_SDK.h"
+
 
 namespace sdpo_driver_laser_2d {
 
@@ -52,7 +53,7 @@ void SdpoDriverLaser2DROS::readParam() {
   ROS_INFO("[sdpo_driver_laser_2d] Model of the 2D laser scanner: %s",
            model_.c_str());
   if (model_ == kSdpoDriverLaser2DYDLIDARXStr) {
-    laser_.reset(new YDLIDARX4());
+    laser_.reset(new YDLIDARX4_SDK());
   } else if (model_ == kSdpoDriverLaser2DRPLIDARS2Str) {
     laser_.reset(new RPLIDARS2());
   } else {

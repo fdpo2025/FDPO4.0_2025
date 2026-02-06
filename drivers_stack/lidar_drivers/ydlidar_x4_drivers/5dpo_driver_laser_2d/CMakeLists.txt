@@ -135,22 +135,37 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${PROJECT_SOURCE_DIR}/third_party/YDLidar-SDK/src
+  ${PROJECT_SOURCE_DIR}/third_party/YDLidar-SDK/core
+
+)
+
+file(GLOB_RECURSE YDLIDAR_SDK_SOURCES
+  ${PROJECT_SOURCE_DIR}/third_party/YDLidar-SDK/src/*.cpp
+  ${PROJECT_SOURCE_DIR}/third_party/YDLidar-SDK/core/*.cpp
 )
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME}_YDLIDARX4
   include/${PROJECT_NAME}/SdpoDriverLaser2D.h
-  include/${PROJECT_NAME}/YDLIDARX4.h
+  include/${PROJECT_NAME}/YDLIDARX4_SDK.h
   include/${PROJECT_NAME}/utils.h
   src/${PROJECT_NAME}/SdpoDriverLaser2D.cpp
-  src/${PROJECT_NAME}/YDLIDARX4.cpp
+  src/${PROJECT_NAME}/YDLIDARX4_SDK.cpp
+  ${YDLIDAR_SDK_SOURCES}
 )
+
 add_library(${PROJECT_NAME}_RPLIDARS2
   include/${PROJECT_NAME}/SdpoDriverLaser2D.h
   include/${PROJECT_NAME}/RPLIDARS2.h
   include/${PROJECT_NAME}/utils.h
   src/${PROJECT_NAME}/SdpoDriverLaser2D.cpp
   src/${PROJECT_NAME}/RPLIDARS2.cpp
+)
+
+target_link_libraries(${PROJECT_NAME}_YDLIDARX4
+  ${catkin_LIBRARIES}
+  pthread
 )
 
 ## Add cmake target dependencies of the library
@@ -193,6 +208,8 @@ add_dependencies(${PROJECT_NAME}_node
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
+  ${PROJECT_NAME}_YDLIDARX4
+  ${PROJECT_NAME}_RPLIDARS2
 )
 
 #############
