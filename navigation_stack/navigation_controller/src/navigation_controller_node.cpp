@@ -967,12 +967,12 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     }
 
-    // Estado pickBoxForward: andar para frente 1s após chegar a warehouse de pick
+    // Estado pickBoxForward: andar para frente 2s após chegar a warehouse de pick
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         double elapsed_time = (ros::Time::now() - pick_box_forward_start_time).toSec();
         
-        if (elapsed_time >= 1.0) {
-            // Passou 1 segundo, remover waypoint e continuar para próximo
+        if (elapsed_time >= 2.0) {
+            // Passou 2 segundos, remover waypoint e continuar para próximo
             in_pick_box_forward = false;
             if (!route.empty()) {
                 route.pop_front();
@@ -988,7 +988,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             } else {
                 navigationFsm.new_state = navigation::states::done;
             }
-            ROS_INFO("NavigationController: Completed pickBoxForward (1s), continuing to next waypoint");
+            ROS_INFO("NavigationController: Completed pickBoxForward (2s), continuing to next waypoint");
         }
     }
 
@@ -999,7 +999,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     if(navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
-        // Andar para frente com velocidade linear 0.1 m/s durante 1s
+        // Andar para frente com velocidade linear 0.1 m/s durante 2s
         // Se estava indo backwards, andar para trás
         v_d = previousWaypoint.backwards ? -0.1 : 0.1;
         w_d = 0.0;
