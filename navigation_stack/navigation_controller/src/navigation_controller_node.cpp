@@ -699,9 +699,16 @@ void NavigationController::followLine() {
     line.pf = currentWaypoint;
     line.pi = previousWaypoint;
     
-    // Velocidade linear nominal efetiva (do waypoint se definida, senão global)
-    double vel_lin_nom_eff = (currentWaypoint.vel_lin_nom > 0) ? 
-                              currentWaypoint.vel_lin_nom : param.vel_lin_nom;
+    // Velocidade linear nominal efetiva
+    // Se o ponto final é uma warehouse, usar 0.06 m/s
+    // Caso contrário, usar a velocidade do waypoint se definida, senão usar a global
+    double vel_lin_nom_eff;
+    if (line.pf.is_warehouse) {
+        vel_lin_nom_eff = 0.06;
+    } else {
+        vel_lin_nom_eff = (currentWaypoint.vel_lin_nom > 0) ? 
+                          currentWaypoint.vel_lin_nom : param.vel_lin_nom;
+    }
     
     // error calc.
     double tr = std::atan2(line.pf.pose.y - line.pi.pose.y, line.pf.pose.x - line.pi.pose.x);  // Line Angle
