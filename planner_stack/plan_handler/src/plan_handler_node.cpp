@@ -156,7 +156,8 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
             point.line_switch_ratio = 1.0;
             point.backwards = false;
-            point.vel_lin_nom = 0.05;  // Velocidade nominal para warehouses
+            // Velocidade nominal: 0.03 m/s para warehouses de process, 0.05 m/s para outras
+            point.vel_lin_nom = is_process_warehouse[value] ? 0.025 : 0.05;
 
             point.pick_box = !has_box; 
             has_box  = !has_box;
