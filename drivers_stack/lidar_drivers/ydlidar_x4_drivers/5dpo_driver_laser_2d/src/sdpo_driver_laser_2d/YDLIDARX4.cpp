@@ -23,22 +23,18 @@ static inline void sleep_ms(int ms){
 }
 
 void YDLIDARX4::start() {
-  // 1) STOP
+  // STOP (seguro)
   char stop_cmd[2] = {(char)0xA5, (char)0x65};
   serial_async_->write(stop_cmd, 2);
   sleep_ms(50);
   serial_async_->flushInput();
 
-  // 2) RESTART/RESET
-  char rst_cmd[2] = {(char)0xA5, (char)0x80};
-  serial_async_->write(rst_cmd, 2);
-  sleep_ms(200);
-  serial_async_->flushInput();
-
-  // 3) START SCAN
+  // START SCAN (tenta direto)
   char start_cmd[2] = {(char)0xA5, (char)0x60};
   serial_async_->write(start_cmd, 2);
   sleep_ms(50);
+
+  // Não fazer RESET sempre — só se necessário
 }
 
 void YDLIDARX4::stop() {
@@ -50,11 +46,14 @@ void YDLIDARX4::stop() {
 }
 
 void YDLIDARX4::restart() {
-  char restart_scan_cmd[2];
-  restart_scan_cmd[0] = (char) 0xA5;
-  restart_scan_cmd[1] = (char) 0x80;
+  char rst_cmd[2] = {(char)0xA5, (char)0x80};
+  serial_async_->write(rst_cmd, 2);
+  sleep_ms(200);
+  serial_async_->flushInput();
 
-  serial_async_->write(restart_scan_cmd, 2);
+  char start_cmd[2] = {(char)0xA5, (char)0x60};
+  serial_async_->write(start_cmd, 2);
+  sleep_ms(50);
 }
 
 void YDLIDARX4::processSerialData(unsigned char& ch) {
@@ -100,17 +99,20 @@ void YDLIDARX4::processSerialData(unsigned char& ch) {
     break;
   case YDLIDARX4State::kSi2:
     if (sample_count_ >= pkg_num_samples_) {
+      // pacote completo: processa e resync
+      processLaserData();
+      byte_count_ = 0;
+
+      // este byte atual pode já ser 0xAA (início do próximo)
       if (ch == 0xAA) {
         state_ = YDLIDARX4State::kPH1;
-        processLaserData();
-        //printPkgDataInfo();
-        byte_count_ = 0;
       } else {
         state_ = YDLIDARX4State::kIddle;
       }
     } else {
       state_ = YDLIDARX4State::kSi1;
     }
+
     break;
   case YDLIDARX4State::kIddle:
     if (ch == 0xAA) {
