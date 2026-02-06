@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  ydlidar::LaserScan scan; // tipo do SDK (está no ydlidar_datatype.h)
+  LaserScan scan; // tipo do SDK (está no ydlidar_datatype.h)
 
   ros::Rate rate(20); // loop rápido; o scan vem à frequência do lidar
   while (ros::ok()) {
