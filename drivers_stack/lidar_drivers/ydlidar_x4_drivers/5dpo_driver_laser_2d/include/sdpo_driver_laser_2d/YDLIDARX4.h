@@ -50,9 +50,7 @@ class YDLIDARX4 : public SdpoDriverLaser2D {
   void processSerialData(unsigned char& ch) override;
   void processLaserData() override;
 
-  void printPkgDataInfo() const override;
-  void printLaserData() const override;
-
+  
  private:
   inline static float rawStartEndAng2Double(const uint32_t& raw_angle) {
     return static_cast<float>(raw_angle) / 64.0f;  // >> 1 already in raw data

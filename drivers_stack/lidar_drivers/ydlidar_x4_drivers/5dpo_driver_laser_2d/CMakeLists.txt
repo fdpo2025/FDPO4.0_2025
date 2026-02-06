@@ -195,19 +195,12 @@ add_executable(${PROJECT_NAME}_node
   src/main.cpp
 )
 
-add_executable(ydlidar_x4_sdk_node
-  src/sdpo_driver_laser_2d/ydlidar_x4_sdk_node.cpp
-)
-
 add_dependencies(ydlidar_x4_sdk_node
   ${${PROJECT_NAME}_EXPORTED_TARGETS}
   ${catkin_EXPORTED_TARGETS}
 )
 
-target_link_libraries(ydlidar_x4_sdk_node
-  ${catkin_LIBRARIES}
-  ydlidar_sdk
-)
+
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -226,7 +219,9 @@ add_dependencies(${PROJECT_NAME}_node
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
+  ydlidar_sdk
 )
+
 
 #############
 ## Install ##
