@@ -166,6 +166,19 @@ add_library(${PROJECT_NAME}_RPLIDARS2
   src/${PROJECT_NAME}/RPLIDARS2.cpp
 )
 
+target_link_libraries(${PROJECT_NAME}_YDLIDARX4
+  ydlidar_sdk
+  pthread
+)
+
+target_link_libraries(${PROJECT_NAME}_node
+  ${catkin_LIBRARIES}
+  ${PROJECT_NAME}_YDLIDARX4
+  ${PROJECT_NAME}_RPLIDARS2
+  pthread
+)
+
+
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure

@@ -1,99 +1,232 @@
-#include <ros/ros.h>
-#include <sensor_msgs/PointCloud.h>
+#include "sdpo_driver_laser_2d/YDLIDARX4.h"
+
+#include "sdpo_driver_laser_2d/utils.h"
+#include <unistd.h>   // usleep
 #include <cmath>
-#include <string>
 
-// SDK
-#include "CYdLidar.h"
-#include "core/common/ydlidar_def.h"
-#include "core/common/ydlidar_datatype.h"
+namespace sdpo_driver_laser_2d {
 
-int main(int argc, char** argv) {
-  ros::init(argc, argv, "ydlidar_x4_sdk_node");
-  ros::NodeHandle nh;
-  ros::NodeHandle pnh("~");
+YDLIDARX4::YDLIDARX4() {
+  dist_data.resize(kLaserScanMaxNumSamplesYDLIDARX4);
+  ang_data.resize(kLaserScanMaxNumSamplesYDLIDARX4);
+}
 
-  std::string port = "/dev/ttyUSB0";
-  int baudrate = 128000;
-  float frequency = 5.0f;
-  std::string frame_id = "laser";
-
-  pnh.param<std::string>("port", port, port);
-  pnh.param<int>("baudrate", baudrate, baudrate);
-  pnh.param<float>("frequency", frequency, frequency);
-  pnh.param<std::string>("frame_id", frame_id, frame_id);
-
-  ros::Publisher pub = nh.advertise<sensor_msgs::PointCloud>("laser_scan_point_cloud", 1);
-
-  CYdLidar lidar;
-
-  // ------- parâmetros base (copiados do tri_test.cpp) -------
-  lidar.setlidaropt(LidarPropSerialPort, port.c_str(), (int)port.size());
-  lidar.setlidaropt(LidarPropSerialBaudrate, &baudrate, sizeof(int));
-
-  int optval = TYPE_TRIANGLE;                 // X4 usa protocolo triangular
-  lidar.setlidaropt(LidarPropLidarType, &optval, sizeof(int));
-
-  optval = YDLIDAR_TYPE_SERIAL;               // serial
-  lidar.setlidaropt(LidarPropDeviceType, &optval, sizeof(int));
-
-  // valores típicos do tri_test (podes ajustar depois)
-  optval = 5; // sample rate “code” (no tri_test é int)
-  lidar.setlidaropt(LidarPropSampleRate, &optval, sizeof(int));
-
-  optval = 4; // abnormal check count (tri_test usa 4)
-  lidar.setlidaropt(LidarPropAbnormalCheckCount, &optval, sizeof(int));
-
-  bool b = true;
-  lidar.setlidaropt(LidarPropFixedResolution, &b, sizeof(bool));
-  lidar.setlidaropt(LidarPropAutoReconnect, &b, sizeof(bool));
-
-  bool isSingleChannel = true; // X4 é single channel
-  lidar.setlidaropt(LidarPropSingleChannel, &isSingleChannel, sizeof(bool));
-
-  float f;
-  f = 180.0f;  lidar.setlidaropt(LidarPropMaxAngle, &f, sizeof(float));
-  f = -180.0f; lidar.setlidaropt(LidarPropMinAngle, &f, sizeof(float));
-  f = 16.0f;   lidar.setlidaropt(LidarPropMaxRange, &f, sizeof(float));
-  f = 0.08f;   lidar.setlidaropt(LidarPropMinRange, &f, sizeof(float));
-
-  lidar.setlidaropt(LidarPropScanFrequency, &frequency, sizeof(float));
-  // ----------------------------------------------------------
-
-  if (!lidar.initialize()) {
-    ROS_FATAL("YDLidar SDK initialize() falhou (porta=%s baud=%d).", port.c_str(), baudrate);
-    return 1;
+YDLIDARX4::~YDLIDARX4() {
+  if (isSerialOpen()) {
+    stop();
   }
-  if (!lidar.turnOn()) {
-    ROS_FATAL("YDLidar turnOn() falhou.");
-    return 1;
-  }
+  closeSerial();
+}
 
-  LaserScan scan; // tipo do SDK (está no ydlidar_datatype.h)
+void YDLIDARX4::start() {
+  // Stop (safe)
+  char stop_cmd[2] = {(char)0xA5, (char)0x65};
+  serial_async_->write(stop_cmd, 2);
+  usleep(50 * 1000);
 
-  ros::Rate rate(20); // loop rápido; o scan vem à frequência do lidar
-  while (ros::ok()) {
-    if (lidar.doProcessSimple(scan)) {
-      sensor_msgs::PointCloud msg;
-      msg.header.stamp = ros::Time::now();
-      msg.header.frame_id = frame_id;
+  // Start scan
+  char start_cmd[2] = {(char)0xA5, (char)0x60};
+  serial_async_->write(start_cmd, 2);
+  usleep(50 * 1000);
+}
 
-      msg.points.resize(scan.points.size());
-      for (size_t i = 0; i < scan.points.size(); i++) {
-        const auto &p = scan.points[i]; // p.angle em rad, p.range em m
-        msg.points[i].x = p.range * std::cos(p.angle);
-        msg.points[i].y = p.range * std::sin(p.angle);
-        msg.points[i].z = 0.0f;
+void YDLIDARX4::stop() {
+  char stop_scan_cmd[2] = {(char)0xA5, (char)0x65};
+  serial_async_->write(stop_scan_cmd, 2);
+}
+
+void YDLIDARX4::restart() {
+  char rst_cmd[2] = {(char)0xA5, (char)0x80};
+  serial_async_->write(rst_cmd, 2);
+  usleep(200 * 1000);
+
+  char start_cmd[2] = {(char)0xA5, (char)0x60};
+  serial_async_->write(start_cmd, 2);
+  usleep(50 * 1000);
+}
+
+void YDLIDARX4::processSerialData(unsigned char& ch) {
+  // Máquina de estados (robusta)
+  switch (state_) {
+    case YDLIDARX4State::kIddle:
+      // procura início de pacote
+      if (ch == 0xAA) {
+        state_ = YDLIDARX4State::kPH1;
+        byte_count_ = 0;
       }
+      sample_count_ = 0;
+      break;
 
-      pub.publish(msg);
+    case YDLIDARX4State::kPH1:
+      // já vimos 0xAA, agora esperamos 0x55
+      // se vier outro 0xAA, mantém-se em kPH1 (resync suave)
+      if (ch == 0x55) {
+        state_ = YDLIDARX4State::kPH2;
+        byte_count_++;
+      } else if (ch == 0xAA) {
+        // continua à procura do 0x55 depois do novo 0xAA
+        byte_count_ = 0;
+        state_ = YDLIDARX4State::kPH1;
+      } else {
+        state_ = YDLIDARX4State::kIddle;
+      }
+      break;
+
+    case YDLIDARX4State::kPH2:
+      byte_count_++;
+      state_ = YDLIDARX4State::kCT;
+      break;
+
+    case YDLIDARX4State::kCT:
+      byte_count_++;
+      // bit 0 indica "start of scan" (pacote zero)
+      if ((ch & 0x01) == 0x01) {
+        pkg_zero_ = true;
+
+        // Publica o scan anterior e limpa contador
+        if (pubLaserData) {
+          pubLaserData();
+        }
+        data_count = 0;
+      } else {
+        pkg_zero_ = false;
+      }
+      state_ = YDLIDARX4State::kLSN;
+      break;
+
+    case YDLIDARX4State::kLSN:
+      byte_count_++;
+      pkg_num_samples_ = (ch & 0x00FF);
+      state_ = YDLIDARX4State::kFSA1;
+      break;
+
+    case YDLIDARX4State::kFSA1:
+      byte_count_++;
+      raw_start_ang_ = (ch & 0x00FF);
+      state_ = YDLIDARX4State::kFSA2;
+      break;
+
+    case YDLIDARX4State::kFSA2:
+      byte_count_++;
+      raw_start_ang_ = ((raw_start_ang_ | (ch << 8)) >> 1);
+      start_ang_ = rawStartEndAng2Double(raw_start_ang_);
+      state_ = YDLIDARX4State::kLSA1;
+      break;
+
+    case YDLIDARX4State::kLSA1:
+      byte_count_++;
+      raw_end_ang_ = (ch & 0x00FF);
+      state_ = YDLIDARX4State::kLSA2;
+      break;
+
+    case YDLIDARX4State::kLSA2:
+      byte_count_++;
+      raw_end_ang_ = ((raw_end_ang_ | (ch << 8)) >> 1);
+      end_ang_ = rawStartEndAng2Double(raw_end_ang_);
+      state_ = YDLIDARX4State::kCS1;
+      break;
+
+    case YDLIDARX4State::kCS1:
+      byte_count_++;
+      pkg_check_code_ = (ch & 0x00FF);
+      state_ = YDLIDARX4State::kCS2;
+      break;
+
+    case YDLIDARX4State::kCS2:
+      byte_count_++;
+      pkg_check_code_ = (pkg_check_code_ | (ch << 8));
+      sample_count_ = 0;
+      state_ = YDLIDARX4State::kSi1;
+      break;
+
+    case YDLIDARX4State::kSi1:
+      // 1º byte (LSB) da distância
+      byte_count_++;
+      if (sample_count_ < kLaserScanMaxNumSamplesYDLIDARX4) {
+        raw_dist_data_[sample_count_] = (ch & 0x00FF);
+        state_ = YDLIDARX4State::kSi2;
+      } else {
+        // overflow de segurança: resync
+        state_ = YDLIDARX4State::kIddle;
+      }
+      break;
+
+    case YDLIDARX4State::kSi2:
+      byte_count_++;
+      raw_dist_data_[sample_count_] =
+          (raw_dist_data_[sample_count_] | (ch << 8));
+      sample_count_++;
+
+      // ✅ só agora, depois de completar a amostra, podes fechar o pacote
+      if (sample_count_ >= pkg_num_samples_) {
+        processLaserData();
+        byte_count_ = 0;
+        // volta a procurar 0xAA para o próximo pacote
+        state_ = YDLIDARX4State::kIddle;
+      }
+      break;
+
+  }
+}
+
+void YDLIDARX4::processLaserData() {
+  // ✅ Não processar pacote zero (ele só marca início da volta)
+  // ✅ Evita divisão por zero em (sample_count_ - 1)
+  if (pkg_zero_ || sample_count_ < 2) {
+    return;
+  }
+
+  float delta_ang = end_ang_ - start_ang_;
+  if (start_ang_ > end_ang_) {
+    delta_ang += 360.0f;
+  }
+
+  for (size_t i = 0; i < sample_count_; i++) {
+    // ✅ evita overflow / corrupção de memória
+    if (data_count >= dist_data.size()) {
+      break;
     }
 
-    ros::spinOnce();
-    rate.sleep();
-  }
+    // distance em mm (para correção de ângulo)
+    dist_data[data_count] = rawDist2Double(raw_dist_data_[i]);
 
-  lidar.turnOff();
-  lidar.disconnecting();
-  return 0;
+    float angle_correction = 0.0f;
+    if (raw_dist_data_[i] != 0) {
+      angle_correction =
+          atanf(21.8f * (155.3f - dist_data[data_count]) /
+                (155.3f * dist_data[data_count])) * 360.0f / M_PIf32;
+    }
+
+    ang_data[data_count] = normAngRad(
+        -(start_ang_ +
+          delta_ang * static_cast<float>(i) /
+              (static_cast<float>(sample_count_) - 1.0f) +
+          angle_correction) * M_PIf32 / 180.0f);
+
+    // distance em metros
+    dist_data[data_count] /= 1000.0f;
+
+    bool is_sample_ok = true;
+
+    if (dist_range_check_) {
+      if ((dist_data[data_count] < dist_min_) ||
+          (dist_data[data_count] > dist_max_)) {
+        is_sample_ok = false;
+      }
+    }
+
+    if (ang_range_check_) {
+      if ((ang_data[data_count] < ang_min_) ||
+          (ang_data[data_count] > ang_max_)) {
+        is_sample_ok = false;
+      }
+    }
+
+    if (is_sample_ok) {
+      data_count++;
+    }
+  }
 }
+
+
+} // namespace sdpo_driver_laser_2d
