@@ -10,6 +10,7 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     factory_coordinates.resize(39);
     warehouse_coordinates.resize(16);
     is_warehouse_coordinate.resize(39, false);
+    is_process_warehouse.resize(39, false);
 
     // ========================================================================
     // FACTORY COORDINATES: hardcoded (dps mudar para extrair de parametrois)
@@ -98,6 +99,16 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     is_warehouse_coordinate[24] = true;
     is_warehouse_coordinate[25] = true;
     
+    // Marcar warehouses de process
+    is_process_warehouse[13] = true;
+    is_process_warehouse[14] = true;
+    is_process_warehouse[17] = true;
+    is_process_warehouse[18] = true;
+    is_process_warehouse[20] = true;
+    is_process_warehouse[21] = true;
+    is_process_warehouse[24] = true;
+    is_process_warehouse[25] = true;
+    
     // Output warehouses (IDs 35-38)
     is_warehouse_coordinate[35] = true;
     is_warehouse_coordinate[36] = true;
@@ -150,7 +161,6 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             point.pick_box = !has_box; 
             has_box  = !has_box;
             point.should_pub = true;
-            point.is_warehouse = true;
             
             // Se é warehouse de pick (pick_box = true), garantir que o ponto anterior tenha line_switch_ratio = 1.0
             // (para completar 100% da linha antes de chegar à warehouse de pick)
@@ -164,15 +174,19 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                     plan_stack.back().line_switch_ratio = 1.0;
                 }
             } else {
-                // Se é warehouse de drop (pick_box = false), garantir que o ponto anterior tenha line_switch_ratio = 0.60
-                // (para completar 60% da linha antes de chegar à warehouse de drop)
+                // Se é warehouse de drop (pick_box = false)
+                // Para warehouses de process: usar line_switch_ratio = 0.95
+                // Para outras warehouses: usar line_switch_ratio = 0.60
+                double drop_switch_ratio = is_process_warehouse[value] ? 0.95 : 0.60;
+                
                 if (!control_points.empty()) {
-                    control_points.back().line_switch_ratio = 0.60;
-                    ROS_INFO("PlanHandlerNode: Set line_switch_ratio=0.60 for previous point (before drop warehouse)");
+                    control_points.back().line_switch_ratio = drop_switch_ratio;
+                    ROS_INFO("PlanHandlerNode: Set line_switch_ratio=%.2f for previous point (before drop warehouse, process=%d)", 
+                             drop_switch_ratio, is_process_warehouse[value] ? 1 : 0);
                 }
                 // Também atualizar no plan_stack se não estiver vazio
                 if (!plan_stack.empty()) {
-                    plan_stack.back().line_switch_ratio = 0.60;
+                    plan_stack.back().line_switch_ratio = drop_switch_ratio;
                 }
             }
 
@@ -181,8 +195,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             point.line_switch_ratio = 1.0 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
             point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
             point.vel_lin_nom =  0.1 * fe_warehouse_coordinate + 0.2 * !fe_warehouse_coordinate; // if backwards deac.   
-            point.should_pub = false;
-            point.is_warehouse = false;
+            point.should_pub = false;       
 
         }
 
@@ -215,7 +228,6 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             nav_plan.points[i].vel_lin_nom = cp.vel_lin_nom;
             nav_plan.points[i].backwards = cp.backwards;
             nav_plan.points[i].pick_box = cp.pick_box;
-            nav_plan.points[i].is_warehouse = cp.is_warehouse;
         }
         
         navPlanPub.publish(nav_plan);
