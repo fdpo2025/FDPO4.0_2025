@@ -1,6 +1,8 @@
 #include "sdpo_driver_laser_2d/YDLIDARX4.h"
 
 #include "sdpo_driver_laser_2d/utils.h"
+#include <unistd.h>   // usleep
+
 
 namespace sdpo_driver_laser_2d {
 
@@ -17,18 +19,13 @@ YDLIDARX4::~YDLIDARX4() {
 }
 
 void YDLIDARX4::start() {
-  // STOP (seguro)
   char stop_cmd[2] = {(char)0xA5, (char)0x65};
   serial_async_->write(stop_cmd, 2);
-  sleep_ms(50);
-  serial_async_->flushInput();
+  usleep(50 * 1000);
 
-  // START SCAN (tenta direto)
   char start_cmd[2] = {(char)0xA5, (char)0x60};
   serial_async_->write(start_cmd, 2);
-  sleep_ms(50);
-
-  // Não fazer RESET sempre — só se necessário
+  usleep(50 * 1000);
 }
 
 
@@ -43,12 +40,11 @@ void YDLIDARX4::stop() {
 void YDLIDARX4::restart() {
   char rst_cmd[2] = {(char)0xA5, (char)0x80};
   serial_async_->write(rst_cmd, 2);
-  sleep_ms(200);
-  serial_async_->flushInput();
+  usleep(200 * 1000);
 
   char start_cmd[2] = {(char)0xA5, (char)0x60};
   serial_async_->write(start_cmd, 2);
-  sleep_ms(50);
+  usleep(50 * 1000);
 }
 
 
