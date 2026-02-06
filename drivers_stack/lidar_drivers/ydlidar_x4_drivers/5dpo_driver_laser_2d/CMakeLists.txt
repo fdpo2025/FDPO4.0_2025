@@ -7,9 +7,15 @@ add_subdirectory(third_party/YDLidar-SDK)
 file(GLOB_RECURSE PROGRAM_SOURCES RELATIVE ${PROJECT_SOURCE_DIR}
   "src/sdpo_driver_laser_2d/*.cpp"
 )
+
+list(REMOVE_ITEM PROGRAM_SOURCES
+  "src/sdpo_driver_laser_2d/ydlidar_x4_sdk_node.cpp"
+)
+
 file(GLOB_RECURSE PROGRAM_HEADERS RELATIVE ${PROJECT_SOURCE_DIR}
   "include/sdpo_driver_laser_2d/*.h"
 )
+
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
@@ -137,10 +143,12 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(
   include
-  ${catkin_INCLUDE_DIRS}  
-  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK/src
+  ${catkin_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK/core
 )
+
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME}_YDLIDARX4
