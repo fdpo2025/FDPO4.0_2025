@@ -737,9 +737,9 @@ void NavigationController::followLine() {
     
     // State machine - Transitions
     // Apenas 2 estados: Follow_Line e Approaching
-    // Só vai para Approaching se o ponto final for uma warehouse
+    // Vai para Approaching se o ponto final for uma warehouse OU se estiver saindo de uma warehouse (backwards=true)
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        if (error_dist < param.dist_da && line.pf.is_warehouse) {
+        if (error_dist < param.dist_da && (line.pf.is_warehouse || isBackwards())) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
         }
     }
