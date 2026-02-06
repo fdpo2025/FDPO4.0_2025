@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(sdpo_driver_laser_2d)
 
+add_subdirectory(third_party/YDLidar-SDK)
+
+
 file(GLOB_RECURSE PROGRAM_SOURCES RELATIVE ${PROJECT_SOURCE_DIR}
   "src/sdpo_driver_laser_2d/*.cpp"
 )
@@ -134,7 +137,9 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(
   include
-  ${catkin_INCLUDE_DIRS}
+  ${catkin_INCLUDE_DIRS}  
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK
 )
 
 ## Declare a C++ library
@@ -174,6 +179,20 @@ add_executable(${PROJECT_NAME}_node
   ${PROGRAM_SOURCES}
   ${PROGRAM_HEADERS}
   src/main.cpp
+)
+
+add_executable(ydlidar_x4_sdk_node
+  src/sdpo_driver_laser_2d/ydlidar_x4_sdk_node.cpp
+)
+
+add_dependencies(ydlidar_x4_sdk_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
+
+target_link_libraries(ydlidar_x4_sdk_node
+  ${catkin_LIBRARIES}
+  ydlidar_sdk
 )
 
 ## Rename C++ executable without prefix
