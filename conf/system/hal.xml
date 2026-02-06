@@ -5,8 +5,8 @@
   <arg name="debug_pico_comm" default="false" doc="Enable Pi4-Pico communication debug logs"/>
 
   <!-- Driver do LiDAR (seleção automática HLS-LFCD2 ou YDLidar X4) -->
-  <include file="$(find lidar_drivers)/ydlidar_x4_drivers/5dpo_driver_lase_2d/launch/ydlidar_x4_sdk.launch">
-  </include>
+  <include file="$(find 5dpo_driver_laser_2d)/launch/ydlidar_x4_sdk.launch"/>
+
 
     
   <!-- Driver do Pi Pico (Odometria e Controle de Motores) -->
