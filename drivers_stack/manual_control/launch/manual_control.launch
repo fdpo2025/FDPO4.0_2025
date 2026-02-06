@@ -1,0 +1,17 @@
+<launch>
+  <node name="joy_node" pkg="joy" type="joy_node" output="screen">
+    <param name="dev" value="/dev/input/js0" />
+    <param name="deadzone" value="0.12" />
+    <param name="autorepeat_rate" value="20" />
+  </node>
+
+  <node name="teleop_control" pkg="manual_control" type="f710_teleop_node" output="screen">
+    <param name="max_linear_vel" value="0.5" />
+    <param name="max_angular_vel" value="1.5" />
+  </node>
+
+  <node name="pico_driver" pkg="pi_pico_driver" type="pico_driver_node" output="screen">
+    <param name="serial_port" value="/dev/ttyACM0" />
+    <param name="debug_comm" value="false" />
+  </node>
+</launch>
