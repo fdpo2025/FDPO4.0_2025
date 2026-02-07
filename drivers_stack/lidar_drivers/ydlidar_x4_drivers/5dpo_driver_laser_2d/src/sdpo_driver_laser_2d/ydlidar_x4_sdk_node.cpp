@@ -48,52 +48,22 @@ public:
     pnh_.param<float>("laser_pose_x", laser_pose_x_, 0.0f);
     pnh_.param<float>("laser_pose_y", laser_pose_y_, 0.0f);
     pnh_.param<float>("laser_pose_z", laser_pose_z_, 0.0f);
-    pnh_.param<float>("laser_pose_yaw",   laser_pose_yaw_deg_,   0.0f);
-    pnh_.param<float>("laser_pose_pitch", laser_pose_pitch_deg_, 0.0f);
-    pnh_.param<float>("laser_pose_roll",  laser_pose_roll_deg_,  0.0f);
+    pnh_.param<float>("laser_pose_yaw",   laser_pose_yaw_,   0.0f);
+    pnh_.param<float>("laser_pose_pitch", laser_pose_pitch_, 0.0f);
+    pnh_.param<float>("laser_pose_roll",  laser_pose_roll_,  0.0f);
 
-    // Filtros (como no SdpoDriver: só aplicam se os dois limites existirem)
-    has_dist_range_ = (pnh_.hasParam("dist_min") && pnh_.hasParam("dist_max"));
-    if (has_dist_range_) {
-      pnh_.getParam("dist_min", dist_min_);
-      pnh_.getParam("dist_max", dist_max_);
-      if (!(dist_max_ > dist_min_)) {
-        ROS_WARN("dist_min/dist_max ignorados (dist_max tem de ser > dist_min).");
-        has_dist_range_ = false;
-      } else {
-        ROS_INFO("Distance range: [%.3f, %.3f] m", dist_min_, dist_max_);
-      }
-    } else if (pnh_.hasParam("dist_min") || pnh_.hasParam("dist_max")) {
-      ROS_WARN("dist_min/dist_max ignorados (tens de definir os dois).");
-    } else {
-      ROS_INFO("Distance range not defined");
-    }
+    ROS_INFO("Base frame: %s | Laser frame: %s",
+            base_frame_id_.c_str(), laser_frame_id_.c_str());
 
-    has_angle_range_ = (pnh_.hasParam("angle_min") && pnh_.hasParam("angle_max"));
-    if (has_angle_range_) {
-      float a_min_deg = 0.f, a_max_deg = 0.f;
-      pnh_.getParam("angle_min", a_min_deg);
-      pnh_.getParam("angle_max", a_max_deg);
+    ROS_INFO("Laser > Base footprint: "
+            "[%f, %f, %f] m , [%f %f %f] deg",
+            laser_pose_x_, laser_pose_y_, laser_pose_z_,
+            laser_pose_yaw_, laser_pose_pitch_, laser_pose_roll_);
 
-      ang_min_rad_ = normAngRad(a_min_deg * static_cast<float>(M_PI) / 180.0f);
-      ang_max_rad_ = normAngRad(a_max_deg * static_cast<float>(M_PI) / 180.0f);
-
-      // No SdpoDriver: se ang_max < ang_min faz swap (assumindo intervalo contínuo)
-      if (ang_max_rad_ < ang_min_rad_) std::swap(ang_min_rad_, ang_max_rad_);
-
-      ROS_INFO("Angle range: [%.2f, %.2f] deg",
-               ang_min_rad_ * 180.0f / static_cast<float>(M_PI),
-               ang_max_rad_ * 180.0f / static_cast<float>(M_PI));
-    } else if (pnh_.hasParam("angle_min") || pnh_.hasParam("angle_max")) {
-      ROS_WARN("angle_min/angle_max ignorados (tens de definir os dois).");
-    } else {
-      ROS_INFO("Angle range not defined");
-    }
-
-    // Converte extrínsecos de graus->rad (armazenar em rad internamente)
-    extr_roll_rad_  = laser_pose_roll_deg_  * static_cast<float>(M_PI) / 180.0f;
-    extr_pitch_rad_ = laser_pose_pitch_deg_ * static_cast<float>(M_PI) / 180.0f;
-    extr_yaw_rad_   = laser_pose_yaw_deg_   * static_cast<float>(M_PI) / 180.0f;
+    // Igual ao SdpoDriver: converte graus->rad e guarda internamente
+    laser_pose_yaw_   *= static_cast<float>(M_PI) / 180.0f;
+    laser_pose_pitch_ *= static_cast<float>(M_PI) / 180.0f;
+    laser_pose_roll_  *= static_cast<float>(M_PI) / 180.0f;
 
     ROS_INFO("Serial: %s @ %d", port_.c_str(), baudrate_);
     ROS_INFO("Scan frequency: %.2f Hz", frequency_);
@@ -179,29 +149,32 @@ private:
     ROS_INFO("YDLidar X4 ligado e a publicar.");
   }
 
+  // --- troca o teu reloadParamsCb por este (fica igual ao SdpoDriver) ---
+
   bool reloadParamsCb(std_srvs::Empty::Request&, std_srvs::Empty::Response&) {
-    // Recarrega frames + extrínsecos (como se fosse dynamic reconfigure “manual”)
     pnh_.param<std::string>("base_frame_id", base_frame_id_, base_frame_id_);
     pnh_.param<std::string>("laser_frame_id", laser_frame_id_, laser_frame_id_);
 
     pnh_.param<float>("laser_pose_x", laser_pose_x_, laser_pose_x_);
     pnh_.param<float>("laser_pose_y", laser_pose_y_, laser_pose_y_);
     pnh_.param<float>("laser_pose_z", laser_pose_z_, laser_pose_z_);
-    pnh_.param<float>("laser_pose_yaw",   laser_pose_yaw_deg_,   laser_pose_yaw_deg_);
-    pnh_.param<float>("laser_pose_pitch", laser_pose_pitch_deg_, laser_pose_pitch_deg_);
-    pnh_.param<float>("laser_pose_roll",  laser_pose_roll_deg_,  laser_pose_roll_deg_);
+    pnh_.param<float>("laser_pose_yaw",   laser_pose_yaw_,   laser_pose_yaw_);
+    pnh_.param<float>("laser_pose_pitch", laser_pose_pitch_, laser_pose_pitch_);
+    pnh_.param<float>("laser_pose_roll",  laser_pose_roll_,  laser_pose_roll_);
 
-    extr_roll_rad_  = laser_pose_roll_deg_  * static_cast<float>(M_PI) / 180.0f;
-    extr_pitch_rad_ = laser_pose_pitch_deg_ * static_cast<float>(M_PI) / 180.0f;
-    extr_yaw_rad_   = laser_pose_yaw_deg_   * static_cast<float>(M_PI) / 180.0f;
+    ROS_INFO("[ydlidar_x4_sdk_node] Laser > Base footprint updated: "
+            "[%f, %f, %f] m , [%f %f %f] deg",
+            laser_pose_x_, laser_pose_y_, laser_pose_z_,
+            laser_pose_yaw_, laser_pose_pitch_, laser_pose_roll_);
 
-    ROS_INFO("Params recarregados.");
-    ROS_INFO("Base frame: %s | Laser frame: %s", base_frame_id_.c_str(), laser_frame_id_.c_str());
-    ROS_INFO("Laser > Base: [%.3f, %.3f, %.3f] m, [yaw=%.2f pitch=%.2f roll=%.2f] deg",
-             laser_pose_x_, laser_pose_y_, laser_pose_z_,
-             laser_pose_yaw_deg_, laser_pose_pitch_deg_, laser_pose_roll_deg_);
+    // Igual ao SdpoDriver: converte graus->rad e guarda internamente
+    laser_pose_yaw_   *= static_cast<float>(M_PI) / 180.0f;
+    laser_pose_pitch_ *= static_cast<float>(M_PI) / 180.0f;
+    laser_pose_roll_  *= static_cast<float>(M_PI) / 180.0f;
+
     return true;
   }
+
 
   inline bool anglePass(float a_rad) const {
     if (!has_angle_range_) return true;
@@ -242,7 +215,7 @@ private:
     // TF base -> laser (igual ao SdpoDriver)
     tf::StampedTransform laser2base_tf;
     laser2base_tf.setOrigin(tf::Vector3(laser_pose_x_, laser_pose_y_, laser_pose_z_));
-    laser2base_tf.setRotation(tf::createQuaternionFromRPY(extr_roll_rad_, extr_pitch_rad_, extr_yaw_rad_));
+    laser2base_tf.setRotation(tf::createQuaternionFromRPY(laser_pose_roll_, laser_pose_pitch_, laser_pose_yaw_));
     laser2base_tf.stamp_ = msg.header.stamp;
     laser2base_tf.frame_id_ = base_frame_id_;
     laser2base_tf.child_frame_id_ = laser_frame_id_;
@@ -267,12 +240,12 @@ private:
   float frequency_{5.0f};
 
   // Frames e extrínsecos (estilo SdpoDriver)
-  std::string base_frame_id_{"base_footprint"};
+ std::string base_frame_id_{"base_footprint"};
   std::string laser_frame_id_{"laser"};
 
   float laser_pose_x_{0.0f}, laser_pose_y_{0.0f}, laser_pose_z_{0.0f};
-  float laser_pose_yaw_deg_{0.0f}, laser_pose_pitch_deg_{0.0f}, laser_pose_roll_deg_{0.0f};
-  float extr_yaw_rad_{0.0f}, extr_pitch_rad_{0.0f}, extr_roll_rad_{0.0f};
+  // IMPORTANTE: estes começam em graus e depois ficam guardados em rad internamente
+  float laser_pose_yaw_{0.0f}, laser_pose_pitch_{0.0f}, laser_pose_roll_{0.0f};
 
   // Filtros
   bool has_dist_range_{false};
