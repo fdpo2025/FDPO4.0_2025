@@ -271,21 +271,26 @@ private:
       pt.z = 0.0f;
       msg.points.push_back(pt);
     }
-    /*
-    // TF base -> laser (igual ao SdpoDriver)
-    tf::StampedTransform laser2base_tf;
-    laser2base_tf.setOrigin(tf::Vector3(laser_pose_x_, laser_pose_y_, laser_pose_z_));
-    laser2base_tf.setRotation(tf::createQuaternionFromRPY(extr_roll_rad_, extr_pitch_rad_, extr_yaw_rad_));
-    laser2base_tf.stamp_ = msg.header.stamp;
-    laser2base_tf.frame_id_ = base_frame_id_;
-    laser2base_tf.child_frame_id_ = laser_frame_id_;
+    
+    // TF base -> laser COM O MESMO STAMP DA CLOUD (evita falhas no RViz)
+    geometry_msgs::TransformStamped t;
+    t.header.stamp = msg.header.stamp;
+    t.header.frame_id = base_frame_id_;
+    t.child_frame_id  = laser_frame_id_;
 
-    ROS_INFO_THROTTLE(1.0, "Publishing TF: %s -> %s",
-                  base_frame_id_.c_str(),
-                  laser_frame_id_.c_str());
+    t.transform.translation.x = laser_pose_x_;
+    t.transform.translation.y = laser_pose_y_;
+    t.transform.translation.z = laser_pose_z_;
 
-    tf_broadcaster_.sendTransform(laser2base_tf);
-    */
+    tf2::Quaternion q;
+    q.setRPY(extr_roll_rad_, extr_pitch_rad_, extr_yaw_rad_);
+    t.transform.rotation.x = q.x();
+    t.transform.rotation.y = q.y();
+    t.transform.rotation.z = q.z();
+    t.transform.rotation.w = q.w();
+
+    tf_broadcaster_.sendTransform(t);
+
     pub_cloud_.publish(msg);
   }
 
