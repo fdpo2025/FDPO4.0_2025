@@ -112,11 +112,12 @@ public:
     // Serviço para “recarregar” extrínsecos/frames sem recompilar (substitui dynamic_reconfigure)
     srv_reload_ = pnh_.advertiseService("reload_params", &YDLidarX4SdkNode::reloadParamsCb, this);
 
+    /*
     tf_timer_ = nh_.createTimer(
       ros::Duration(0.02),   // 50 Hz
       &YDLidarX4SdkNode::publishTfOnly,
       this);
-
+    */
     setupSdk();
   }
 
