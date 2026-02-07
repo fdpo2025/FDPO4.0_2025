@@ -124,20 +124,21 @@ public:
 
   void publishTfOnly(const ros::TimerEvent&) {
     tf::StampedTransform laser2base_tf;
-    laser2base_tf.setOrigin(tf::Vector3(
-        laser_pose_x_, laser_pose_y_, laser_pose_z_));
+    laser2base_tf.setOrigin(tf::Vector3(laser_pose_x_, laser_pose_y_, laser_pose_z_));
     laser2base_tf.setRotation(tf::createQuaternionFromRPY(
-        laser_pose_roll_, laser_pose_pitch_, laser_pose_yaw_));
+        extr_roll_rad_, extr_pitch_rad_, extr_yaw_rad_));
+
     laser2base_tf.stamp_ = ros::Time::now();
     laser2base_tf.frame_id_ = base_frame_id_;
     laser2base_tf.child_frame_id_ = laser_frame_id_;
 
     ROS_INFO_THROTTLE(1.0, "Publishing TF: %s -> %s",
-                  base_frame_id_.c_str(),
-                  laser_frame_id_.c_str());
+                      base_frame_id_.c_str(),
+                      laser_frame_id_.c_str());
 
     tf_broadcaster_.sendTransform(laser2base_tf);
   }
+
 
 
   void spin() {
