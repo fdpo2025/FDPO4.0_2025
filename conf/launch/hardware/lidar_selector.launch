@@ -40,7 +40,7 @@
             <param name="laser_pose_x" value="0.0"/>
             <param name="laser_pose_y" value="0.0"/>
             <param name="laser_pose_z" value="0.0"/>
-            <param name="laser_pose_yaw" value="0.0"/>
+            <param name="laser_pose_yaw" value="180.0"/>
             <param name="laser_pose_pitch" value="0.0"/>
             <param name="laser_pose_roll" value="0.0"/>
             <param name="dist_min" value="0.12"/>
