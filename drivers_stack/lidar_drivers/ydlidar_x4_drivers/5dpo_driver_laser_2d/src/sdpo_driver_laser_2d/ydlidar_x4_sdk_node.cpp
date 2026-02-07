@@ -268,7 +268,7 @@ private:
 
       geometry_msgs::Point32 pt;
       pt.x = r * std::cos(a);
-      pt.y = r * std::sin(a);
+      pt.y = - r * std::sin(a);
       pt.z = 0.0f;
       msg.points.push_back(pt);
     }
