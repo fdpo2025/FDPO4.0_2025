@@ -1,0 +1,8 @@
+digraph G {
+"odom" -> "base_link"[label="Broadcaster: /pico_driver_node\nAverage rate: 100.200 Hz\nMost recent transform: 1770468013.276 ( 0.006 sec old)\nBuffer length: 4.980 sec\n"];
+"map" -> "odom"[label="Broadcaster: /localizer_node\nAverage rate: 100.200 Hz\nMost recent transform: 1770468013.276 ( 0.006 sec old)\nBuffer length: 4.980 sec\n"];
+edge [style=invis];
+ subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
+"Recorded at time: 1770468013.282"[ shape=plaintext ] ;
+ }->"map";
+}
