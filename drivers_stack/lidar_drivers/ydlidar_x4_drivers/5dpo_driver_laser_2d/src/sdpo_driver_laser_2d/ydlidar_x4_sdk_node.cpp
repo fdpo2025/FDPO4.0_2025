@@ -142,6 +142,8 @@ public:
     t.transform.rotation.w = q.w();
 
     tf_broadcaster_.sendTransform(t);
+
+    ROS_WARN_THROTTLE(1.0, "TF SENT: %s -> %s", base_frame_id_.c_str(), laser_frame_id_.c_str());
   }
 
 
