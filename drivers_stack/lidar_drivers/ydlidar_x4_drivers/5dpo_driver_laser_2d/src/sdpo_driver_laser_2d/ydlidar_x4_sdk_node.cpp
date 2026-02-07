@@ -24,6 +24,9 @@
 
 #pragma message("### COMPILING ydlidar_x4_sdk_node.cpp (CUSTOM BUILD MARKER) ###")
 
+#error "STOP HERE – THIS ydlidar_x4_sdk_node.cpp SHOULD BE COMPILING"
+
+
 
 static inline float normAngRad(float a) {
   // Normaliza para [-pi, pi)
