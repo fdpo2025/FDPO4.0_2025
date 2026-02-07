@@ -22,6 +22,9 @@
 #include "core/common/ydlidar_def.h"
 #include "core/common/ydlidar_datatype.h"
 
+#pragma message("### COMPILING ydlidar_x4_sdk_node.cpp (CUSTOM BUILD MARKER) ###")
+
+
 static inline float normAngRad(float a) {
   // Normaliza para [-pi, pi)
   const float two_pi = 2.0f * static_cast<float>(M_PI);
