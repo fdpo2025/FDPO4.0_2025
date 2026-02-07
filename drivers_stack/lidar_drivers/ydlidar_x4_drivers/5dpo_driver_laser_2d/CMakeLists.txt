@@ -115,3 +115,22 @@ target_link_libraries(${PROJECT_NAME}_node
   ${PROJECT_NAME}_YDLIDARX4
   ${PROJECT_NAME}_RPLIDARS2
 )
+
+# -----------------------
+# YDLIDAR X4 SDK standalone node
+# -----------------------
+add_executable(ydlidar_x4_sdk_node
+  src/sdpo_driver_laser_2d/ydlidar_x4_sdk_node.cpp
+)
+
+add_dependencies(ydlidar_x4_sdk_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
+  ${catkin_EXPORTED_TARGETS}
+)
+
+target_link_libraries(ydlidar_x4_sdk_node
+  ${catkin_LIBRARIES}
+  ydlidar_sdk
+  pthread
+)
