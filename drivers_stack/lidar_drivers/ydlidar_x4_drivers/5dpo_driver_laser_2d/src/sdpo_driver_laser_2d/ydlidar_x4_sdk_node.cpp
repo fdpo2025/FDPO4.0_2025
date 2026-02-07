@@ -259,7 +259,7 @@ private:
 
     for (const auto& p : scan.points) {
       // p.angle em rad, p.range em m (segundo o teu comentário e uso original)
-      const float a = static_cast<float>(p.angle) * M_PIf32 / 180.0f; // graus -> rad
+      float a = static_cast<float>(p.angle) * M_PIf32 / 180.0f; // graus -> rad
       a = normAngRad(-a);                                      // corrige sentido
       const float r = static_cast<float>(p.range);
 
@@ -269,7 +269,7 @@ private:
       
       geometry_msgs::Point32 pt;
       pt.x = r * std::cos(a);
-      pt.y = - r * std::sin(a);
+      pt.y = r * std::sin(a);
       pt.z = 0.0f;
       msg.points.push_back(pt);
     }
