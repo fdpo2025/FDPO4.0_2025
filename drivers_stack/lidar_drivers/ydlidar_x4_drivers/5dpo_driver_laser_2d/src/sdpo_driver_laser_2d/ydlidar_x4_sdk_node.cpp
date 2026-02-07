@@ -142,17 +142,17 @@ public:
 
 
   void spin() {
-    LaserScan scan; // tipo do SDK
-    ros::Rate rate(20); // loop rápido; scan chega à freq do lidar
+    LaserScan scan;
+    ros::Rate rate(20);
 
     while (ros::ok()) {
       if (lidar_.doProcessSimple(scan)) {
         publishPointCloudAndTf(scan);
       }
-      ros::spinOnce();
       rate.sleep();
     }
   }
+
 
 private:
   void setupSdk() {
@@ -316,7 +316,12 @@ private:
 int main(int argc, char** argv) {
   ros::init(argc, argv, "ydlidar_x4_sdk_node");
 
+  ros::AsyncSpinner spinner(2);  // timers/callbacks numa thread separada
+  spinner.start();
+
   YDLidarX4SdkNode node;
   node.spin();
+
   return 0;
 }
+
