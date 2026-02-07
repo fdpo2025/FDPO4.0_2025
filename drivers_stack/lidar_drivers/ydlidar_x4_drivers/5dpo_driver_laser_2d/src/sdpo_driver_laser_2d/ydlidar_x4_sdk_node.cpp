@@ -246,6 +246,11 @@ private:
     laser2base_tf.stamp_ = msg.header.stamp;
     laser2base_tf.frame_id_ = base_frame_id_;
     laser2base_tf.child_frame_id_ = laser_frame_id_;
+
+    ROS_INFO_THROTTLE(1.0, "Publishing TF: %s -> %s",
+                  base_frame_id_.c_str(),
+                  laser_frame_id_.c_str());
+
     tf_broadcaster_.sendTransform(laser2base_tf);
 
     pub_cloud_.publish(msg);
