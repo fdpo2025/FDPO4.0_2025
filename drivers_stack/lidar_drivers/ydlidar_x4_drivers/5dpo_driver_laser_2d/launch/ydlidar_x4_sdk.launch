@@ -1,61 +1,48 @@
 <launch>
-  <!-- =========================
-       Configuração geral
-       ========================= -->
-  <arg name="port" default="/dev/ttyUSB0"/>
-  <arg name="baud" default="128000"/>
 
-  <arg name="scan_topic" default="/scan"/>
-  <arg name="cloud_topic" default="/laser_scan_point_cloud"/>
+    <!-- Argumento para escolher o driver: "hlds" ou "ydlidar" -->
+    <arg name="lidar_driver" default="ydlidar"/>
+    
+    <!-- Frame ID comum para ambos os drivers -->
+    <arg name="frame_id" default="laser"/>
 
-  <!-- Frame do laser -->
-  <arg name="frame_id" default="laser"/>
+    
+    <!-- ============================================ -->
+    <!-- Driver YDLidar X4 (SDK novo, estilo Sdpo) -->
+    <!-- ============================================ -->
+    <group if="$(eval lidar_driver == 'ydlidar')">
+        <arg name="serial_port_ydlidar" default="/dev/ttyUSB0"/>
+        <arg name="baud_rate_ydlidar" default="128000"/>
 
-  <!-- =========================
-       Pose do laser no robô
-       (METROS e RADIANOS)
-       ========================= -->
-  <arg name="laser_x" default="0.0"/>
-  <arg name="laser_y" default="0.0"/>
-  <arg name="laser_z" default="0.0"/>
+        <node pkg="sdpo_driver_laser_2d"
+              type="ydlidar_x4_sdk_node"
+              name="ydlidar_x4"
+              clear_params="true"
+              output="screen">
 
-  <!-- 180 graus = pi rad -->
-  <arg name="laser_yaw"   default="3.14159265"/>
-  <arg name="laser_pitch" default="0.0"/>
-  <arg name="laser_roll"  default="0.0"/>
+            <!-- Ligação -->
+            <param name="port" value="$(arg serial_port_ydlidar)"/>
+            <param name="baudrate" value="$(arg baud_rate_ydlidar)"/>
 
-  <!-- =========================
-       1) Driver YDLidar X4 (SDK)
-       ========================= -->
-  <node pkg="sdpo_driver_laser_2d"
-        type="ydlidar_x4_sdk_node"
-        name="ydlidar_x4"
-        output="screen">
+            <!-- Frames (IGUAL AO SDPO DRIVER) -->
+            <param name="base_frame_id"  value="base_link"/>
+            <param name="laser_frame_id" value="$(arg frame_id)"/>
 
-    <param name="port" value="$(arg port)"/>
-    <param name="baudrate" value="$(arg baud)"/>
-    <param name="frame_id" value="$(arg frame_id)"/>
+            <!-- Extrínsecos do laser (METROS + GRAUS) -->
+            <param name="laser_pose_x" value="0.0"/>
+            <param name="laser_pose_y" value="0.0"/>
+            <param name="laser_pose_z" value="0.0"/>
 
-    <!-- Se o teu node publica LaserScan -->
-    <remap from="/scan" to="$(arg scan_topic)"/>
-  </node>
+            <!-- YDLidar X4 normalmente está virado para trás -->
+            <param name="laser_pose_yaw"   value="180.0"/>
+            <param name="laser_pose_pitch" value="0.0"/>
+            <param name="laser_pose_roll"  value="0.0"/>
 
-  <!-- =========================
-       2) TF estático base_link → laser
-       (ISTO É O QUE FALTAVA)
-       ========================= -->
-  <node pkg="tf"
-        type="static_transform_publisher"
-        name="base_link_to_laser_tf"
-        args="
-          $(arg laser_x)
-          $(arg laser_y)
-          $(arg laser_z)
-          $(arg laser_yaw)
-          $(arg laser_pitch)
-          $(arg laser_roll)
-          base_link
-          $(arg frame_id)
-          100" />
+            <!-- Filtros -->
+            <param name="dist_min" value="0.12"/>
+            <param name="dist_max" value="10.0"/>
+
+        </node>
+    </group>
 
 </launch>
