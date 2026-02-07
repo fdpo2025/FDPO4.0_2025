@@ -178,7 +178,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                 // Se é warehouse de drop (pick_box = false)
                 // Para warehouses de process: usar line_switch_ratio = 0.95
                 // Para outras warehouses: usar line_switch_ratio = 0.60
-                double drop_switch_ratio = is_process_warehouse[value] ? 0.95 : 0.60;
+                double drop_switch_ratio = is_process_warehouse[value] ? 0.80 : 0.60;
                 
                 if (!control_points.empty()) {
                     control_points.back().line_switch_ratio = drop_switch_ratio;
