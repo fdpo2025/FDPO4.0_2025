@@ -107,6 +107,11 @@ public:
     // Serviço para “recarregar” extrínsecos/frames sem recompilar (substitui dynamic_reconfigure)
     srv_reload_ = pnh_.advertiseService("reload_params", &YDLidarX4SdkNode::reloadParamsCb, this);
 
+    tf_timer_ = nh_.createTimer(
+      ros::Duration(0.02),   // 50 Hz
+      &YDLidarX4SdkNode::publishTfOnly,
+      this);
+
     setupSdk();
   }
 
@@ -116,6 +121,20 @@ public:
       lidar_.disconnecting();
     } catch (...) {}
   }
+
+  void publishTfOnly(const ros::TimerEvent&) {
+    tf::StampedTransform laser2base_tf;
+    laser2base_tf.setOrigin(tf::Vector3(
+        laser_pose_x_, laser_pose_y_, laser_pose_z_));
+    laser2base_tf.setRotation(tf::createQuaternionFromRPY(
+        laser_pose_roll_, laser_pose_pitch_, laser_pose_yaw_));
+    laser2base_tf.stamp_ = ros::Time::now();
+    laser2base_tf.frame_id_ = base_frame_id_;
+    laser2base_tf.child_frame_id_ = laser_frame_id_;
+
+    tf_broadcaster_.sendTransform(laser2base_tf);
+  }
+
 
   void spin() {
     LaserScan scan; // tipo do SDK
@@ -238,7 +257,7 @@ private:
       pt.z = 0.0f;
       msg.points.push_back(pt);
     }
-
+    /*
     // TF base -> laser (igual ao SdpoDriver)
     tf::StampedTransform laser2base_tf;
     laser2base_tf.setOrigin(tf::Vector3(laser_pose_x_, laser_pose_y_, laser_pose_z_));
@@ -252,7 +271,7 @@ private:
                   laser_frame_id_.c_str());
 
     tf_broadcaster_.sendTransform(laser2base_tf);
-
+    */
     pub_cloud_.publish(msg);
   }
 
@@ -263,6 +282,8 @@ private:
   ros::Publisher pub_cloud_;
   ros::ServiceServer srv_reload_;
   tf::TransformBroadcaster tf_broadcaster_;
+
+  ros::Timer tf_timer_;
 
   CYdLidar lidar_;
 
