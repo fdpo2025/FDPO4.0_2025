@@ -8,7 +8,9 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud.h>
-#include <tf/transform_broadcaster.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <tf2/LinearMath/Quaternion.h>
 #include <std_srvs/Empty.h>
 
 #include <cmath>
@@ -123,22 +125,24 @@ public:
   }
 
   void publishTfOnly(const ros::TimerEvent&) {
-    tf::StampedTransform laser2base_tf;
-    laser2base_tf.setOrigin(tf::Vector3(laser_pose_x_, laser_pose_y_, laser_pose_z_));
-    laser2base_tf.setRotation(tf::createQuaternionFromRPY(
-        extr_roll_rad_, extr_pitch_rad_, extr_yaw_rad_));
+    geometry_msgs::TransformStamped t;
+    t.header.stamp = ros::Time::now();
+    t.header.frame_id = base_frame_id_;
+    t.child_frame_id = laser_frame_id_;
 
-    laser2base_tf.stamp_ = ros::Time::now();
-    laser2base_tf.frame_id_ = base_frame_id_;
-    laser2base_tf.child_frame_id_ = laser_frame_id_;
+    t.transform.translation.x = laser_pose_x_;
+    t.transform.translation.y = laser_pose_y_;
+    t.transform.translation.z = laser_pose_z_;
 
-    ROS_INFO_THROTTLE(1.0, "Publishing TF: %s -> %s",
-                      base_frame_id_.c_str(),
-                      laser_frame_id_.c_str());
+    tf2::Quaternion q;
+    q.setRPY(extr_roll_rad_, extr_pitch_rad_, extr_yaw_rad_);
+    t.transform.rotation.x = q.x();
+    t.transform.rotation.y = q.y();
+    t.transform.rotation.z = q.z();
+    t.transform.rotation.w = q.w();
 
-    tf_broadcaster_.sendTransform(laser2base_tf);
+    tf_broadcaster_.sendTransform(t);
   }
-
 
 
   void spin() {
@@ -286,7 +290,8 @@ private:
 
   ros::Publisher pub_cloud_;
   ros::ServiceServer srv_reload_;
-  tf::TransformBroadcaster tf_broadcaster_;
+  tf2_ros::TransformBroadcaster tf_broadcaster_;
+
 
   ros::Timer tf_timer_;
 
