@@ -1,9 +1,0 @@
-digraph G {
-"odom" -> "base_link"[label="Broadcaster: /pico_driver_node\nAverage rate: 97.191 Hz\nMost recent transform: 1770474814.098 ( 0.002 sec old)\nBuffer length: 4.980 sec\n"];
-"map" -> "odom"[label="Broadcaster: /localizer_node\nAverage rate: 97.183 Hz\nMost recent transform: 1770474814.088 ( 0.012 sec old)\nBuffer length: 4.970 sec\n"];
-"base_link" -> "laser"[label="Broadcaster: /sdpo_driver_laser_2d\nAverage rate: 7.922 Hz\nMost recent transform: 1770474814.008 ( 0.092 sec old)\nBuffer length: 4.797 sec\n"];
-edge [style=invis];
- subgraph cluster_legend { style=bold; color=black; label ="view_frames Result";
-"Recorded at time: 1770474814.100"[ shape=plaintext ] ;
- }->"map";
-}
