@@ -39,6 +39,8 @@ static inline float normAngRad(float a) {
 class YDLidarX4SdkNode {
 public:
   YDLidarX4SdkNode() : nh_(), pnh_("~") {
+    ROS_WARN("YDLIDAR_X4: cheguei aqui");
+
     // Params do teu nó original
     pnh_.param<std::string>("port", port_, std::string("/dev/ttyUSB0"));
     pnh_.param<int>("baudrate", baudrate_, 128000);
