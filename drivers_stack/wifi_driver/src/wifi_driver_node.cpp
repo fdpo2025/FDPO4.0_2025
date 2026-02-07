@@ -15,6 +15,8 @@ WifiDriverNode::WifiDriverNode(ros::NodeHandle& nh)
   port_ = 44832;
   timeout_s_ = 1.0;
 
+  ROS_WARN("YDLIDAR_X4: cheguei aqui");
+
   // Carregar do parameter server (sobrescreve se existir)
   nh_.param("server_ip", server_ip_, server_ip_);
   nh_.param("port", port_, port_);
