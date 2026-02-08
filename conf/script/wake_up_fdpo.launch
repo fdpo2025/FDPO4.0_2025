@@ -13,7 +13,8 @@
 	<arg name="use_hmi" default="true"/>
 	<arg name="use_rviz" default="false" doc="Ativar RViz automaticamente"/>
 	<arg name="use_planner" default="true" />
-	<arg name="planner_node_name" default="path_planner_node" />
+	<arg name="planner_node_name" default="chris_planner_node" />
+	<arg name="planning_method" default="astar" doc="Planning method for chris_planner: closest, onebyone, greedy_h, or astar"/>
 	<arg name="use_wifi" default="true" />
 
 	<!-- HAL: Hardware Abstraction Layer (LiDAR, etc) -->
@@ -39,6 +40,7 @@
 
 	<include if="$(arg use_planner)" file="$(find conf)/system/planner.xml">
 		<arg name="node_name" value="$(arg planner_node_name)" />
+		<arg name="planning_method" value="$(arg planning_method)" />
 	</include>
 		
 	<include file="$(find conf)/system/wifi.xml">
