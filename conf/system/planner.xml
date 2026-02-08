@@ -1,9 +1,11 @@
 <launch>
   <!-- Argumentos repassáveis (opcional) -->
-  <arg name="node_name" default="path_planner_node" />
+  <arg name="node_name" default="chris_planner_node" />
+  <arg name="planning_method" default="astar" />
 
   <!-- Sobe o planner -->
-  <include file="$(find path_planner)/launch/path_planner.launch">
+  <include file="$(find chris_planner)/launch/chris_planner.launch">
     <arg name="node_name" value="$(arg node_name)" />
+    <arg name="planning_method" value="$(arg planning_method)" />
   </include>
 </launch>

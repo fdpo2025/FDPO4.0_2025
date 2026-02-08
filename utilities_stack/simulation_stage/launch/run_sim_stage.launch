@@ -17,6 +17,8 @@
   <arg name="use_conf_hmi"        default="true"/>
   <arg name="use_ss_controller"   default="false" doc="Use state space controller (true) or original controller (false)"/>
   <arg name="use_raw_odom"         default="false" doc="Use raw odometry (/odom) instead of EKF filtered. Only works when use_ekf=false"/>
+  <arg name="use_planner"         default="true" doc="Use path planner"/>
+  <arg name="planning_method"     default="astar" doc="Planning method for chris_planner: closest, onebyone, greedy_h, or astar"/>
 
   <param name="/use_sim_time" value="true"/>
 
@@ -32,6 +34,11 @@
 
   <include if="$(arg use_conf_hmi)" file="$(arg conf_root)/system/hmi.xml">
       <arg name="map_file" value="$(arg map_file)"/>
+  </include>
+
+  <!-- Planner: Path planning using chris_planner -->
+  <include if="$(arg use_planner)" file="$(arg conf_root)/system/planner.xml">
+    <arg name="planning_method" value="$(arg planning_method)"/>
   </include>
 
 </launch>

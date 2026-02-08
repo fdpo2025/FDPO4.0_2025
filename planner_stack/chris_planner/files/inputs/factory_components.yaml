@@ -1,0 +1,9 @@
+input_warehouse: [0, 1, 2, 3]
+machineA:
+  inputs: [17, 24]
+  outputs: [18, 25]
+machineB:
+  inputs: [13, 20]
+  outputs: [14, 21]
+output_warehouse: [35, 36, 37, 38]
+robot_start_node: 31
