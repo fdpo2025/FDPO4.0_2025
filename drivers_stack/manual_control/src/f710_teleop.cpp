@@ -18,14 +18,28 @@ F710Teleop::~F710Teleop() {}
 void F710Teleop::joyCallback(const sensor_msgs::Joy::ConstPtr& joy) {
     geometry_msgs::Twist twist;
 
-    // Analógico Esquerdo (Eixo 1) -> Velocidade Linear
-    twist.linear.x = max_v_ * joy->axes[1];
-    // Analógico Direito (Eixo 3) -> Velocidade Angular
-    twist.angular.z = max_w_ * joy->axes[3];
+    // 1. Deadzone manual: evita que o robô ande sozinho se o analógico não voltar ao zero perfeito
+    double raw_linear = (std::abs(joy->axes[1]) > 0.05) ? joy->axes[1] : 0.0;
+    double raw_angular = (std::abs(joy->axes[3]) > 0.05) ? joy->axes[3] : 0.0;
+
+    // 2. Curva Exponencial: dá mais precisão em velocidades baixas e força total só no fim do curso
+    // Isso torna o comando muito mais "intuitivo"
+    double linear_val = raw_linear * std::abs(raw_linear);
+    double angular_val = raw_angular * std::abs(raw_angular);
+
+    // 3. Limitação Dinâmica: Se estiveres no máximo de linear, reduzimos um pouco a linear 
+    // para dar "espaço" aos motores para rodarem (angular)
+    if (std::abs(linear_val) > 0.0) {
+        twist.linear.x = linear_val * max_v_ * (1.0 - std::abs(angular_val) * 0.3);
+    } else {
+        twist.linear.x = linear_val * max_v_;
+    }
+
+    twist.angular.z = angular_val * max_w_;
     
     vel_pub_.publish(twist);
 
-    // Botão 'A' (Index 0) -> Controlo do pick_box
+    //
     std_msgs::Bool pick_msg;
     pick_msg.data = (joy->buttons[0] == 1);
     pick_pub_.publish(pick_msg);
