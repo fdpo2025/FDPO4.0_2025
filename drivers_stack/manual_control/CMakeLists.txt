@@ -9,7 +9,7 @@ project(manual_control)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
-  rospy
+  roscpp
   sensor_msgs
   std_msgs
 )
@@ -106,7 +106,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES manual_control
-#  CATKIN_DEPENDS geometry_msgs rospy sensor_msgs std_msgs
+   CATKIN_DEPENDS geometry_msgs roscpp sensor_msgs std_msgs
 #  DEPENDS system_lib
 )
 
@@ -117,7 +117,7 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
+  include
   ${catkin_INCLUDE_DIRS}
 )
 
@@ -139,6 +139,10 @@ include_directories(
 add_executable(f710_teleop_node 
   src/f710_teleop.cpp
   src/main.cpp
+)
+
+add_dependencies(f710_teleop_node
+   ${catkin_EXPORTED_TARGETS}
 )
 
 target_link_libraries(f710_teleop_node
