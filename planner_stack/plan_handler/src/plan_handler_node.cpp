@@ -193,7 +193,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
         } else {
 
-            point.line_switch_ratio = 1.0 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
+            point.line_switch_ratio = 0.8 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
             point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
             point.vel_lin_nom =  0.1 * fe_warehouse_coordinate + 0.2 * !fe_warehouse_coordinate; // if backwards deac.   
             point.should_pub = false;       
