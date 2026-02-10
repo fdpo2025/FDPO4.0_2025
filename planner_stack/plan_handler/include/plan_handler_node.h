@@ -48,7 +48,7 @@ class PlanHandlerNode {
         std::vector<bool> is_warehouse_coordinate; // works like a hashtable 
         std::vector<bool> is_process_warehouse;     // Identifica warehouses de process
         bool is_last_warehouse, is_current_warehouse, fe_warehouse_coordinate;   // falling edge
-
+	bool was_last_warehouse_process;
         std::vector<ControllerPoint> plan_stack;
         
         std::string planned_paths_topic;
