@@ -117,6 +117,7 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
 
     // State variables
     fe_warehouse_coordinate = has_box = is_last_warehouse = is_current_warehouse = false;
+    was_last_warehouse_process = false;
     last_pick_box_state = false;  // Estado inicial do pick_box
 
     // ROS subscribers e publishers
@@ -153,6 +154,8 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
         fe_warehouse_coordinate = is_last_warehouse && !is_current_warehouse;
 
         if(is_current_warehouse) {
+            // Guardar se esta warehouse é de processamento para usar quando sairmos dela
+            was_last_warehouse_process = is_process_warehouse[value];
 
             point.line_switch_ratio = 1.0;
             point.backwards = false;
@@ -193,7 +196,15 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
         } else {
 
-            point.line_switch_ratio = 1.0 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
+            // Quando sai de uma warehouse (backwards=true):
+            // - Se era warehouse de processamento: line_switch_ratio = 1.0
+            // - Se era outra warehouse: line_switch_ratio = 0.7
+            // Caso contrário: line_switch_ratio = 0.75
+            if (fe_warehouse_coordinate) {
+                point.line_switch_ratio = was_last_warehouse_process ? 1.0 : 0.7;
+            } else {
+                point.line_switch_ratio = 0.75;
+            }
             point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
             point.vel_lin_nom =  0.1 * fe_warehouse_coordinate + 0.2 * !fe_warehouse_coordinate; // if backwards deac.   
             point.should_pub = false;       

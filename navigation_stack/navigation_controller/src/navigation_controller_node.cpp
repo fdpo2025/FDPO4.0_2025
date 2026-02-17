@@ -16,7 +16,7 @@ in_pick_box_forward(false) {
 
     // load from YAML or from /nav_plan
     nh.param("load_from_route", load_from_route, false);
-    
+
     // ros init
     std::string odom_topic;
     nh.param("odom_topic", odom_topic, std::string("/odometry/filtered"));
@@ -781,12 +781,12 @@ void NavigationController::followLine() {
         
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-
+        
         // -----------------------
         //   ANGULAR CONTROL
         // -----------------------
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
-
+        
         // Limitar velocidade angular
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
@@ -833,7 +833,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     // Quando align=true: usar isPositionArrived() para parar no ponto exato e rodar
     else if(navigationFsm.state == navigation::states::driveToGoal && isPositionArrived() && route.front().align && enable) {
-        
+
         // Guardar waypoint anterior antes de remover
         previousWaypoint = route.front();
         
@@ -845,7 +845,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             ROS_INFO("NavigationController: Arrived at pick warehouse (id=%d, x=%.2f, y=%.2f, backwards=%d), entering pickBoxForward state", 
                      previousWaypoint.id, previousWaypoint.pose.x, previousWaypoint.pose.y, previousWaypoint.backwards ? 1 : 0);
         } else {
-            navigationFsm.new_state = navigation::states::turnToFinalYaw;
+        navigationFsm.new_state = navigation::states::turnToFinalYaw;
         }
 
     }
@@ -877,21 +877,21 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
                 ROS_INFO("NavigationController: Completed line to pick warehouse, entering pickBoxForward state");
             } else {
                 // Não é warehouse de pick, remover normalmente
-                route.pop_front();
-                updateDesiredPose();
-                
-                // Reinicializar followLine FSM para nova linha
-                followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-                followLineFsm.set_state();
+            route.pop_front();
+            updateDesiredPose();
+            
+            // Reinicializar followLine FSM para nova linha
+            followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+            followLineFsm.set_state();
                 
                 // Reset completion feedback flag para nova linha
                 completion_feedback_sent = false;
-                
-                // Se não há mais waypoints, ir direto para idle
-                if(route.empty()) {
-                    navigationFsm.new_state = navigation::states::idle;
-                } else {
-                    navigationFsm.new_state = navigation::states::done;
+            
+            // Se não há mais waypoints, ir direto para idle
+            if(route.empty()) {
+                navigationFsm.new_state = navigation::states::idle;
+            } else {
+                navigationFsm.new_state = navigation::states::done;
                 }
             }
         }
@@ -922,20 +922,20 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             ROS_INFO("NavigationController: Completed turnToFinalYaw at pick warehouse, entering pickBoxForward state");
         } else {
             // Não é warehouse de pick, remover normalmente
-            route.pop_front();
+        route.pop_front();
             // Reset completion feedback flag para nova linha
             completion_feedback_sent = false;
-            updateDesiredPose();
-            
-            // Reinicializar followLine FSM para nova linha
-            followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-            followLineFsm.set_state();
-            
-            // Se não há mais waypoints, ir direto para idle
-            if(route.empty()) {
-                navigationFsm.new_state = navigation::states::idle;
-            } else {
-                navigationFsm.new_state = navigation::states::done;
+        updateDesiredPose();
+        
+        // Reinicializar followLine FSM para nova linha
+        followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+        followLineFsm.set_state();
+        
+        // Se não há mais waypoints, ir direto para idle
+        if(route.empty()) {
+            navigationFsm.new_state = navigation::states::idle;
+        } else {
+            navigationFsm.new_state = navigation::states::done;
             }
         }
 
@@ -1011,7 +1011,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         velPub.publish(cmd);
         ROS_INFO_THROTTLE(1.0, "NavigationController: Route empty, publishing stop command");
     } else {
-        publishVel();
+    publishVel();
     }
 
 }
@@ -1024,11 +1024,11 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
 
         // Só carregar route do YAML se load_from_route for true
         if (load_from_route) {
-            loadRouteFromParameters();
-            
-            if (route.empty()) {
-                res.success = false; res.message = "no waypoints in params";
-                return true;
+        loadRouteFromParameters();
+
+        if (route.empty()) {
+            res.success = false; res.message = "no waypoints in params";
+            return true;
             }
         } else {
             // Se não carregar do route, esperar por /nav_plan
