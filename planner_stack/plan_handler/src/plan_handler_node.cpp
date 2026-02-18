@@ -11,6 +11,8 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     warehouse_coordinates.resize(16);
     is_warehouse_coordinate.resize(39, false);
     is_process_warehouse.resize(39, false);
+    is_input_warehouse.resize(39, false);
+    is_output_warehouse.resize(39, false);
 
     // ========================================================================
     // FACTORY COORDINATES: hardcoded (dps mudar para extrair de parametrois)
@@ -83,11 +85,15 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     // ========================================================================
     // IS_WAREHOUSE_COORDINATE
     // ========================================================================
-    // Input warehouses (IDs 0-3)
+    // Input warehouses (IDs 0-3) - SEMPRE pick
     is_warehouse_coordinate[0] = true;
     is_warehouse_coordinate[1] = true;
     is_warehouse_coordinate[2] = true;
     is_warehouse_coordinate[3] = true;
+    is_input_warehouse[0] = true;
+    is_input_warehouse[1] = true;
+    is_input_warehouse[2] = true;
+    is_input_warehouse[3] = true;
     
     // Process warehouses (IDs 13,14,17,18,20,21,24,25)
     is_warehouse_coordinate[13] = true;
@@ -109,11 +115,15 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     is_process_warehouse[24] = true;
     is_process_warehouse[25] = true;
     
-    // Output warehouses (IDs 35-38)
+    // Output warehouses (IDs 35-38) - SEMPRE drop
     is_warehouse_coordinate[35] = true;
     is_warehouse_coordinate[36] = true;
     is_warehouse_coordinate[37] = true;
     is_warehouse_coordinate[38] = true;
+    is_output_warehouse[35] = true;
+    is_output_warehouse[36] = true;
+    is_output_warehouse[37] = true;
+    is_output_warehouse[38] = true;
 
     // State variables
     fe_warehouse_coordinate = has_box = is_last_warehouse = is_current_warehouse = false;
@@ -166,10 +176,27 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                 point.pick_box = has_box;  // Manter o estado atual (sem toggle)
                 point.should_pub = false;  // Não publicar mudança de estado
                 ROS_INFO("PlanHandlerNode: First node is warehouse (ID %d), skipping has_box toggle", value);
-            } else {
+            } 
+            // Input warehouses: SEMPRE pick (has_box = true)
+            else if (is_input_warehouse[value]) {
+                point.pick_box = true;
+                has_box = true;
+                point.should_pub = true;
+                ROS_INFO("PlanHandlerNode: Input warehouse (ID %d) -> PICK", value);
+            }
+            // Output warehouses: SEMPRE drop (has_box = false)
+            else if (is_output_warehouse[value]) {
+                point.pick_box = false;
+                has_box = false;
+                point.should_pub = true;
+                ROS_INFO("PlanHandlerNode: Output warehouse (ID %d) -> DROP", value);
+            }
+            // Process warehouses: toggle (comportamento original)
+            else {
                 point.pick_box = !has_box; 
                 has_box = !has_box;
                 point.should_pub = true;
+                ROS_INFO("PlanHandlerNode: Process warehouse (ID %d) -> %s", value, point.pick_box ? "PICK" : "DROP");
             }
             
             // Se é warehouse de pick (pick_box = true), garantir que o ponto anterior tenha line_switch_ratio = 1.0
