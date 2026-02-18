@@ -64,46 +64,56 @@ class A2BPlannerNode:
         Espera JSON: {"pickup_node": 0, "dropoff_node": 35}
         """
         try:
+            # Log para saberes exatamente o que chegou
+            rospy.loginfo(f"Recebido do Node-RED: {msg.data}")
+
             # 1. Parse do JSON
             data = json.loads(msg.data)
             
-            # Logica para suportar tanto o formato antigo como o novo
-            # Se vier do teu UI antigo adaptado:
-            pickup = int(data.get('target_node')) # Onde ir buscar (Ex: 0)
+            # 2. Extrair dados com segurança
+            # Tenta buscar 'pickup_node' (novo padrão). Se falhar, tenta 'pickup' ou 'target_node'
+            p_raw = data.get('pickup_node') 
             
-            # ATENCAO: A UI precisa de enviar para onde a caixa vai.
-            # Por agora, vamos assumir que se não vier destino, vai para o Output 35
-            # Mas o ideal é a UI mandar "dropoff_node"
-            dropoff = int(data.get('dropoff_node', 35)) 
-            
-            rospy.loginfo(f"Nova Missao recebida: Ir de {self.current_robot_node} -> Pegar em {pickup} -> Largar em {dropoff}")
+            # Se a UI não mandou pickup_node, tenta chaves antigas por segurança
+            if p_raw is None:
+                p_raw = data.get('target_node')
 
-            # 2. Calcular Rota 1: Onde estou -> Onde está a caixa
+            d_raw = data.get('dropoff_node')
+
+            # 3. Validação antes de converter
+            if p_raw is None or d_raw is None:
+                rospy.logerr(f"ERRO: Dados incompletos. Recebi: {data}")
+                return
+
+            # Converter para Inteiros
+            pickup = int(p_raw)
+            dropoff = int(d_raw)
+            
+            rospy.loginfo(f"Nova Missao validada: Ir de {self.current_robot_node} -> Pegar em {pickup} -> Largar em {dropoff}")
+
+            # 4. Calcular Rota 1: Onde estou -> Onde está a caixa
             path_to_pickup = self.factory.graph.shortest_path(self.current_robot_node, pickup)
             
-            # 3. Calcular Rota 2: Onde está a caixa -> Onde entregar
+            # 5. Calcular Rota 2: Onde está a caixa -> Onde entregar
             path_to_dropoff = self.factory.graph.shortest_path(pickup, dropoff)
 
-            # 4. Colar as rotas (Stitching)
-            # path_to_pickup termina em 'pickup', path_to_dropoff começa em 'pickup'
-            # Para não duplicar o nó do meio, cortamos o primeiro elemento da segunda lista
+            # 6. Colar as rotas (Stitching)
             full_path = path_to_pickup + path_to_dropoff[1:]
 
             rospy.loginfo(f"Trajetoria calculada ({len(full_path)} nos): {full_path}")
 
-            # 5. Publicar
+            # 7. Publicar
             path_msg = Int32MultiArray()
             path_msg.data = full_path
             self.path_pub.publish(path_msg)
             
-            # 6. Atualizar estado interno
-            # Assumimos que o robô vai ter sucesso e ficará no destino final
+            # 8. Atualizar estado interno
             self.current_robot_node = dropoff
 
         except ValueError as e:
-            rospy.logerr(f"Erro nos dados da missao (IDs invalidos?): {e}")
+            rospy.logerr(f"Erro de valor (IDs invalidos?): {e}")
         except Exception as e:
-            rospy.logerr(f"Erro ao processar missao: {e}")
+            rospy.logerr(f"Erro critico ao processar missao: {e}")
 
     def run(self):
         rospy.spin()

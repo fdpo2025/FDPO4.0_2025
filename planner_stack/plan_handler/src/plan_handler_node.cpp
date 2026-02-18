@@ -39,7 +39,7 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     factory_coordinates[21] = {0.468, 0.0};  
     factory_coordinates[22] = {0.695, 0.0};
     factory_coordinates[23] = {-0.695, -0.15};
-    factory_coordinates[24] = {-0.468, -0.15};
+    factory_coordinates[24] = {-0.468, -0.165};
     factory_coordinates[25] = {-0.227, -0.15};
     factory_coordinates[26] = {0.0, -0.15};
     factory_coordinates[27] = {0.245, -0.233};

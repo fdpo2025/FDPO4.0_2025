@@ -1,6 +1,0 @@
-<launch>
-  <arg name="node_name" default="a2b_planner" />
-
-  <node name="$(arg node_name)" pkg="a2b_planner" type="a2b_node.py" output="screen">
-  </node>
-</launch>
