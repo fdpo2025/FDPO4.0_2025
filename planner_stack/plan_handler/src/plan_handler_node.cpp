@@ -163,6 +163,11 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
         is_current_warehouse = is_warehouse_coordinate[value];
         fe_warehouse_coordinate = is_last_warehouse && !is_current_warehouse;
 
+        // DEBUG: Mostrar info de cada nó
+        ROS_INFO("PlanHandlerNode: Processing node %d - is_first=%d, is_warehouse=%d, is_input=%d, is_output=%d, has_box=%d",
+                 value, is_first_node ? 1 : 0, is_current_warehouse ? 1 : 0, 
+                 is_input_warehouse[value] ? 1 : 0, is_output_warehouse[value] ? 1 : 0, has_box ? 1 : 0);
+
         if(is_current_warehouse) {
 
             point.line_switch_ratio = 1.0;
@@ -172,10 +177,11 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
             // Se é o primeiro nó do caminho E é uma warehouse, NÃO fazer toggle do has_box
             // (o robô já está nessa posição, é apenas o ponto de partida)
+            // IMPORTANTE: Também não adicionar ao plan_stack para evitar conflitos com caminhos futuros
             if (is_first_node) {
-                point.pick_box = has_box;  // Manter o estado atual (sem toggle)
-                point.should_pub = false;  // Não publicar mudança de estado
-                ROS_INFO("PlanHandlerNode: First node is warehouse (ID %d), skipping has_box toggle", value);
+                ROS_INFO("PlanHandlerNode: First node is warehouse (ID %d), skipping entirely (not added to plan_stack)", value);
+                is_first_node = false;
+                continue;  // Salta este ponto completamente - não adiciona a control_points nem plan_stack
             } 
             // Input warehouses: SEMPRE pick (has_box = true)
             else if (is_input_warehouse[value]) {
