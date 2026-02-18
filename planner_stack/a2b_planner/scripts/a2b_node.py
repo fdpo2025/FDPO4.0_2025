@@ -92,10 +92,11 @@ class A2BPlannerNode:
             rospy.loginfo(f"Nova Missao validada: Ir de {self.current_robot_node} -> Pegar em {pickup} -> Largar em {dropoff}")
 
             # 4. Calcular Rota 1: Onde estou -> Onde está a caixa
-            path_to_pickup = self.factory.graph.shortest_path(self.current_robot_node, pickup)
+            # Usa shortest_path_compact para incluir coordenada adjacente ao sair de warehouses
+            path_to_pickup = self.factory.shortest_path_compact(self.current_robot_node, pickup)
             
             # 5. Calcular Rota 2: Onde está a caixa -> Onde entregar
-            path_to_dropoff = self.factory.graph.shortest_path(pickup, dropoff)
+            path_to_dropoff = self.factory.shortest_path_compact(pickup, dropoff)
 
             # 6. Colar as rotas (Stitching)
             full_path = path_to_pickup + path_to_dropoff[1:]

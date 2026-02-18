@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste ROS Bridge</title>
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .connected { background: #16a34a; }
+        .disconnected { background: #dc2626; }
+        .data-box {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 10px 0;
+            border-left: 4px solid #0ea5e9;
+        }
+        h1 { color: #0ea5e9; }
+        h3 { color: #94a3b8; margin-bottom: 10px; }
+        .value { font-size: 1.2em; color: #22d3ee; }
+    </style>
+</head>
+<body>
+    <h1>🤖 Teste ROS Bridge</h1>
+    
+    <div id="status" class="status disconnected">Desconectado</div>
+    
+    <div class="data-box">
+        <h3>Odometria (/odometry/filtered)</h3>
+        <p>X: <span id="odom-x" class="value">--</span> m</p>
+        <p>Y: <span id="odom-y" class="value">--</span> m</p>
+        <p>Theta: <span id="odom-theta" class="value">--</span> rad</p>
+    </div>
+
+    <div class="data-box">
+        <h3>Tópicos disponíveis</h3>
+        <pre id="topics" style="color: #94a3b8;">A carregar...</pre>
+    </div>
+
+    <script>
+        // MUDA ESTE IP para o do teu rosbridge!
+        var ros = new ROSLIB.Ros({
+            url: 'ws://10.242.202.243:9090'
+        });
+
+        ros.on('connection', function() {
+            console.log('Conectado ao rosbridge!');
+            document.getElementById('status').textContent = '✅ Conectado ao ROS';
+            document.getElementById('status').className = 'status connected';
+            
+            // Listar tópicos disponíveis
+            ros.getTopics(function(result) {
+                document.getElementById('topics').textContent = result.topics.join('\n');
+            });
+        });
+
+        ros.on('error', function(error) {
+            console.log('Erro:', error);
+            document.getElementById('status').textContent = '❌ Erro de conexão';
+            document.getElementById('status').className = 'status disconnected';
+        });
+
+        ros.on('close', function() {
+            console.log('Conexão fechada');
+            document.getElementById('status').textContent = '🔌 Desconectado';
+            document.getElementById('status').className = 'status disconnected';
+        });
+
+        // Subscrever à odometria
+        var odomTopic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/odometry/filtered',
+            messageType: 'nav_msgs/Odometry'
+        });
+
+        odomTopic.subscribe(function(msg) {
+            document.getElementById('odom-x').textContent = msg.pose.pose.position.x.toFixed(3);
+            document.getElementById('odom-y').textContent = msg.pose.pose.position.y.toFixed(3);
+            
+            // Converter quaternion para ângulo (yaw)
+            var q = msg.pose.pose.orientation;
+            var yaw = Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+            document.getElementById('odom-theta').textContent = yaw.toFixed(3);
+        });
+    </script>
+</body>
+</html>
+
+
