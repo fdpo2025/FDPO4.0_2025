@@ -135,6 +135,7 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
 void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::ConstPtr& msg)
 {
     std::vector<ControllerPoint> control_points;
+    bool is_first_node = true;  // Flag para identificar o primeiro nó do caminho
 
     for (const auto& value : msg->data) {
     
@@ -159,9 +160,17 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             // Velocidade nominal: 0.03 m/s para warehouses de process, 0.05 m/s para outras
             point.vel_lin_nom = is_process_warehouse[value] ? 0.025 : 0.05;
 
-            point.pick_box = !has_box; 
-            has_box  = !has_box;
-            point.should_pub = true;
+            // Se é o primeiro nó do caminho E é uma warehouse, NÃO fazer toggle do has_box
+            // (o robô já está nessa posição, é apenas o ponto de partida)
+            if (is_first_node) {
+                point.pick_box = has_box;  // Manter o estado atual (sem toggle)
+                point.should_pub = false;  // Não publicar mudança de estado
+                ROS_INFO("PlanHandlerNode: First node is warehouse (ID %d), skipping has_box toggle", value);
+            } else {
+                point.pick_box = !has_box; 
+                has_box = !has_box;
+                point.should_pub = true;
+            }
             
             // Se é warehouse de pick (pick_box = true), garantir que o ponto anterior tenha line_switch_ratio = 1.0
             // (para completar 100% da linha antes de chegar à warehouse de pick)
@@ -207,6 +216,9 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
         
         ROS_INFO("PlanHandlerNode: Added point - x=%.3f, y=%.3f, line_switch_ratio=%.2f, vel_lin_nom=%.2f, backwards=%d",
                  point.x, point.y, point.line_switch_ratio, point.vel_lin_nom, point.backwards ? 1 : 0);
+        
+        // Após processar o primeiro nó, marcar como false
+        is_first_node = false;
     }
 
     ROS_INFO("PlanHandlerNode: Received new path with %zu waypoints. Stack size: %zu", control_points.size(), plan_stack.size());
