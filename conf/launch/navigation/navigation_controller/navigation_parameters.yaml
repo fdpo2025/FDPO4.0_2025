@@ -29,7 +29,7 @@ kp_angular: 1.0     # Ganho proporcional para controlo angular
 # ============================================================================
 # PARÂMETROS followLine (seguir linha entre waypoints)
 # ============================================================================
-k_line: 8.5              # Ganho para correção de linha (followLine)
+k_line: 7.5              # Ganho para correção de linha (followLine)
 gain_fwd: 1.0            # GAIN_FWD - ganho forward para controlo de linha
 vel_lin_nom: 0.2         # VEL_LIN_NOM - velocidade linear nominal para seguir linha (m/s)
 dist_da: 0.0             # DIST_DA - distância para começar a desacelerar (m)
@@ -38,4 +38,4 @@ max_etf: 0.2             # MAX_ETF - máximo erro de orientação para transiç�
 tol_init_line: 0.03      # Tolerância de distância à linha para transição GoTo_Init -> Follow_Line (m)
 line_switch_ratio: 0.9   # Ratio da linha para mudar para próxima (0.9 = 90%)
 approaching_line_progress: 0.0  # Progresso da linha para entrar em Approaching (0.60 = 60%)
-approaching_vel: 0.03   # Velocidade constante no estado Approaching (m/s)
+approaching_vel: 0.02   # Velocidade constante no estado Approaching (m/s)

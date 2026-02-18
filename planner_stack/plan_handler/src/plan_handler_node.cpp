@@ -34,14 +34,14 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     factory_coordinates[14] = {0.468, 0.15};   
     factory_coordinates[15] = {0.695, 0.15};
     factory_coordinates[16] = {-0.695, 0.0};
-    factory_coordinates[17] = {-0.468, 0.0};  
+    factory_coordinates[17] = {-0.468, -0.023};  
     factory_coordinates[18] = {-0.227, 0.0};  
     factory_coordinates[19] = {0.0, 0.0};
     factory_coordinates[20] = {0.227, 0.0};    
     factory_coordinates[21] = {0.468, 0.0};  
     factory_coordinates[22] = {0.695, 0.0};
     factory_coordinates[23] = {-0.695, -0.15};
-    factory_coordinates[24] = {-0.468, -0.165};
+    factory_coordinates[24] = {-0.468, -0.158};
     factory_coordinates[25] = {-0.227, -0.15};
     factory_coordinates[26] = {0.0, -0.15};
     factory_coordinates[27] = {0.245, -0.233};
@@ -169,7 +169,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                  is_input_warehouse[value] ? 1 : 0, is_output_warehouse[value] ? 1 : 0, has_box ? 1 : 0);
 
         if(is_current_warehouse) {
-
+            was_last_warehouse_process = is_process_warehouse[value];
             point.line_switch_ratio = 1.0;
             point.backwards = false;
             // Velocidade nominal: 0.03 m/s para warehouses de process, 0.05 m/s para outras
@@ -235,8 +235,24 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
         } else {
 
-            point.line_switch_ratio = 0.8 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
-            point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
+            //point.line_switch_ratio = 0.8 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
+            
+            if (fe_warehouse_coordinate) {
+
+
+                point.line_switch_ratio = was_last_warehouse_process ? 1.0 : 0.7;
+
+
+            } else {
+
+
+                point.line_switch_ratio = 0.75;
+
+
+            }            
+
+
+	    point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
             point.vel_lin_nom =  0.1 * fe_warehouse_coordinate + 0.2 * !fe_warehouse_coordinate; // if backwards deac.   
             point.should_pub = false;       
 

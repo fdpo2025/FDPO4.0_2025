@@ -51,6 +51,8 @@ class PlanHandlerNode {
         std::vector<bool> is_output_warehouse;      // Output warehouses (SEMPRE drop)
         bool is_last_warehouse, is_current_warehouse, fe_warehouse_coordinate;   // falling edge
 
+
+	bool was_last_warehouse_process;
         std::vector<ControllerPoint> plan_stack;
         
         std::string planned_paths_topic;
