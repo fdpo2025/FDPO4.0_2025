@@ -20,6 +20,10 @@ private:
     ros::Subscriber joy_sub_;
 
     double max_v_, max_w_;
+    
+    // Novas variáveis para a lógica de toggle
+    bool magnet_state_ = false;      // Estado atual do íman (ON/OFF)
+    bool last_button_state_ = false; // Auxiliar para detetar o clique (rising edge)
 };
 
 #endif
