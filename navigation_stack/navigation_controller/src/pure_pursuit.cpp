@@ -1,4 +1,4 @@
-#include "pure_pusuit.h"
+#include "pure_pursuit.h"
 #include <cmath>
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0), 
