@@ -545,29 +545,26 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
 
     mode = req.command;
 
-    if(mode == "start") {
+    if (mode == "start") {
 
-        // Só carregar route do YAML se load_from_route for true
         if (load_from_route) {
-            loadRouteFromParameters();
-            
-            if (route.empty()) {
-                res.success = false; res.message = "no waypoints in params";
-                return true;
-            }
-        } else {
-            // Se não carregar do route, esperar por /nav_plan
-            if (route.empty()) {
-                res.success = false; res.message = "no route loaded, waiting for /nav_plan";
-                ROS_WARN("NavigationController: No route loaded. Waiting for /nav_plan message.");
-                return true;
-            }
+            ROS_WARN("pure_pursuit_node: load_from_route=true mas este node nao carrega YAML route. Envia /nav_plan.");
+            res.success = false;
+            res.message = "pure_pursuit_node does not load route.yaml; send /nav_plan";
+            return true;
         }
 
-        res.success = true;  res.message = "started";
+        if (route_seg_.empty() && route_full_.empty()) {
+            res.success = false;
+            res.message = "no route loaded, waiting for /nav_plan";
+            ROS_WARN("pure_pursuit_node: No route loaded. Waiting for /nav_plan.");
+            return true;
+        }
+
+        res.success = true;
+        res.message = "started";
         ROS_INFO("Navigation START");
         return true;
-
     }
 
     else if(mode == "stop") {
