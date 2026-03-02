@@ -1,7 +1,8 @@
-#include "navigation_controller_node.h"
+#include "pure_pusuit.h"
 #include <cmath>
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0), 
+navigationFsm(navigation::states::idle),
 k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false}), tfBuffer(), tfListener(tfBuffer),
 in_pick_box_forward(false) {
     
