@@ -815,6 +815,14 @@ bool NavigationController::isNearSegInit(double tol) const {
   return dist <= tol;
 }
 
+std::pair<double, double> NavigationController::normalize(double vx, double vy) const {
+    double length = std::hypot(vx, vy);
+    if (length == 0.0) {
+        return {0.0, 0.0};
+    }
+    return {vx / length, vy / length};
+}
+
 std::vector<Point> NavigationController::smoothPath(const std::vector<Point>& path_in,
                                                         double radius,
                                                         int corner_steps) const {

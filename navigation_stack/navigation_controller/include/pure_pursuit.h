@@ -193,6 +193,7 @@ class NavigationController {
         void publishLineMarkersSegment();               
         bool isNearSegInit(double tol) const;
 
+        std::pair<double,double> normalize(double vx, double vy) const;
         std::vector<Point> smoothPath(const std::vector<Point>& path_in,
                                       double radius,
                                       int corner_steps) const;
