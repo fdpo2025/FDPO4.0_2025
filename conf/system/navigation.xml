@@ -5,6 +5,7 @@
   <arg name="use_beacon_detector" default="true" doc="Usar beacon detector (desativado em modo perfect_localization)"/>
 
   <arg name="use_ss_controller" default="false" doc="Use state space controller (true) or original controller (false)"/>
+  <arg name="use_pp_controller" default="false"/>
   <arg name="use_raw_odom" default="false" doc="Use raw odometry (/odom) instead of filtered (/odometry/filtered). Only effective when use_ekf=false"/>
 
   <!-- Navigation Controller: 
@@ -12,8 +13,9 @@
        - Se use_ekf=true: usa /odometry/filtered (EKF corrigido)
        - Caso contrário: usa /base_pose_ground_truth (apenas simulação perfect_localization) -->
   <include file="$(find conf)/launch/navigation/navigation_controller/run_navigation_controller.launch">
-    <arg name="odom_topic" value="$(eval '/odom' if arg('use_raw_odom') else ('/base_pose_ground_truth' if not arg('use_ekf') and not arg('use_beacon_detector') else '/odometry/filtered'))"/>
-    <arg name="ss" value="$(arg use_ss_controller)"/>
+  <arg name="odom_topic" value="$(eval '/odom' if arg('use_raw_odom') else ('/base_pose_ground_truth' if not arg('use_ekf') and not arg('use_beacon_detector') else '/odometry/filtered'))"/>
+  <arg name="ss" value="$(arg use_ss_controller)"/>
+  <arg name="pp" value="$(arg use_pp_controller)"/>
   </include>
   
   <!-- Beacon Detector (ativo apenas quando use_beacon_detector=true) -->
