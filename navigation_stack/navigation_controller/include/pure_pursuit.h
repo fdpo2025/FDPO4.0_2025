@@ -196,7 +196,7 @@ class NavigationController {
         void buildSmoothedPathFromSegment();
         void purePursuitFollowPath();
 
-        void buildNextSegment()
+        void buildNextSegment();
         
 };
 
