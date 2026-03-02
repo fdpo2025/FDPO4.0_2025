@@ -129,22 +129,15 @@ void NavigationController::loadNavigationParams() {
     nh.param("arrive_radius",  param.arrive_radius, 0.05);
     nh.param("yaw_tol",param.yaw_tol, 0.08);
     nh.param("loop_rate_hz", param.loop_rate_hz, 30);
-    
-    // FollowLine parameters (from Pascal code)
-    nh.param("gain_fwd", param.gain_fwd, 1.0);      // GAIN_FWD
-    nh.param("vel_lin_nom", param.vel_lin_nom, 0.3);  // VEL_LIN_NOM
-    nh.param("dist_da", param.dist_da, 0.3);       // DIST_DA
-    nh.param("tol_findist", param.tol_findist, 0.05); // TOL_FINDIST
-    nh.param("max_etf", param.max_etf, 0.2);       // MAX_ETF (rad)
-    nh.param("tol_init_line", param.tol_init_line, 0.1); // Tolerância de distância à linha para GoTo_Init -> Follow_Line (m)
-    nh.param("line_switch_ratio", param.line_switch_ratio, 0.9); // Ratio da linha para mudar para próxima (0.9 = 90%)
-    nh.param("approaching_line_progress", param.approaching_line_progress, 0.60); // Progresso da linha para entrar em Approaching (0.60 = 60%)
-    nh.param("approaching_vel", param.approaching_vel, 0.05); // Velocidade constante no estado Approaching (m/s)
-
+       
     nh.param("pp_Ld", param.pp_Ld_, 0.9);
     nh.param("pp_vref", param.pp_vref_, 0.3);
     nh.param("smooth_radius", param.smooth_radius_, 0.25);
     nh.param("smooth_corner_steps", param.smooth_corner_steps_, 6);
+    nh.param("pp_L0",     param.pp_L0_,     0.35);
+    nh.param("pp_kv",     param.pp_kv_,     1.0);
+    nh.param("pp_Ld_min", param.pp_Ld_min_, 0.25);
+    nh.param("pp_Ld_max", param.pp_Ld_max_, 1.20);
         
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f", 
              param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
@@ -694,7 +687,13 @@ void NavigationController::purePursuitFollowPath() {
   const WayPoint& seg_goal = route_seg_.back();
   
   // Lookahead (fixo)
-  const double Ld = pp_Ld_;
+  //const double Ld = pp_Ld_;
+
+  // velocidade "do controlador" (usa o que tens agora + o que queres impor)
+  const double v_abs = std::abs(v_d);  // ou std::abs(st.v), mas v_d é o comando atual
+
+  double Ld = param.pp_L0_ + param.pp_kv_ * v_abs;
+  Ld = std::clamp(Ld, param.pp_Ld_min_, param.pp_Ld_max_);
 
   // nearest e target no path suavizado
   int near_idx = nearestPointIndex(path_pts_, st.x, st.y, last_near_idx_);

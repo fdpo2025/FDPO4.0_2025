@@ -112,21 +112,15 @@ class NavigationController {
             int loop_rate_hz;
             bool invert_odom_theta;  
             
-            // FollowLine parameters 
-            double gain_fwd;      // GAIN_FWD
-            double vel_lin_nom;   // VEL_LIN_NOM
-            double dist_da;       // DIST_DA
-            double tol_findist;   // TOL_FINDIST
-            double max_etf;       // MAX_ETF
-            double tol_init_line; // (m) tolerance to GoTo_Init -> Follow_Line
-            double line_switch_ratio;  // Ratio of line to switch to next (0.9 = 90%)
-            double approaching_line_progress;  // Line progress threshold to enter Approaching state (0.60 = 60%)
-            double approaching_vel;            // Constant velocity in Approaching state (m/s)
-
+            
             double pp_Ld_;
             double pp_vref_;
             double smooth_radius_;
             double smooth_corner_steps_;
+            double pp_L0_;
+            double pp_kv_;
+            double pp_Ld_min_;
+            double pp_Ld_max_;
 
         };
 
