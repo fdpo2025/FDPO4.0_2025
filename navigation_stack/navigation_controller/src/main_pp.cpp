@@ -5,7 +5,7 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "pure_pursuit_node");
     ros::NodeHandle nh("~");
 
-    PurePursuit pp(nh);
+    NavigationController pp(nh);
 
     ROS_INFO("Pure Pursuit node started");
 

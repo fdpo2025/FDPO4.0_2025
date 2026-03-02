@@ -139,10 +139,7 @@ void NavigationController::loadNavigationParams() {
     nh.param("pp_kv",     param.pp_kv_,     1.0);
     nh.param("pp_Ld_min", param.pp_Ld_min_, 0.25);
     nh.param("pp_Ld_max", param.pp_Ld_max_, 1.20);
-        
-    ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f", 
-             param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
-
+            
 }
 
 void NavigationController::updateDesiredPoseSegment() {
@@ -303,7 +300,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
     ROS_INFO("RViz goal added: x=%.2f y=%.2f yaw=%.2f (map frame)", 
              waypoint_temp.pose.x, waypoint_temp.pose.y, waypoint_temp.pose.theta);
 
-    updateDesiredPose();
+    updateDesiredPoseSegment();
            
     // Publicar linhas de visualização
     publishLineMarkersSegment();
@@ -659,7 +656,7 @@ void NavigationController::buildSmoothedPathFromSegment() {
   for (const auto& wp : route_seg_) raw.push_back({wp.pose.x, wp.pose.y});
 
   std::vector<Point> sm = raw;
-  if (raw.size() >= 3) sm = smoothPath(raw, smooth_radius_, smooth_corner_steps_);
+  if (raw.size() >= 3) sm = smoothPath(raw, param.smooth_radius_, (int)param.smooth_corner_steps_);
 
   path_pts_ = std::move(sm);
   last_near_idx_ = 0;
@@ -720,7 +717,7 @@ void NavigationController::purePursuitFollowPath() {
 
   // Velocidade nominal do segmento:
   // Podes escolher: usar a velocidade do goal (warehouse) ou a mínima do segmento.
-  double v_ref = pp_vref_;
+  double v_ref = param.pp_vref_;
 
   // opção A (simples): usar vel do waypoint final se existir
   if (seg_goal.vel_lin_nom > 0) v_ref = seg_goal.vel_lin_nom;
@@ -816,4 +813,70 @@ bool NavigationController::isNearSegInit(double tol) const {
   const double dist = std::hypot(dx, dy);
 
   return dist <= tol;
+}
+
+std::vector<Point> NavigationControllerSS::smoothPath(const std::vector<Point>& path_in,
+                                                        double radius,
+                                                        int corner_steps) const {
+    if (path_in.size() < 2) {
+        return path_in;
+    }
+
+    ROS_WARN("ESTOU A USAR ESTE smoothPath!!!");
+
+    std::vector<Point> new_path;
+    new_path.reserve(path_in.size() * corner_steps);
+    new_path.push_back(path_in[0]);
+
+    for (size_t i = 1; i + 1 < path_in.size(); ++i) {
+        Point p_prev = path_in[i - 1];
+        Point p_curr = path_in[i];
+        Point p_next = path_in[i + 1];
+
+        double v1x = p_curr.x - p_prev.x;
+        double v1y = p_curr.y - p_prev.y;
+        double v2x = p_next.x - p_curr.x;
+        double v2y = p_next.y - p_curr.y;
+
+        std::pair<double,double> n1 = normalize(v1x, v1y);
+        std::pair<double,double> n2 = normalize(v2x, v2y);
+        double d1x = n1.first;
+        double d1y = n1.second;
+        double d2x = n2.first;
+        double d2y = n2.second;
+
+        double dist1 = std::hypot(v1x, v1y);
+        double dist2 = std::hypot(v2x, v2y);
+        //double r = std::min({radius, dist1 * 2, dist2 * 2});
+        double r = radius;
+
+        Point before{
+            p_curr.x - d1x * r,
+            p_curr.y - d1y * r
+        };
+        Point after{
+            p_curr.x + d2x * r,
+            p_curr.y + d2y * r
+        };
+
+        new_path.push_back(before);
+
+        for (int k = 1; k < corner_steps; ++k) {
+            double t = static_cast<double>(k) / corner_steps;
+            double omt = 1.0 - t;
+
+            double bx = (omt * omt) * before.x
+                        + 2.0 * omt * t * p_curr.x
+                        + (t * t) * after.x;
+            double by = (omt * omt) * before.y
+                        + 2.0 * omt * t * p_curr.y
+                        + (t * t) * after.y;
+            new_path.push_back({bx, by});
+        }
+
+        new_path.push_back(after);
+    }
+
+    new_path.push_back(path_in.back());
+    return new_path;
 }

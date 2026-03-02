@@ -77,8 +77,7 @@ class NavigationController {
 
         std::string mode; // "start" | "pause" | "unpause" | "stop""
 
-        Fsm navigationFsm;
-        Fsm followLineFsm;  // followLine fsm
+        Fsm navigationFsm;        
         // both with respect to the map frame
         Pose poseCurr, poseDesired;
         double v_d, w_d;
@@ -88,6 +87,9 @@ class NavigationController {
 
         std::deque<WayPoint> route_full_;   // rota completa (tudo do NavPlan)
         std::deque<WayPoint> route_seg_;    // segmento atual (até próxima warehouse)
+        bool path_ready_{false};
+        int last_near_idx_{0};
+        int target_idx_{0};
 
         bool segment_active_ = false;
 
@@ -110,7 +112,7 @@ class NavigationController {
             double pp_Ld_;
             double pp_vref_;
             double smooth_radius_;
-            double smooth_corner_steps_;
+            int smooth_corner_steps_;
             double pp_L0_;
             double pp_kv_;
             double pp_Ld_min_;
@@ -143,12 +145,10 @@ class NavigationController {
         double getAlignLineYawError();
 
         void hardStop();
-        void setTheta();
-        void goToXY();
-        void followLine();
+        void setTheta();              
 
         std::deque<WayPoint> route;
-        void updateDesiredPoseSegment() 
+        void updateDesiredPoseSegment();
         void loadRouteFromParameters();
         
         ros::Subscriber odomSub;
@@ -189,10 +189,13 @@ class NavigationController {
         int lookaheadTargetIndex(const std::vector<Point>& p, double x, double y, int near_idx, double Ld);
         void buildSmoothedPathFromSegment();
         void purePursuitFollowPath();
-        void buildNextSegment();
-        void loadRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg);        
+        void buildNextSegment();      
         void publishLineMarkersSegment();               
         bool isNearSegInit(double tol) const;
+
+        std::vector<Point> smoothPath(const std::vector<Point>& path_in,
+                                      double radius,
+                                      int corner_steps) const;
        
         
 };
@@ -212,12 +215,5 @@ namespace navigation {
         }; 
     }
     
-    namespace followLineStates {
-        
-        enum {
-            Follow_Line = 0,
-            Approaching
-        };
-    }
-
+    
 }
