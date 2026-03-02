@@ -815,7 +815,7 @@ bool NavigationController::isNearSegInit(double tol) const {
   return dist <= tol;
 }
 
-std::vector<Point> NavigationControllerSS::smoothPath(const std::vector<Point>& path_in,
+std::vector<Point> NavigationController::smoothPath(const std::vector<Point>& path_in,
                                                         double radius,
                                                         int corner_steps) const {
     if (path_in.size() < 2) {
