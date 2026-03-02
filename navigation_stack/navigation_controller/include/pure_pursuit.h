@@ -62,19 +62,6 @@ struct PPState {
   double x{0}, y{0}, yaw{0}, v{0};
 };
 
-std::vector<Point> path_pts_;
-int last_near_idx_{0};
-int target_idx_{0};
-bool path_ready_{false};
-
-double pp_Ld_min_{0.4};    // opcional
-double pp_Ld_max_{1.5};    // opcional
-
-std::deque<WayPoint> route_full_;   // rota completa (tudo do NavPlan)
-std::deque<WayPoint> route_seg_;    // segmento atual (até próxima warehouse)
-
-bool segment_active_ = false;
-
 
 class NavigationController {
 
@@ -98,6 +85,13 @@ class NavigationController {
         double k1;  // dist2Line result (perpendicular distance with sign)
         double line_progress;  // dist2Line result (0 = at pi, 1 = at pf, >1 = past pf)
         WayPoint currentWaypoint, previousWaypoint;  // currentWaypoint: pi; previousWaypoint: pf
+
+        std::deque<WayPoint> route_full_;   // rota completa (tudo do NavPlan)
+        std::deque<WayPoint> route_seg_;    // segmento atual (até próxima warehouse)
+
+        bool segment_active_ = false;
+
+        std::vector<Point> path_pts_;
         
         struct Parameters {
 
@@ -195,8 +189,11 @@ class NavigationController {
         int lookaheadTargetIndex(const std::vector<Point>& p, double x, double y, int near_idx, double Ld);
         void buildSmoothedPathFromSegment();
         void purePursuitFollowPath();
-
         void buildNextSegment();
+        void loadRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg);        
+        void publishLineMarkersSegment();               
+        bool isNearSegInit(double tol) const;
+       
         
 };
 
