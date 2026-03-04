@@ -85,10 +85,9 @@ void Distortion_Compensator_Node::getLaserScan(
         const double cos_th = std::cos(theta_i);
         const double sin_th = std::sin(theta_i);
 
-        const double x_shift = x_Li_i - x_i;
-        const double y_shift = y_Li_i - y_i;
-        const double x_Lo_i = cos_th * x_shift + sin_th * y_shift;
-        const double y_Lo_i = -sin_th * x_shift + cos_th * y_shift;
+        // Transform point from frame_ti to frame_0: P_0 = R(theta_i)*P_ti + T_i
+        const double x_Lo_i = cos_th * x_Li_i - sin_th * y_Li_i + x_i;
+        const double y_Lo_i = sin_th * x_Li_i + cos_th * y_Li_i + y_i;
 
         point_cloud_compensated.points[i].x = static_cast<float>(x_Lo_i);
         point_cloud_compensated.points[i].y = static_cast<float>(y_Lo_i);
