@@ -76,7 +76,10 @@ class NavigationController {
         double k1;  // dist2Line result (perpendicular distance with sign)
         double line_progress;  // dist2Line result (0 = at pi, 1 = at pf, >1 = past pf)
         WayPoint currentWaypoint, previousWaypoint;  // currentWaypoint: pi; previousWaypoint: pf
-        
+        const double ALIGN_DIST_THRESHOLD = 0.02;
+        const double ALIGN_YAW_THRESHOLD = 0.025;
+
+
         struct Parameters {
 
             double v_nom, w_nom, w_min;
@@ -106,6 +109,7 @@ class NavigationController {
         dynamic_reconfigure::Server<navigation_controller::NavigationConfig> dr_srv_;
         Parameters param;
         void loadNavigationParams();
+        void pickBoxAction();
 
         double normalizeAngle(double theta);
 
