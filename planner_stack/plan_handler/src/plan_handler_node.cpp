@@ -30,8 +30,8 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     factory_coordinates[10] = {-0.395, 0.233};
     factory_coordinates[11] = {-0.245, 0.233};
     factory_coordinates[12] = {0.0, 0.15};
-    factory_coordinates[13] = {0.227, 0.15};  
-    factory_coordinates[14] = {0.468, 0.15};   
+    factory_coordinates[13] = {0.22, 0.15};  
+    factory_coordinates[14] = {0.468, 0.163};   
     factory_coordinates[15] = {0.695, 0.15};
     factory_coordinates[16] = {-0.695, 0.0};
     factory_coordinates[17] = {-0.468, -0.023};  
@@ -44,16 +44,16 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     factory_coordinates[24] = {-0.468, -0.158};
     factory_coordinates[25] = {-0.227, -0.15};
     factory_coordinates[26] = {0.0, -0.15};
-    factory_coordinates[27] = {0.245, -0.233};
-    factory_coordinates[28] = {0.395, -0.233};
-    factory_coordinates[29] = {0.545, -0.233};
-    factory_coordinates[30] = {0.695, -0.233};
+    factory_coordinates[27] = {0.245, -0.230};
+    factory_coordinates[28] = {0.395, -0.230};
+    factory_coordinates[29] = {0.545, -0.230};
+    factory_coordinates[30] = {0.695, -0.230};
     factory_coordinates[31] = {-0.695, -0.355};
     factory_coordinates[32] = {-0.468, -0.355};
     factory_coordinates[33] = {-0.227, -0.355};
     factory_coordinates[34] = {0.0, -0.355};
     factory_coordinates[35] = {0.245, -0.468};
-    factory_coordinates[36] = {0.395, -0.468};
+    factory_coordinates[36] = {0.3935, -0.468};
     factory_coordinates[37] = {0.545, -0.468};
     factory_coordinates[38] = {0.695, -0.468};
 
@@ -173,7 +173,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             point.line_switch_ratio = 1.0;
             point.backwards = false;
             // Velocidade nominal: 0.03 m/s para warehouses de process, 0.05 m/s para outras
-            point.vel_lin_nom = is_process_warehouse[value] ? 0.025 : 0.05;
+            point.vel_lin_nom = is_process_warehouse[value] ? 0.025 : 0.06;
 
             // Se é o primeiro nó do caminho E é uma warehouse, NÃO fazer toggle do has_box
             // (o robô já está nessa posição, é apenas o ponto de partida)
@@ -253,7 +253,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
 
 	    point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
-            point.vel_lin_nom =  0.1 * fe_warehouse_coordinate + 0.2 * !fe_warehouse_coordinate; // if backwards deac.   
+            point.vel_lin_nom =  0.1 * fe_warehouse_coordinate + 0.3 * !fe_warehouse_coordinate; // if backwards deac.   
             point.should_pub = false;       
 
         }

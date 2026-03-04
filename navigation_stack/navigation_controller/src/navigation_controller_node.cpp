@@ -957,7 +957,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         double elapsed_time = (ros::Time::now() - pick_box_forward_start_time).toSec();
         
-        if (elapsed_time >= 2.0) {
+        if (elapsed_time >= 0.7) {
             // Passou 2 segundos, remover waypoint e continuar para próximo
             in_pick_box_forward = false;
             if (!route.empty()) {
