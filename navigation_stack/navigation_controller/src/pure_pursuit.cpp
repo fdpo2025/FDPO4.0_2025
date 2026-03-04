@@ -784,20 +784,26 @@ void NavigationController::buildNextSegment() {
     return;
   }
 
-  // Copia do início até (e incluindo) a próxima warehouse
   while (!route_full_.empty()) {
-    WayPoint wp = route_full_.front();
-    route_full_.pop_front();
-    route_seg_.push_back(wp);
 
-    if (wp.is_warehouse) break;  // fecha segmento na warehouse
+    // adiciona o ponto atual
+    route_seg_.push_back(route_full_.front());
+    route_full_.pop_front();
+
+    // se acabou, fecha
+    if (route_full_.empty()) break;
+
+    // REGRA: se o PRÓXIMO ponto for backwards=true, fecha segmento AGORA
+    if (route_full_.front().backwards) {
+      break;
+    }
   }
 
   segment_active_ = !route_seg_.empty();
 
-  ROS_INFO("Segment built: %zu points (remaining full: %zu). Last is_warehouse=%d",
+  ROS_INFO("Segment built (break if next is backwards): %zu points (remaining full: %zu). Next_backwards=%d",
            route_seg_.size(), route_full_.size(),
-           (!route_seg_.empty() ? (route_seg_.back().is_warehouse ? 1 : 0) : 0));
+           (!route_full_.empty() ? (route_full_.front().backwards ? 1 : 0) : 0));
 }
 
 bool NavigationController::isNearSegInit(double tol) const {
