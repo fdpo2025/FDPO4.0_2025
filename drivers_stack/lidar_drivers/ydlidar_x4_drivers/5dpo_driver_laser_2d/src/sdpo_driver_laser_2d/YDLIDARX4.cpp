@@ -113,6 +113,10 @@ void YDLIDARX4::processSerialData(unsigned char& ch) {
       byte_count_++;
       if ((ch & 0x01) == 0x01) {
         pkg_zero_ = true;
+        // CT[bit(7:1)] encodes scan frequency information
+        // F = CT[bit(7:1)] / 10  (Hz)
+        unsigned char ct = ch;
+        scan_freq_hz_ = static_cast<float>((ct >> 1) & 0x7F) / 10.0f;
         if (pubLaserData) {
           pubLaserData();
         }
