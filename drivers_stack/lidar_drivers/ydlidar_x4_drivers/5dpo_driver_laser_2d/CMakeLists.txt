@@ -20,6 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
   dynamic_reconfigure
   sdpo_ros_serial_port
   sensor_msgs
+  std_msgs
   tf
 )
 
@@ -122,6 +123,7 @@ catkin_package(
     dynamic_reconfigure
     sdpo_ros_serial_port
     sensor_msgs
+    std_msgs
     tf
 #   DEPENDS system_lib
 )

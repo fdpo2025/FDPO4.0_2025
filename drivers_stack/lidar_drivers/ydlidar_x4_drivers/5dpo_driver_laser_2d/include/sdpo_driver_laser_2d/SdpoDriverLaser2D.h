@@ -31,6 +31,9 @@ class SdpoDriverLaser2D {
   float ang_min_;
   float ang_max_;
 
+  // Scan frequency (Hz) from sensor protocol, when available (e.g. YDLIDAR X4 CT bits 7:1).
+  float scan_freq_hz_ = 0.0f;
+
   std::string serial_port_name_;
   int baud_rate_;
   CallbackAsyncSerial *serial_async_;
@@ -50,6 +53,8 @@ class SdpoDriverLaser2D {
   void setDistRangeCheck(const float& dist_min, const float& dist_max);
   void setAngRangeCheck(const float& ang_min, const float& ang_max);
   void setPubLaserData(const std::function<void()>& pubLaserDataFunction);
+
+  float getScanFrequencyHz() const { return scan_freq_hz_; }
 
   virtual void start() = 0;
   virtual void stop() = 0;

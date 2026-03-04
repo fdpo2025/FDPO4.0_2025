@@ -23,6 +23,8 @@ SdpoDriverLaser2DROS::SdpoDriverLaser2DROS() {
 
   pub_laser_ = nh.advertise<sensor_msgs::PointCloud>(
       "laser_scan_point_cloud", 1);
+  pub_scan_freq_ = nh.advertise<std_msgs::Float32>(
+      "laser_scan_frequency", 1, true);
 }
 
 void SdpoDriverLaser2DROS::start() {
@@ -192,6 +194,14 @@ void SdpoDriverLaser2DROS::pubLaserData() {
   tf_broad_.sendTransform(laser2base_tf);
 
   pub_laser_.publish(msg);
+
+  // Publish scan frequency (Hz) when available from protocol
+  const float f_hz = laser_->getScanFrequencyHz();
+  if (f_hz > 0.0f) {
+    std_msgs::Float32 f_msg;
+    f_msg.data = f_hz;
+    pub_scan_freq_.publish(f_msg);
+  }
 }
 
 } // namespace sdpo_driver_laser_2d
