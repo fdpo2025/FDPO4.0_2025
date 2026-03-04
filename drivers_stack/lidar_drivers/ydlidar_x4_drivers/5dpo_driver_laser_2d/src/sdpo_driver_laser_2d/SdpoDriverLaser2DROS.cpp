@@ -201,9 +201,19 @@ void SdpoDriverLaser2DROS::pubLaserData() {
 
   pub_laser_.publish(msg);
 
-  // Publish scan frequency (Hz): use value from protocol or fallback default
-  float f_hz = laser_->getScanFrequencyHz();
-  if (f_hz <= 0.0f) f_hz = default_scan_freq_hz_;
+  // Measure scan frequency from time between consecutive scans
+  ros::Time now = msg.header.stamp;
+  if (!last_scan_time_.isZero()) {
+    double dt = (now - last_scan_time_).toSec();
+    if (dt > 0.0) {
+      measured_scan_freq_hz_ = static_cast<float>(1.0 / dt);
+    }
+  }
+  last_scan_time_ = now;
+
+  // Publish scan frequency: measured value, fallback default until 2nd scan
+  float f_hz = (measured_scan_freq_hz_ > 0.0f) ? measured_scan_freq_hz_
+                                                : default_scan_freq_hz_;
   std_msgs::Float32 f_msg;
   f_msg.data = f_hz;
   pub_scan_freq_.publish(f_msg);

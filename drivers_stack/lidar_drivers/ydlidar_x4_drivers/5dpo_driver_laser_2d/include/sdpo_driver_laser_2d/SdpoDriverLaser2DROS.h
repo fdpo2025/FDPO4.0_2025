@@ -22,6 +22,8 @@ class SdpoDriverLaser2DROS {
   tf::TransformBroadcaster tf_broad_;
 
   ros::Time sample_time_;
+  ros::Time last_scan_time_;
+  float measured_scan_freq_hz_ = 0.0f;
 
   dynamic_reconfigure::Server<sdpo_driver_laser_2d::LaserExtrinsicParamConfig>
       cfg_server_;
