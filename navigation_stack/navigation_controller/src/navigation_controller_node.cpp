@@ -953,7 +953,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     }
 
-    // Estado pickBoxForward: andar para frente 2s após chegar a warehouse de pick
+    // Estado pickBoxForward
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         
         // Cálculo de erros para a transição
@@ -961,11 +961,14 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         double dy = previousWaypoint.pose.y - poseCurr.y;
         double dist_error = std::sqrt(dx*dx + dy*dy);
         double yaw_error = std::abs(normalizeAngle(previousWaypoint.pose.theta - poseCurr.theta));
+        if (previousWaypoint.backwards) {
+            yaw_error = std::abs(normalizeAngle(yaw_error + M_PI));
+        }
         double lateral_error = std::abs(-std::sin(previousWaypoint.pose.theta) * dx + std::cos(previousWaypoint.pose.theta) * dy);
 
         // CONDIÇÃO DE SAÍDA: Distância atingida E alinhamento correto
         // (Aproximadamente 1.5cm de erro lateral e 1.5 graus de erro angular)
-        if (dist_error <= 0.05 && lateral_error < 0.015 && yaw_error < 0.026) {
+        if (dist_error <= 0.6 && lateral_error < 0.03 && yaw_error < 0.04) {
             in_pick_box_forward = false;
             if (!route.empty()) {
                 route.pop_front();
@@ -1020,11 +1023,15 @@ void NavigationController::pickBoxAction() {
     double yaw_target = previousWaypoint.pose.theta;
     double yaw_error = normalizeAngle(yaw_target - poseCurr.theta);
 
+    if (previousWaypoint.backwards) {
+        yaw_error = normalizeAngle(yaw_error + M_PI);
+    }
+
     // 2. Erro Lateral (importante para garantir que o robô está centrado com a caixa)
     double lateral_error = std::abs(-std::sin(yaw_target) * dx + std::cos(yaw_target) * dy);
 
     // 3. Lógica de Movimento
-    if (dist_error > 0.05) { 
+    if (dist_error > 0.1) { 
         // Se ainda está longe (mais de 5cm), aproxima-se com correção angular
         // Se estiver muito torto, o cos(yaw_error) reduz a velocidade linear
         double alignment_factor = std::max(0.1, std::cos(yaw_error));
