@@ -12,4 +12,4 @@ laser_pose_roll: 0.0
 dist_min: 0.12
 dist_max: 10.0
 # Frequência de rotação (Hz) quando o dispositivo não a reporta no protocolo; usada para laser_scan_frequency e compensação de distorção
-default_scan_freq_hz: 6.0
+default_scan_freq_hz: 10.0

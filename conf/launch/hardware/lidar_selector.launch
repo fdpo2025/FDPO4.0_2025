@@ -29,7 +29,7 @@
         <arg name="serial_port_ydlidar" default="/dev/ttyUSB0"/>
         <arg name="baud_rate_ydlidar" default="128000"/>
         <!-- Frequência de rotação (Hz) quando o dispositivo não a reporta; usada para laser_scan_frequency e compensação de distorção -->
-        <arg name="default_scan_freq_hz" default="12.0"/>
+        <arg name="default_scan_freq_hz" default="10.0"/>
         
         <node pkg="sdpo_driver_laser_2d" type="sdpo_driver_laser_2d_node"
             name="sdpo_driver_laser_2d" clear_params="true" output="screen">

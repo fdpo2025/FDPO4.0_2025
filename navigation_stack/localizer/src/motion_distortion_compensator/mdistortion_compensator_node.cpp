@@ -49,14 +49,9 @@ void Distortion_Compensator_Node::getLaserScan(
         cloud_pub.publish(point_cloud_compensated);
         return;
     }
-    if (n_points == 1) {
-        cloud_pub.publish(point_cloud_compensated);
-        return;
-    }
-
-    // dt between two consecutive points: T_scan/(N-1) so that t_0=0 and t_{N-1}=T_scan
+    // dt between two consecutive points: T_scan/N (equally spaced samples in one rotation)
     const double dt_point = (scan_freq_hz_ > 0.0)
-        ? (1.0 / scan_freq_hz_) / (static_cast<double>(n_points) - 1.0)
+        ? (1.0 / scan_freq_hz_) / static_cast<double>(n_points)
         : 0.0;
     if (dt_point <= 0.0) {
         cloud_pub.publish(*msg);
