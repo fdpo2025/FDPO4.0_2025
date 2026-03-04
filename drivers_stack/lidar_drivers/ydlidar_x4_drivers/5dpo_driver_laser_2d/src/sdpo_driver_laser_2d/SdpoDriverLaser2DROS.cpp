@@ -142,6 +142,12 @@ void SdpoDriverLaser2DROS::readParam() {
     ROS_INFO("[sdpo_driver_laser_2d] Angle range not defined");
   }
 
+  print_is_default_param_set("default_scan_freq_hz");
+  nh_private.param<float>("default_scan_freq_hz", default_scan_freq_hz_, 10.0f);
+  if (default_scan_freq_hz_ <= 0.0f) default_scan_freq_hz_ = 10.0f;
+  ROS_INFO("[sdpo_driver_laser_2d] Default scan frequency (fallback): %.1f Hz",
+           default_scan_freq_hz_);
+
   // Dynamic reconfigure
   dynamic_reconfigure::Server<sdpo_driver_laser_2d::LaserExtrinsicParamConfig>::CallbackType
       callback;
@@ -195,13 +201,12 @@ void SdpoDriverLaser2DROS::pubLaserData() {
 
   pub_laser_.publish(msg);
 
-  // Publish scan frequency (Hz) when available from protocol
-  const float f_hz = laser_->getScanFrequencyHz();
-  if (f_hz > 0.0f) {
-    std_msgs::Float32 f_msg;
-    f_msg.data = f_hz;
-    pub_scan_freq_.publish(f_msg);
-  }
+  // Publish scan frequency (Hz): use value from protocol or fallback default
+  float f_hz = laser_->getScanFrequencyHz();
+  if (f_hz <= 0.0f) f_hz = default_scan_freq_hz_;
+  std_msgs::Float32 f_msg;
+  f_msg.data = f_hz;
+  pub_scan_freq_.publish(f_msg);
 }
 
 } // namespace sdpo_driver_laser_2d

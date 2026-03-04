@@ -43,6 +43,8 @@ class SdpoDriverLaser2DROS {
   float dist_max_;
   float ang_min_;
   float ang_max_;
+  /** Fallback scan frequency (Hz) when device does not report it (e.g. CT[7:1]=0). Used for laser_scan_frequency topic. */
+  float default_scan_freq_hz_ = 10.0f;
 
  public:
   SdpoDriverLaser2DROS();
