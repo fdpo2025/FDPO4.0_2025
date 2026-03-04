@@ -12,6 +12,7 @@
 	<arg name="use_ekf" default="true" doc="Usar EKF localizer com beacons"/>
 	<arg name="use_raw_odom" default="false" doc="Usar odometria pura (/odom)"/>
 	<arg name="use_ss_controller" default="false" doc="Usar state space controller"/>
+	<arg name="use_pp_controller" default="false" doc="Usar pure pursuit controller (true)"/>
 	<arg name="use_hal" default="true"/>
 	<arg name="use_navigation" default="true"/>
 	<arg name="use_hmi" default="true"/>
@@ -35,6 +36,7 @@
 		<arg name="use_ekf" value="$(arg use_ekf)"/>
 		<arg name="use_raw_odom" value="$(arg use_raw_odom)"/>
 		<arg name="use_ss_controller" value="$(arg use_ss_controller)"/>
+		<arg name="use_pp_controller" value="$(arg use_pp_controller)"/>
 	</include>
     
 	<!-- HMI: Interface Humano-Máquina (Mapa, RViz, etc) -->
@@ -62,4 +64,3 @@
 	</include>
 
 </launch>
-
