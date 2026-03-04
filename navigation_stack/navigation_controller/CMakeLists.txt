@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(navigation_controller)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 ## -------------------------
 ## Padrões de compilação
 ## -------------------------
@@ -109,6 +112,25 @@ add_dependencies(navigation_controller_ss_node
 
 target_link_libraries(navigation_controller_ss_node
   ${catkin_LIBRARIES}
+)
+
+## -------------------------
+## Executável Pure Pursuit (Template)
+## -------------------------
+
+add_executable(pure_pursuit_node
+  src/pure_pursuit.cpp
+  src/fsm.cpp
+  src/main_pp.cpp
+)
+
+target_link_libraries(pure_pursuit_node
+  ${catkin_LIBRARIES}
+)
+
+add_dependencies(pure_pursuit_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
 )
 
 ## -------------------------
