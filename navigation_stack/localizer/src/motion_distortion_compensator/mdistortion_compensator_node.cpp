@@ -49,9 +49,15 @@ void Distortion_Compensator_Node::getLaserScan(
         cloud_pub.publish(point_cloud_compensated);
         return;
     }
+    if (n_points == 1) {
+        cloud_pub.publish(point_cloud_compensated);
+        return;
+    }
 
-    // dt between two consecutive points: T_scan/N = (1/F)/N
-    const double dt_point = (scan_freq_hz_ > 0.0) ? (1.0 / scan_freq_hz_) / static_cast<double>(n_points) : 0.0;
+    // dt between two consecutive points: T_scan/(N-1) so that t_0=0 and t_{N-1}=T_scan
+    const double dt_point = (scan_freq_hz_ > 0.0)
+        ? (1.0 / scan_freq_hz_) / (static_cast<double>(n_points) - 1.0)
+        : 0.0;
     if (dt_point <= 0.0) {
         cloud_pub.publish(*msg);
         return;
@@ -84,9 +90,11 @@ void Distortion_Compensator_Node::getLaserScan(
         const double cos_th = std::cos(theta_i);
         const double sin_th = std::sin(theta_i);
 
-        // corrected coordinates
-        const double x_Lo_i = cos_th * (x_Li_i - x_i) + sin_th * (y_Li_i - y_i);
-        const double y_Lo_i = -sin_th * (x_Li_i - x_i) + cos_th * (y_Li_i - y_i);
+        // Deskew: undo robot motion — p_corr = T(t_i)^{-1} * p_i = R(-θ_i)(p_i - Δp_i)
+        const double x_shift = x_Li_i - x_i;
+        const double y_shift = y_Li_i - y_i;
+        const double x_Lo_i = cos_th * x_shift + sin_th * y_shift;
+        const double y_Lo_i = -sin_th * x_shift + cos_th * y_shift;
 
         point_cloud_compensated.points[i].x = static_cast<float>(x_Lo_i);
         point_cloud_compensated.points[i].y = static_cast<float>(y_Lo_i);
