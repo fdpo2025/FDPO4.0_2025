@@ -1,0 +1,3 @@
+<launch>
+  <node name="mdistortion_compensator_node" pkg="localizer" type="mdistortion_compensator_node" output="screen"/>
+</launch>

@@ -16,6 +16,9 @@
     <arg name="ss" value="$(arg use_ss_controller)"/>
   </include>
   
+  <!-- Motion distortion compensator (point cloud): apenas para YDLidar -->
+  <include if="$(eval arg('lidar_driver') == 'ydlidar')" file="$(find conf)/launch/navigation/localizer/motion_distortion_compensator/run_motion_distortion_compensator.launch"/>
+
   <!-- Beacon Detector (ativo apenas quando use_beacon_detector=true) -->
   <include if="$(arg use_beacon_detector)" file="$(find conf)/launch/navigation/localizer/beacon_detector/run_beacon_detector.launch">
     <arg name="input_topic_type" value="$(eval 'point_cloud' if arg('lidar_driver') == 'ydlidar' else 'laser_scan')"/>

@@ -19,8 +19,9 @@ BeaconDetector::BeaconDetector(ros::NodeHandle& nh, ros::NodeHandle& nh_priv) : 
 
     // Subscribe usando NodeHandle público (tópicos globais com "/" para absoluto)
     if (input_topic_type == "point_cloud") {
-        pointCloudSub = nh.subscribe("/laser_scan_point_cloud", 10, &BeaconDetector::processPointCloud, this);
-        ROS_INFO("BeaconDetector subscribed to PointCloud topic: /laser_scan_point_cloud");
+        // Usa a point cloud já compensada pelo mdistortion_compensator_node
+        pointCloudSub = nh.subscribe("/laser_scan_point_cloud_compensated", 10, &BeaconDetector::processPointCloud, this);
+        ROS_INFO("BeaconDetector subscribed to compensated PointCloud topic: /laser_scan_point_cloud_compensated");
     } else {
         sensorDataSub = nh.subscribe("/base_scan", 10, &BeaconDetector::processSensorData, this);
         ROS_INFO("BeaconDetector subscribed to LaserScan topic: /base_scan");
@@ -146,7 +147,11 @@ void BeaconDetector::updateRobotFrameBeacons(const ros::Time& stamp) {
             return;
         }
     } catch (const tf2::TransformException& ex) {
-        ROS_WARN_THROTTLE(1.0, "TF lookup falhou (base_link<-map): %s", ex.what());
+        // No arranque o frame "map" pode ainda não existir (EKF não publicou); não avisar
+        const std::string msg = ex.what();
+        if (msg.find("does not exist") == std::string::npos) {
+            ROS_WARN_THROTTLE(1.0, "TF lookup falhou (base_link<-map): %s", ex.what());
+        }
         return;
     }
 
