@@ -717,7 +717,7 @@ void NavigationController::purePursuitFollowPath() {
   double v_ref = param.pp_vref_;
 
   // opção A (simples): usar vel do waypoint final se existir
-  if (seg_goal.vel_lin_nom > 0) v_ref = seg_goal.vel_lin_nom;
+  //if (seg_goal.vel_lin_nom > 0) v_ref = seg_goal.vel_lin_nom;
 
   // opcional: reduzir velocidade ao aproximar do fim do segmento
   // (fica suave e evita overshoot)
