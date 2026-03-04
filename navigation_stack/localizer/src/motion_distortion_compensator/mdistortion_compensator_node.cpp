@@ -8,7 +8,7 @@ Distortion_Compensator_Node::Distortion_Compensator_Node(ros::NodeHandle& nh_)
     : nh(nh_) {
 
     odometry_sub = nh.subscribe<nav_msgs::Odometry>(
-        "/odometry/filtered", 10,
+        "/odom", 10,
         &Distortion_Compensator_Node::updateVelocities, this);
 
     cloud_sub = nh.subscribe<sensor_msgs::PointCloud>(
@@ -90,7 +90,6 @@ void Distortion_Compensator_Node::getLaserScan(
         const double cos_th = std::cos(theta_i);
         const double sin_th = std::sin(theta_i);
 
-        // Deskew: undo robot motion — p_corr = T(t_i)^{-1} * p_i = R(-θ_i)(p_i - Δp_i)
         const double x_shift = x_Li_i - x_i;
         const double y_shift = y_Li_i - y_i;
         const double x_Lo_i = cos_th * x_shift + sin_th * y_shift;
