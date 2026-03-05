@@ -844,6 +844,9 @@ void NavigationController::computeStateSpaceControl() {
         w_d = 0.0;
         return;
     }
+    
+    const WayPoint seg_init = route_seg_.front();
+    const bool backwards = seg_init.backwards; // ou isBackwards() se já estiver adaptado
 
     // ========================================================================
     // VERIFICAR SE JÁ ESTAMOS NO FIM DO CAMINHO
@@ -853,10 +856,8 @@ void NavigationController::computeStateSpaceControl() {
     double dy_goal = goal.y - poseCurr.y;
     double dist_goal = std::hypot(dx_goal, dy_goal);
 
-    if (dist_goal < param.end_dist_tol && seg_idx >= static_cast<int>(path_pts_.size()) - 1) {
-        v_d = 0.0;
-        w_d = 0.0;
-        return;
+    if (dist_goal < param.end_dist_tol && seg_idx >= (int)path_pts_.size() - 2) {
+        v_d = 0.0; w_d = 0.0; return;
     }
 
     // ========================================================================
@@ -892,7 +893,7 @@ void NavigationController::computeStateSpaceControl() {
     // ========================================================================
     double v_target = v_r * std::cos(e_theta) + param.kx * ex;
     double w_target = w_r + param.ky * v_r * ey + param.kth * std::sin(e_theta);
-
+    
     // ========================================================================
     // SATURAÇÃO DE VELOCIDADES (limites máximos)
     // ========================================================================
@@ -921,4 +922,25 @@ void NavigationController::computeStateSpaceControl() {
     // VELOCIDADE ANGULAR (direto)
     // ========================================================================
     w_d = w_target;
+
+    if(backwards){
+        v_d = -v_r;
+        w_d = 0;
+
+        if (isNearSegInit(0.05)) {  
+         route_seg_.front().backwards = false;
+        } 
+    }
+}
+
+bool NavigationController::isNearSegInit(double tol) const {
+  if (route_seg_.empty()) return true;  // ou false, como preferires
+
+  const WayPoint seg_init = route_seg_.front();
+
+  const double dx = seg_init.pose.x - poseCurr.x;
+  const double dy = seg_init.pose.y - poseCurr.y;
+  const double dist = std::hypot(dx, dy);
+
+  return dist <= tol;
 }

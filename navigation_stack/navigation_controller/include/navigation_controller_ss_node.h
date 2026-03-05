@@ -215,6 +215,7 @@ class NavigationController {
         RefState computeRef(double x, double y, double theta,
                                             const std::vector<Point>& path_in,
                                             int seg_idx_in);
+        bool isNearSegInit(double tol) const;
         
 };
 
