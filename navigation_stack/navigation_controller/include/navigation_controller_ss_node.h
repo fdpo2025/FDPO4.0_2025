@@ -100,6 +100,10 @@ class NavigationController {
         int last_near_idx_{0};
         int target_idx_{0};
 
+        int seg_idx{0};
+        double last_th{0.0};
+        
+
         bool segment_active_ = false;
 
         std::vector<Point> path_pts_;
@@ -107,10 +111,7 @@ class NavigationController {
         struct Parameters {
 
             double v_nom, w_nom, w_min;
-            double v_min;  
-            double v_max;  
-            double a_max;  
-            double d_max;  
+            double v_min;                         
             double kp_linear, kp_angular;
             double k_line;  
             double arrive_radius, yaw_tol;
@@ -123,6 +124,8 @@ class NavigationController {
             double v_max;
             double w_max;
             double v_ref;
+            double end_dist_tol;
+            double yaw_tol;         // Tolerância de yaw para alinhamento final
             double a_max;           
             double d_max;           
             double smooth_radius;
@@ -206,12 +209,12 @@ class NavigationController {
         std::pair<double,double> normalize(double vx, double vy) const;
         std::vector<Point> smoothPath(const std::vector<Point>& path_in,
                                       double radius,
-                                      int corner_steps) const;~
+                                      int corner_steps) const;
 
-        void computeStateSpaceControl()
+        void computeStateSpaceControl();
         RefState computeRef(double x, double y, double theta,
                                             const std::vector<Point>& path_in,
-                                            int seg_idx_in)
+                                            int seg_idx_in);
         
 };
 

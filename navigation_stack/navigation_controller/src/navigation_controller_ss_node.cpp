@@ -123,27 +123,31 @@ void NavigationController::loadNavigationParams() {
     nh.param("yaw_tol",param.yaw_tol, 0.08);
     nh.param("loop_rate_hz", param.loop_rate_hz, 30);
 
-    params.kx = 1.0;
-    params.ky = 50.0;
-    params.kth = 5.0;
-    params.v_max = 0.4;
-    params.w_max = 3.0;
-    params.v_ref = 0.2;    
-    params.a_max = 0.5;     // Aceleração máxima (m/s²) - padrão igual ao navigation_controller
-    params.d_max = 0.5;     // Desaceleração máxima (m/s²) - padrão igual ao navigation_controller
-    params.smooth_radius = 0.01;
-    params.smooth_corner_steps = 8;
+    param.kx = 1.0;
+    param.ky = 50.0;
+    param.kth = 5.0;
+    param.v_max = 0.4;
+    param.w_max = 3.0;
+    param.v_ref = 0.2; 
+    param.end_dist_tol = 0.05;
+    param.yaw_tol = 0.08;  // Tolerância de yaw (rad)   
+    param.a_max = 0.5;     // Aceleração máxima (m/s²) - padrão igual ao navigation_controller
+    param.d_max = 0.5;     // Desaceleração máxima (m/s²) - padrão igual ao navigation_controller
+    param.smooth_radius = 0.01;
+    param.smooth_corner_steps = 8;
        
-    nh.param("kx", params.kx, params.kx);
-    nh.param("ky", params.ky, params.ky);
-    nh.param("kth", params.kth, params.kth);
-    nh.param("v_max", params.v_max, params.v_max);
-    nh.param("w_max", params.w_max, params.w_max);
-    nh.param("v_ref", params.v_ref, params.v_ref);    
-    nh.param("a_max", params.a_max, params.a_max);
-    nh.param("d_max", params.d_max, params.d_max);
-    nh.param("smooth_radius", params.smooth_radius, params.smooth_radius);
-    nh.param("smooth_corner_steps", params.smooth_corner_steps, params.smooth_corner_steps);
+    nh.param("kx", param.kx, param.kx);
+    nh.param("ky", param.ky, param.ky);
+    nh.param("kth", param.kth, param.kth);
+    nh.param("v_max", param.v_max, param.v_max);
+    nh.param("w_max", param.w_max, param.w_max);
+    nh.param("v_ref", param.v_ref, param.v_ref); 
+    nh.param("end_dist_tol", param.end_dist_tol, param.end_dist_tol);
+    nh.param("yaw_tol", param.yaw_tol, param.yaw_tol);   
+    nh.param("a_max", param.a_max, param.a_max);
+    nh.param("d_max", param.d_max, param.d_max);
+    nh.param("smooth_radius", param.smooth_radius, param.smooth_radius);
+    nh.param("smooth_corner_steps", param.smooth_corner_steps, param.smooth_corner_steps);
             
 }
 
@@ -699,17 +703,6 @@ void NavigationController::buildNextSegment() {
            (!route_full_.empty() ? (route_full_.front().backwards ? 1 : 0) : 0));
 }
 
-bool NavigationController::isNearSegInit(double tol) const {
-  if (route_seg_.empty()) return true;  // ou false, como preferires
-
-  const WayPoint seg_init = route_seg_.front();
-
-  const double dx = seg_init.pose.x - poseCurr.x;
-  const double dy = seg_init.pose.y - poseCurr.y;
-  const double dist = std::hypot(dx, dy);
-
-  return dist <= tol;
-}
 
 std::pair<double, double> NavigationController::normalize(double vx, double vy) const {
     double length = std::hypot(vx, vy);
@@ -790,7 +783,7 @@ RefState NavigationController::computeRef(double x, double y, double theta,
                                             int seg_idx_in)
 {
     // Acede aos parâmetros via membro da classe
-    double v_ref = params.v_ref;
+    double v_ref = param.v_ref;
     
     int N = static_cast<int>(path_in.size());
 
@@ -842,12 +835,11 @@ RefState NavigationController::computeRef(double x, double y, double theta,
 // ============================================================================
 // ============================================================================
 void NavigationController::computeStateSpaceControl() {
-    
+
     // ========================================================================
     // VERIFICAR SE HÁ CAMINHO DISPONÍVEL
     // ========================================================================
-    if (smooth.empty()) {
-        // Sem caminho → pára
+    if (path_pts_.empty()) {
         v_d = 0.0;
         w_d = 0.0;
         return;
@@ -856,13 +848,12 @@ void NavigationController::computeStateSpaceControl() {
     // ========================================================================
     // VERIFICAR SE JÁ ESTAMOS NO FIM DO CAMINHO
     // ========================================================================
-    const Point& goal = smooth.back();
-    double dx_goal = goal.x - curr_x;
-    double dy_goal = goal.y - curr_y;
+    const Point& goal = path_pts_.back();
+    double dx_goal = goal.x - poseCurr.x;
+    double dy_goal = goal.y - poseCurr.y;
     double dist_goal = std::hypot(dx_goal, dy_goal);
 
-    if (dist_goal < params.end_dist_tol && seg_idx >= static_cast<int>(smooth.size()) - 1) {
-        // Dentro da tolerância → pára
+    if (dist_goal < end_dist_tol_ && seg_idx_ >= static_cast<int>(path_pts_.size()) - 1) {
         v_d = 0.0;
         w_d = 0.0;
         return;
@@ -871,68 +862,63 @@ void NavigationController::computeStateSpaceControl() {
     // ========================================================================
     // CALCULAR REFERÊNCIA NO CAMINHO SUAVIZADO
     // ========================================================================
-    RefState ref = computeRef(curr_x, curr_y, curr_theta, smooth, seg_idx);
+    RefState ref = computeRef(poseCurr.x, poseCurr.y, poseCurr.theta, path_pts_, seg_idx_);
 
-    seg_idx = ref.seg_idx;
-    last_th = ref.theta_r;
+    seg_idx_ = ref.seg_idx;
+    last_th_ = ref.theta_r;
 
-    double xr      = ref.xr;
-    double yr      = ref.yr;
-    double theta_r = ref.theta_r;
-    double v_r     = ref.v_r;
-    double w_r     = ref.w_r;
+    const double xr      = ref.xr;
+    const double yr      = ref.yr;
+    const double theta_r = ref.theta_r;
+    const double v_r     = ref.v_r;
+    const double w_r     = ref.w_r;
 
-    double theta = curr_theta;
+    const double theta = poseCurr.theta;
 
     // ========================================================================
     // CALCULAR ERRO NO REFERENCIAL DO ROBÔ
     // ========================================================================
-    double dx = xr - curr_x;
-    double dy = yr - curr_y;
+    const double dx = xr - poseCurr.x;
+    const double dy = yr - poseCurr.y;
 
-    double ex =  std::cos(theta) * dx + std::sin(theta) * dy;
-    double ey = -std::sin(theta) * dx + std::cos(theta) * dy;
+    const double ex =  std::cos(theta) * dx + std::sin(theta) * dy;
+    const double ey = -std::sin(theta) * dx + std::cos(theta) * dy;
 
     double e_theta = theta_r - theta;
-    // Normalizar para [-pi, pi)
-    e_theta = std::atan2(std::sin(e_theta), std::cos(e_theta));
+    e_theta = std::atan2(std::sin(e_theta), std::cos(e_theta)); // [-pi, pi]
 
     // ========================================================================
     // APLICAR LEI DE CONTROLO DE ESPAÇO DE ESTADOS
     // ========================================================================
-    double v_target = v_r * std::cos(e_theta) + params.kx * ex;
-    double w_target = w_r + params.ky * v_r * ey + params.kth * std::sin(e_theta);
+    double v_target = v_r * std::cos(e_theta) + param.kx * ex;
+    double w_target = w_r + param.ky * v_r * ey + param.kth * std::sin(e_theta);
 
     // ========================================================================
     // SATURAÇÃO DE VELOCIDADES (limites máximos)
     // ========================================================================
-    if (v_target >  params.v_max) v_target =  params.v_max;
-    if (v_target < -params.v_max) v_target = -params.v_max;
-    if (w_target >  params.w_max) w_target =  params.w_max;
-    if (w_target < -params.w_max) w_target = -params.w_max;
+    if (v_target >  param.v_max) v_target =  param.v_max;
+    if (v_target < -param.v_max) v_target = -param.v_max;
+    if (w_target >  param.w_max) w_target =  param.w_max;
+    if (w_target < -param.w_max) w_target = -param.w_max;
 
     // ========================================================================
-    // APLICAR LIMITAÇÃO DE ACELERAÇÃO/DESACELERAÇÃO (igual ao navigation_controller)
+    // LIMITAÇÃO DE ACELERAÇÃO/DESACELERAÇÃO
     // ========================================================================
-    double dt = 1.0 / loop_rate_hz;
+    const double dt = 1.0 / std::max(1, param.loop_rate_hz);
 
-    // Aceleração/Desaceleração linear
     if (v_target > v_d) {
-        // Accelerate
-        v_d += params.a_max * dt;
+        v_d += param.a_max * dt;
         if (v_d > v_target) v_d = v_target;
     } else {
-        // Decelerate
-        v_d -= params.d_max * dt;
+        v_d -= param.d_max * dt;
         if (v_d < v_target) v_d = v_target;
     }
 
-    // Garantir limites máximos após aceleração/desaceleração
-    if (v_d >  params.v_max) v_d =  params.v_max;
-    if (v_d < -params.v_max) v_d = -params.v_max;
+    if (v_d >  param.v_max) v_d =  param.v_max;
+    if (v_d < -param.v_max) v_d = -param.v_max;
 
     // ========================================================================
-    // VELOCIDADE ANGULAR (aplicar diretamente, sem limitação de aceleração angular)
+    // VELOCIDADE ANGULAR (direto)
     // ========================================================================
     w_d = w_target;
 }
