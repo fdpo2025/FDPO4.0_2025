@@ -688,7 +688,7 @@ void NavigationController::purePursuitFollowPath() {
   const double v_abs = std::abs(v_d);  // ou std::abs(st.v), mas v_d é o comando atual
 
   double Ld = param.pp_L0_ + param.pp_kv_ * v_abs;
-  Ld = std::clamp(Ld, param.pp_Ld_min_, param.pp_Ld_max_);
+  //Ld = std::clamp(Ld, param.pp_Ld_min_, param.pp_Ld_max_);
 
   // nearest e target no path suavizado
   int near_idx = nearestPointIndex(path_pts_, st.x, st.y, last_near_idx_);
