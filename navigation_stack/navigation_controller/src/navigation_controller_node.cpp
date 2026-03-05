@@ -781,36 +781,33 @@ void NavigationController::followLine() {
         
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-        // 1. CÁLCULO ANGULAR (Mantém o trilho)
+        // 1. CONTROLO ANGULAR (Manter o robô no trilho da linha)
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
-        // 2. RAMPA DE DESACELERAÇÃO POR DISTÂNCIA
-        // Para a descida ser visível em distâncias curtas (0.15m), precisamos de um kp_linear menor
-        // ou de uma lógica que sinta a proximidade.
-        // Exemplo: se error_dist = 0.05m, v_ramp será 0.1m/s (com kp=2.0)
-        double v_ramp = 2.0 * error_dist; 
+        // 2. LÓGICA DA RAMPA (O declive do teu desenho)
+        // Multiplicador menor (ex: 1.5) faz a descida começar mais cedo e ser mais suave
+        double v_ramp = 1.5 * error_dist; 
         double v_target = std::min(v_ramp, vel_lin_nom_eff);
 
-        // 3. O "DEGRAU" POR ORIENTAÇÃO (A descida no meio do gráfico)
-        // Em vez de um cosseno suave, vamos penalizar agressivamente se o erro angular > 5 graus
-        double orientation_penalty = 1.0;
+        // 3. O "TRAVÃO" POR DESALINHAMENTO
+        // Se o erro for maior que 5 graus, a velocidade cai para 30% (a descida brusca)
         double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
+        double alignment_penalty = (error_ang_deg > 5.0) ? 0.3 : 1.0;
 
-        if (error_ang_deg > 5.0) {
-            // Se estiver mal orientado, corta a velocidade para metade ou menos
-            orientation_penalty = 0.3; 
+        // 4. VELOCIDADE FINAL COM PATAMAR MÍNIMO
+        v_d = v_target * alignment_penalty;
+        
+        // Se a velocidade calculada for muito baixa, mantemos v_min para o toque final
+        if (v_d < param.v_min) {
+            v_d = param.v_min;
         }
 
-        // 4. VELOCIDADE FINAL
-        v_d = v_target * orientation_penalty;
-
-        // Garante que não para totalmente antes do contacto, mas numa velocidade de aproximação segura
-        if (v_d < param.v_min) v_d = param.v_min;
-
-        ROS_INFO_THROTTLE(0.2, "[APPROACHING] Dist: %.3f | ErrAng: %.1f deg | V: %.2f", 
-                        error_dist, error_ang_deg, v_d);
+        // 5. LOG DE INFO PARA DIAGNÓSTICO (Aparece a cada 200ms)
+        ROS_INFO(0.2, 
+            "[APPROACHING] Dist: %.3fm | ErrAng: %.1f deg | V_Ramp: %.2f | Penalty: %.1f | FINAL V: %.2f m/s", 
+            error_dist, error_ang_deg, v_target, alignment_penalty, v_d);
     }
 
     // Zerar velocidade linear se erro angular > 93°
@@ -972,7 +969,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         double elapsed_time = (ros::Time::now() - pick_box_forward_start_time).toSec();
         
-        if (elapsed_time >= 0.7) {
+        //if (elapsed_time >= 0.7) {
             // Passou 2 segundos, remover waypoint e continuar para próximo
             in_pick_box_forward = false;
             if (!route.empty()) {
@@ -990,7 +987,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
                 navigationFsm.new_state = navigation::states::done;
             }
             ROS_INFO("NavigationController: Completed pickBoxForward (2s), continuing to next waypoint");
-        }
+        //}
     }
 
     // Set states
