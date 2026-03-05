@@ -956,29 +956,24 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     // Estado pickBoxForward
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         
-        // Cálculo de erros para a transição
         double dx = previousWaypoint.pose.x - poseCurr.x;
         double dy = previousWaypoint.pose.y - poseCurr.y;
         double dist_error = std::sqrt(dx*dx + dy*dy);
-        double yaw_error = std::abs(normalizeAngle(previousWaypoint.pose.theta - poseCurr.theta));
-        if (previousWaypoint.backwards) {
-            yaw_error = std::abs(normalizeAngle(yaw_error + M_PI));
-        }
-        double lateral_error = std::abs(-std::sin(previousWaypoint.pose.theta) * dx + std::cos(previousWaypoint.pose.theta) * dy);
-
-        // CONDIÇÃO DE SAÍDA: Distância atingida E alinhamento correto
-        // (Aproximadamente 1.5cm de erro lateral e 1.5 graus de erro angular)
-        if (dist_error <= 0.6 && lateral_error < 0.03 && yaw_error < 0.04) {
+        
+        // CONDIÇÃO DE SAÍDA: 
+        // 1. O plan_handler já confirmou que a caixa está agarrada (pick_box é true)
+        // 2. O robô já recuou pelo menos 10cm do ponto de contacto
+        if (route.front().pick_box == true && dist_error > 0.10) {
             in_pick_box_forward = false;
             if (!route.empty()) {
-                route.pop_front();
+                route.pop_front(); // Remove o waypoint do armazém
                 updateDesiredPose();
                 followLineFsm.new_state = navigation::followLineStates::Follow_Line;
                 followLineFsm.set_state();
                 completion_feedback_sent = false;
             }
             navigationFsm.new_state = route.empty() ? navigation::states::idle : navigation::states::done;
-            ROS_INFO("NavigationController: Pick alignment OK. Transitioning.");
+            ROS_INFO("NavigationController: Box attached and robot backed away. Transitioning to next waypoint.");
         }
     }
 
@@ -1015,36 +1010,36 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 }
 
 void NavigationController::pickBoxAction() {
-    // 1. Cálculo de Erros em relação ao waypoint da caixa (previousWaypoint)
     double dx = previousWaypoint.pose.x - poseCurr.x;
     double dy = previousWaypoint.pose.y - poseCurr.y;
     double dist_error = std::sqrt(dx*dx + dy*dy);
     
     double yaw_target = previousWaypoint.pose.theta;
     double yaw_error = normalizeAngle(yaw_target - poseCurr.theta);
+    if (previousWaypoint.backwards) yaw_error = normalizeAngle(yaw_error + M_PI);
 
-    if (previousWaypoint.backwards) {
-        yaw_error = normalizeAngle(yaw_error + M_PI);
+    // LÓGICA BASEADA NO ESTADO DA CAIXA
+    if (route.front().pick_box == false) {
+        // --- FASE 1: APROXIMAÇÃO ---
+        // Se estiver longe, avança. Se estiver a menos de 5cm, para e alinha.
+        if (dist_error > 0.05) {
+            double alignment_factor = std::max(0.1, std::cos(yaw_error));
+            v_d = (previousWaypoint.backwards ? -0.1 : 0.1) * alignment_factor;
+            w_d = 2.0 * yaw_error;
+        } else {
+            v_d = 0.0; // Para e espera que os ímanes liguem (pick_box -> true)
+            w_d = 2.0 * yaw_error;
+        }
+        ROS_INFO_THROTTLE(1.0, "[DOCKING] Approaching/Aligning... Dist: %.3f", dist_error);
+    } 
+    else {
+        // --- FASE 2: SAÍDA (RECUO) ---
+        // Se pick_box já é true, o robô deve andar para trás para sair do armazém
+        // Invertemos o sentido da marcha normal
+        v_d = (previousWaypoint.backwards ? 0.1 : -0.1); 
+        w_d = 2.0 * yaw_error; // Mantém-se direito enquanto recua
+        ROS_INFO_THROTTLE(1.0, "[DOCKING] Box attached! Backing away... Dist: %.3f", dist_error);
     }
-
-    // 2. Erro Lateral (importante para garantir que o robô está centrado com a caixa)
-    double lateral_error = std::abs(-std::sin(yaw_target) * dx + std::cos(yaw_target) * dy);
-
-    // 3. Lógica de Movimento
-    if (dist_error > 0.1) { 
-        // Se ainda está longe (mais de 5cm), aproxima-se com correção angular
-        // Se estiver muito torto, o cos(yaw_error) reduz a velocidade linear
-        double alignment_factor = std::max(0.1, std::cos(yaw_error));
-        v_d = (previousWaypoint.backwards ? -0.1 : 0.1) * alignment_factor;
-        w_d = k1 * yaw_error; 
-    } else {
-        // Se já encostou ou está quase lá, para o linear e refina o ângulo
-        v_d = 0.0;
-        w_d = k1 * yaw_error;
-    }
-
-    ROS_INFO_THROTTLE(0.5, "[PICK_ACTION] DistErr: %.3fm | LatErr: %.3fm | YawErr: %.2f deg", 
-                     dist_error, lateral_error, yaw_error * 180.0/M_PI);
 }
 
 
