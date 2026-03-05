@@ -156,7 +156,7 @@ void NavigationController::loadNavigationParams() {
     // FollowLine parameters (from Pascal code)
     nh.param("gain_fwd", param.gain_fwd, 1.0);      // GAIN_FWD
     nh.param("vel_lin_nom", param.vel_lin_nom, 0.3);  // VEL_LIN_NOM
-    nh.param("dist_da", param.dist_da, 0.15);       // DIST_DA
+    nh.param("dist_da", param.dist_da, 0.3);       // DIST_DA
     nh.param("tol_findist", param.tol_findist, 0.05); // TOL_FINDIST
     nh.param("max_etf", param.max_etf, 0.2);       // MAX_ETF (rad)
     nh.param("tol_init_line", param.tol_init_line, 0.1); // Tolerância de distância à linha para GoTo_Init -> Follow_Line (m)
@@ -835,74 +835,47 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     navigationFsm.update_tis();
     bool enable = !(mode == "stop" || mode == "pause") && !route.empty();
 
-    // Compute Transitions
+    // Transição inicial
     if(navigationFsm.state == navigation::states::idle && enable) {
-
         navigationFsm.new_state = navigation::states::driveToGoal;
-
     }
 
-    // Quando align=true: usar isPositionArrived() para parar no ponto exato e rodar
-    else if(navigationFsm.state == navigation::states::driveToGoal && isPositionArrived() && route.front().align && enable) {
+    // LÓGICA DE TRANSIÇÃO DE WAYPOINT / LINHA
+    else if(navigationFsm.state == navigation::states::driveToGoal && enable) {
         
-        // Guardar waypoint anterior antes de remover
-        previousWaypoint = route.front();
-        
-        // Se é warehouse de pick, entrar no estado pickBoxForward
-        if (route.front().pick_box) {
-            navigationFsm.new_state = navigation::states::pickBoxForward;
-            pick_box_forward_start_time = ros::Time::now();
-            in_pick_box_forward = true;
-            ROS_INFO("NavigationController: Arrived at pick warehouse (id=%d, x=%.2f, y=%.2f, backwards=%d), entering pickBoxForward state", 
-                     previousWaypoint.id, previousWaypoint.pose.x, previousWaypoint.pose.y, previousWaypoint.backwards ? 1 : 0);
-        } else {
-            navigationFsm.new_state = navigation::states::turnToFinalYaw;
+        // --- NOVIDADE: GATILHO PARA O APPROACHING ---
+        // Se for armazém e estivermos perto (dist_da), mudamos a FSM secundária interna
+        if (route.front().is_warehouse && error_dist < param.dist_da && followLineFsm.state == navigation::followLineStates::Follow_Line) {
+            followLineFsm.new_state = navigation::followLineStates::Approaching;
+            followLineFsm.set_state();
+            ROS_INFO(">>> [TRANSITION] Perto do armazem (%.3fm). A iniciar Aproximacao Dinamica.", error_dist);
         }
 
-    }
+        // Determinar se a linha acabou (por distância ou por progresso %)
+        double switch_ratio = (route.front().line_switch_ratio > 0) ? route.front().line_switch_ratio : param.line_switch_ratio;
+        bool arrived = route.front().align ? isPositionArrived() : (line_progress >= switch_ratio);
 
-    // Quando align=false: usar line_progress para mudar de linha mais cedo (suaviza transições)
-    // Usar line_switch_ratio do waypoint se definido (>0), senão usar parâmetro global
-    else if(navigationFsm.state == navigation::states::driveToGoal && !route.front().align && enable) {
-        
-        double switch_ratio = (route.front().line_switch_ratio > 0) ? 
-                               route.front().line_switch_ratio : param.line_switch_ratio;
-        
-        if (line_progress >= switch_ratio) {
-            // Guardar waypoint anterior antes de remover
+        if (arrived) {
             previousWaypoint = route.front();
-            
-            // Verificar se é warehouse de pick antes de remover
             bool is_pick_warehouse = route.front().pick_box;
-            
-            ROS_INFO("Line switch at %.0f%% (threshold=%.0f%%): waypoint (id=%d, x=%.2f, y=%.2f, pick_box=%d, backwards=%d). Remaining: %zu", 
-                     line_progress * 100, switch_ratio * 100,
-                     previousWaypoint.id, previousWaypoint.pose.x, previousWaypoint.pose.y, is_pick_warehouse ? 1 : 0, 
-                     previousWaypoint.backwards ? 1 : 0, route.size() - 1);
-        
-            // Se é warehouse de pick, NÃO remover ainda - será removido quando sair do estado pickBoxForward
+
             if (is_pick_warehouse) {
+                // Se é pick, vai para o estado de avanço final (pickBoxForward)
                 navigationFsm.new_state = navigation::states::pickBoxForward;
                 pick_box_forward_start_time = ros::Time::now();
                 in_pick_box_forward = true;
-                ROS_INFO("NavigationController: Completed line to pick warehouse, entering pickBoxForward state");
+                ROS_INFO("NavigationController: Linha concluida no armazem. Entrando em pickBoxForward");
             } else {
-                // Não é warehouse de pick, remover normalmente
-                route.pop_front();
-                updateDesiredPose();
-                
-                // Reinicializar followLine FSM para nova linha
-                followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-                followLineFsm.set_state();
-                
-                // Reset completion feedback flag para nova linha
-                completion_feedback_sent = false;
-                
-                // Se não há mais waypoints, ir direto para idle
-                if(route.empty()) {
-                    navigationFsm.new_state = navigation::states::idle;
+                // Se não é pick, remove e passa para o próximo ou roda (turnToFinalYaw)
+                if (route.front().align) {
+                    navigationFsm.new_state = navigation::states::turnToFinalYaw;
                 } else {
-                    navigationFsm.new_state = navigation::states::done;
+                    route.pop_front();
+                    updateDesiredPose();
+                    followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+                    followLineFsm.set_state();
+                    completion_feedback_sent = false;
+                    navigationFsm.new_state = route.empty() ? navigation::states::idle : navigation::states::done;
                 }
             }
         }
