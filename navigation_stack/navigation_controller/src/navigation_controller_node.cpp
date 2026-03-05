@@ -805,9 +805,8 @@ void NavigationController::followLine() {
         }
 
         // 5. LOG DE INFO PARA DIAGNÓSTICO (Aparece a cada 200ms)
-        ROS_INFO(0.2, 
-            "[APPROACHING] Dist: %.3fm | ErrAng: %.1f deg | V_Ramp: %.2f | Penalty: %.1f | FINAL V: %.2f m/s", 
-            error_dist, error_ang_deg, v_target, alignment_penalty, v_d);
+        ROS_INFO(">>> [APPROACHING] Dist: %.3f | AngErr: %.1f deg | Penalty: %.1f | V_FINAL: %.2f", 
+             error_dist, error_ang_deg, alignment_penalty, v_d);
     }
 
     // Zerar velocidade linear se erro angular > 93°
