@@ -781,21 +781,39 @@ void NavigationController::followLine() {
         
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-
-        // -----------------------
-        //   ANGULAR CONTROL
-        // -----------------------
+        // 1. CÁLCULO DA VELOCIDADE ANGULAR (Mantém o foco na linha)
+        // Usamos os ganhos já definidos para garantir que ele não sai do trilho
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
 
-        // Limitar velocidade angular
+        // Limitar velocidade angular para segurança
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
-        // -----------------------
-        //   LINEAR CONTROL 
-        // -----------------------
-        // Velocidade constante no estado Approaching
-        v_d = param.approaching_vel;
+        // 2. CÁLCULO DA VELOCIDADE LINEAR DINÂMICA
+        // Queremos que ele use a velocidade nominal (vel_lin_nom_eff) enquanto puder
+        // e que abrande proporcionalmente ao erro de distância (kp_linear * error_dist)
+        double v_ramp = param.kp_linear * error_dist;
+        
+        // O v_target será o menor valor entre a rampa e a velocidade máxima permitida
+        double v_target = std::min(v_ramp, vel_lin_nom_eff);
+
+        // 3. FATOR DE AMORTECIMENTO POR ORIENTAÇÃO (O "Travão")
+        // Se o erro angular for grande, o cosseno aproxima-se de 0, abrandando o robô.
+        // Se estiver perfeitamente alinhado (0 rad), o fator é 1.0 (velocidade máxima).
+        double alignment_factor = std::cos(error_ang);
+        if (alignment_factor < 0) alignment_factor = 0; // Evita velocidades negativas aqui
+
+        // Aplicamos o fator de alinhamento à velocidade alvo
+        v_d = v_target * alignment_factor;
+
+        // 4. GARANTIA DE MOVIMENTO (v_min)
+        // Para não deixar o robô "morrer" a 1cm da caixa, garantimos uma v_min
+        if (v_d < param.v_min && error_dist > param.arrive_radius) {
+            v_d = param.v_min;
+        }
+        
+        ROS_INFO_THROTTLE(0.5, "[APPROACHING] Dist: %.3f | V_target: %.2f | Align: %.2f | Final V: %.2f", 
+                        error_dist, v_target, alignment_factor, v_d);
     }
 
     // Zerar velocidade linear se erro angular > 93°
@@ -953,27 +971,28 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     }
 
-    // Estado pickBoxForward
+    // Estado pickBoxForward: andar para frente 2s após chegar a warehouse de pick
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
+        double elapsed_time = (ros::Time::now() - pick_box_forward_start_time).toSec();
         
-        double dx = previousWaypoint.pose.x - poseCurr.x;
-        double dy = previousWaypoint.pose.y - poseCurr.y;
-        double dist_error = std::sqrt(dx*dx + dy*dy);
-        
-        // CONDIÇÃO DE SAÍDA: 
-        // 1. O plan_handler já confirmou que a caixa está agarrada (pick_box é true)
-        // 2. O robô já recuou pelo menos 10cm do ponto de contacto
-        if (route.front().pick_box == true && dist_error > 0.10) {
+        if (elapsed_time >= 0.7) {
+            // Passou 2 segundos, remover waypoint e continuar para próximo
             in_pick_box_forward = false;
             if (!route.empty()) {
-                route.pop_front(); // Remove o waypoint do armazém
+                route.pop_front();
                 updateDesiredPose();
+                // Reinicializar followLine FSM para nova linha
                 followLineFsm.new_state = navigation::followLineStates::Follow_Line;
                 followLineFsm.set_state();
+                // Reset completion feedback flag para nova linha
                 completion_feedback_sent = false;
             }
-            navigationFsm.new_state = route.empty() ? navigation::states::idle : navigation::states::done;
-            ROS_INFO("NavigationController: Box attached and robot backed away. Transitioning to next waypoint.");
+            if(route.empty()) {
+                navigationFsm.new_state = navigation::states::idle;
+            } else {
+                navigationFsm.new_state = navigation::states::done;
+            }
+            ROS_INFO("NavigationController: Completed pickBoxForward (2s), continuing to next waypoint");
         }
     }
 
@@ -984,9 +1003,15 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     if(navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
-        pickBoxAction(); // Chama a nova função que calcula v_d e w_d
+        // Andar para frente com velocidade linear 0.1 m/s durante 2s
+        // Se estava indo backwards, andar para trás
+        v_d = previousWaypoint.backwards ? -0.1 : 0.1;
+        w_d = 0.0;
+        ROS_INFO_THROTTLE(0.5, "NavigationController: pickBoxForward state - moving at %.2f m/s (backwards=%d)", 
+                         v_d, previousWaypoint.backwards ? 1 : 0);
     }
     else {
+        // Parar se não há waypoints ou estado inválido
         v_d = 0.0;
         w_d = 0.0;
     }
@@ -1008,40 +1033,6 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     }
 
 }
-
-void NavigationController::pickBoxAction() {
-    double dx = previousWaypoint.pose.x - poseCurr.x;
-    double dy = previousWaypoint.pose.y - poseCurr.y;
-    double dist_error = std::sqrt(dx*dx + dy*dy);
-    
-    double yaw_target = previousWaypoint.pose.theta;
-    double yaw_error = normalizeAngle(yaw_target - poseCurr.theta);
-    if (previousWaypoint.backwards) yaw_error = normalizeAngle(yaw_error + M_PI);
-
-    // LÓGICA BASEADA NO ESTADO DA CAIXA
-    if (route.front().pick_box == false) {
-        // --- FASE 1: APROXIMAÇÃO ---
-        // Se estiver longe, avança. Se estiver a menos de 5cm, para e alinha.
-        if (dist_error > 0.05) {
-            double alignment_factor = std::max(0.1, std::cos(yaw_error));
-            v_d = (previousWaypoint.backwards ? -0.1 : 0.1) * alignment_factor;
-            w_d = 2.0 * yaw_error;
-        } else {
-            v_d = 0.0; // Para e espera que os ímanes liguem (pick_box -> true)
-            w_d = 2.0 * yaw_error;
-        }
-        ROS_INFO_THROTTLE(1.0, "[DOCKING] Approaching/Aligning... Dist: %.3f", dist_error);
-    } 
-    else {
-        // --- FASE 2: SAÍDA (RECUO) ---
-        // Se pick_box já é true, o robô deve andar para trás para sair do armazém
-        // Invertemos o sentido da marcha normal
-        v_d = (previousWaypoint.backwards ? 0.1 : -0.1); 
-        w_d = 2.0 * yaw_error; // Mantém-se direito enquanto recua
-        ROS_INFO_THROTTLE(1.0, "[DOCKING] Box attached! Backing away... Dist: %.3f", dist_error);
-    }
-}
-
 
 bool NavigationController::controlSrvCb(navigation_controller::NavigationControl::Request& req, navigation_controller::NavigationControl::Response& res) {
 
