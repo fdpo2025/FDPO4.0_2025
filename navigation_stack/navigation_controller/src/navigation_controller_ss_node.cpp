@@ -1,161 +1,717 @@
-#include "navigation_controller_ss_node.h"
+#include "pure_pursuit.h"
 #include <cmath>
 
-// ============================================================================
-// CONSTRUCTOR
-// ============================================================================
-NavigationControllerSS::NavigationControllerSS(ros::NodeHandle& nh_) 
-    : nh(nh_), curr_x(0.0), curr_y(0.0), curr_theta(0.0), v_d(0.0), w_d(0.0),
-      seg_idx(0), last_th(0.0), loop_rate_hz(30),
-      navigationFsm(navigation_ss::states::idle), mode("stop") {
+NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0), 
+navigationFsm(navigation::states::idle),
+k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false}), tfBuffer(), tfListener(tfBuffer),
+in_pick_box_forward(false) {
     
-    // ========================================================================
-    // SUBSCRIBE TO ODOMETRY TOPIC
-    // ========================================================================
+    mode = "idle";
+
+    // load navigation parameters
+    loadNavigationParams();
+    
+    //load RViz parameters
+    nh.param("rviz_append", rvizGoalAppend, false);
+
+    // load from YAML or from /nav_plan
+    nh.param("load_from_route", load_from_route, false);
+    
+    // ros init
     std::string odom_topic;
     nh.param("odom_topic", odom_topic, std::string("/odometry/filtered"));
-    odomSub = nh.subscribe(odom_topic, 10, &NavigationControllerSS::odomCallback, this);
-    ROS_INFO("NavigationControllerSS subscribing to: %s", odom_topic.c_str());
-
-    // ========================================================================
-    // SUBSCRIBE TO RVIZ GOAL TOPIC
-    // ========================================================================
-    rvizGoalSub = nh.subscribe("/move_base_simple/goal", 10, 
-                                &NavigationControllerSS::rvizGoalCallback, this);
-    ROS_INFO("NavigationControllerSS subscribing to: /move_base_simple/goal");
-
-    // ========================================================================
-    // PUBLISH TO VELOCITY TOPIC
-    // ========================================================================
+    odomSub = nh.subscribe(odom_topic, 10, &NavigationController::updateCurrPose, this);
+    ROS_INFO("NavigationController subscribing to odometry topic: %s", odom_topic.c_str());
+    rvizGoalSub = nh.subscribe("/move_base_simple/goal", 10, &NavigationController::rvizGoalCallBack, this);
+    navPlanSub = nh.subscribe("/nav_plan", 10, &NavigationController::navPlanCallback, this);
+    ROS_INFO("NavigationController subscribing to /nav_plan (load_from_route=%s)", load_from_route ? "true" : "false");
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
-    ROS_INFO("NavigationControllerSS publishing to: /cmd_vel");
+    lineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_lines", 1, true);  // latch=true para RViz ver imediatamente
+    navCompletionFeedbackPub = nh.advertise<plan_handler::CompletionFeedback>("/nav_completion_feedback", 10);
+    completion_feedback_sent = false;
+    controlTimer = nh.createTimer(ros::Duration(1.0 / std::max(1, param.loop_rate_hz)), &NavigationController::navigationFsmRunner, this);
+    controlSrv = nh.advertiseService("control", &NavigationController::controlSrvCb, this);
 
-    // ========================================================================
-    // LOAD CONTROLLER PARAMETERS
-    // ========================================================================
-    loadControllerParams();
+    dynamic_reconfigure::Server<navigation_controller::NavigationConfig>::CallbackType cb;
+    cb = boost::bind(&NavigationController::reconfigCb, this, _1, _2);
+    dr_srv_.setCallback(cb);
 
-    // ========================================================================
-    // TIMER FOR CONTROL LOOP (FSM RUNNER)
-    // ========================================================================
-    nh.param("loop_rate_hz", loop_rate_hz, 30);
-    controlTimer = nh.createTimer(ros::Duration(1.0 / loop_rate_hz), 
-                                   &NavigationControllerSS::navigationFsmRunner, this);
+    ROS_INFO("NavigationController instace created");
+}
 
-    // ========================================================================
-    // SERVICE FOR CONTROL COMMANDS
-    // ========================================================================
-    controlSrv = nh.advertiseService("control_ss", &NavigationControllerSS::controlSrvCb, this);
-    ROS_INFO("NavigationControllerSS: Service 'control_ss' advertised");
+void NavigationController::reconfigCb(navigation_controller::NavigationConfig &cfg, uint32_t) {
+    param.v_nom        = cfg.v_nom;
+    param.w_nom        = cfg.w_nom;
+    param.w_min        = cfg.w_min;
+    param.kp_linear    = cfg.kp_linear;
+    param.kp_angular   = cfg.kp_angular;
+    param.arrive_radius= cfg.arrive_radius;
+    param.yaw_tol      = cfg.yaw_tol;
 
-    // ========================================================================
-    // NÃO CARREGAR WAYPOINTS NO CONSTRUTOR - só quando start for chamado
-    // Garantir que começa parado
-    // ========================================================================
-    // loadPathFromParameters();  // Removido - só carrega quando start é chamado
+    if (param.loop_rate_hz != cfg.loop_rate_hz) {
+        param.loop_rate_hz = cfg.loop_rate_hz;
+        controlTimer.stop();
+        controlTimer = nh.createTimer(
+            ros::Duration(1.0 / std::max(1, param.loop_rate_hz)),
+            &NavigationController::navigationFsmRunner, this
+        );
+    }
+}
 
-    // Garantir velocidades zero no início
-    v_d = 0.0;
-    w_d = 0.0;
+void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg) {
+  if (msg->points.empty()) return;
+
+  route_full_.clear();
+  route_seg_.clear();
+  segment_active_ = false;
+
+  // previousWaypoint = pose atual
+  previousWaypoint.id = 0;
+  previousWaypoint.pose.x = poseCurr.x;
+  previousWaypoint.pose.y = poseCurr.y;
+  previousWaypoint.pose.theta = poseCurr.theta;
+  previousWaypoint.align = false;
+  previousWaypoint.backwards = false;
+  previousWaypoint.line_switch_ratio = -1.0;
+  previousWaypoint.vel_lin_nom = -1.0;
+  previousWaypoint.pick_box = false;
+  previousWaypoint.is_warehouse = false;
+
+  for (size_t i = 0; i < msg->points.size(); ++i) {
+    const auto& cp = msg->points[i];
+    WayPoint wp;
+    wp.id = (int)i;
+    wp.pose.x = cp.x;
+    wp.pose.y = cp.y;
+
+    // theta como tu já fazes
+    if (i < msg->points.size() - 1) {
+      double dx = msg->points[i + 1].x - cp.x;
+      double dy = msg->points[i + 1].y - cp.y;
+      wp.pose.theta = std::atan2(dy, dx);
+    } else if (i > 0) {
+      double dx = cp.x - msg->points[i - 1].x;
+      double dy = cp.y - msg->points[i - 1].y;
+      wp.pose.theta = std::atan2(dy, dx);
+    } else {
+      wp.pose.theta = poseCurr.theta;
+    }
+
+    wp.align = false;
+    wp.backwards = cp.backwards;
+    wp.pick_box = cp.pick_box;
+    wp.is_warehouse = cp.is_warehouse;
+    wp.line_switch_ratio = (cp.line_switch_ratio > 0) ? cp.line_switch_ratio : -1.0;
+    wp.vel_lin_nom = (cp.vel_lin_nom > 0) ? cp.vel_lin_nom : -1.0;
+
+    route_full_.push_back(wp);
+  }
+
+  buildNextSegment();          // <<<<<< cria route_seg_
+  updateDesiredPoseSegment();  // desired = route_seg_.front()
+  buildSmoothedPathFromSegment();
+  publishLineMarkersSegment();
+
+  completion_feedback_sent = false;
+}
+
+void NavigationController::loadNavigationParams() {
+
     
-    // Publicar zeros uma vez para garantir que o robô está parado
+    nh.param("w_nom", param.w_nom, 1.2);             
+    nh.param("arrive_radius",  param.arrive_radius, 0.05);
+    nh.param("yaw_tol",param.yaw_tol, 0.08);
+    nh.param("loop_rate_hz", param.loop_rate_hz, 30);
+
+    params.kx = 1.0;
+    params.ky = 50.0;
+    params.kth = 5.0;
+    params.v_max = 0.4;
+    params.w_max = 3.0;
+    params.v_ref = 0.2;    
+    params.a_max = 0.5;     // Aceleração máxima (m/s²) - padrão igual ao navigation_controller
+    params.d_max = 0.5;     // Desaceleração máxima (m/s²) - padrão igual ao navigation_controller
+    params.smooth_radius = 0.01;
+    params.smooth_corner_steps = 8;
+       
+    nh.param("kx", params.kx, params.kx);
+    nh.param("ky", params.ky, params.ky);
+    nh.param("kth", params.kth, params.kth);
+    nh.param("v_max", params.v_max, params.v_max);
+    nh.param("w_max", params.w_max, params.w_max);
+    nh.param("v_ref", params.v_ref, params.v_ref);    
+    nh.param("a_max", params.a_max, params.a_max);
+    nh.param("d_max", params.d_max, params.d_max);
+    nh.param("smooth_radius", params.smooth_radius, params.smooth_radius);
+    nh.param("smooth_corner_steps", params.smooth_corner_steps, params.smooth_corner_steps);
+            
+}
+
+void NavigationController::updateDesiredPoseSegment() {
+  if (route_seg_.empty()) return;
+  poseDesired = route_seg_.back().pose;   // <- objetivo do segmento = warehouse
+}
+
+bool NavigationController::isBackwards() {
+  return !route_seg_.empty() ? route_seg_.front().backwards : false;
+}
+
+double NavigationController::getAlignYawError() {
+
+    double theta_d = std::atan2(poseDesired.y - poseCurr.y, poseDesired.x - poseCurr.x);
+    
+    // If backwards, robot must point in opposite direction to waypoint
+    if (isBackwards()) {
+        theta_d = normalizeAngle(theta_d + M_PI);
+    }
+
+    return normalizeAngle(theta_d - poseCurr.theta); 
+
+}
+
+bool NavigationController::checkAlignYaw() {
+
+    double yaw_error = getAlignYawError();
+
+    if(std::fabs(yaw_error) <= param.yaw_tol) return true;
+    return false;
+
+}
+
+double NavigationController::getPositionError() {
+
+    return std::hypot(poseDesired.x - poseCurr.x, poseDesired.y - poseCurr.y);
+
+}
+
+bool NavigationController::isPositionArrived() {
+    
+    double position_error = getPositionError();
+
+    if(position_error <= param.arrive_radius) return true;
+    return false;
+
+}
+
+double NavigationController::getDesiredYawError() {
+
+    return normalizeAngle(poseDesired.theta - poseCurr.theta); 
+
+}
+
+bool NavigationController::isYawDesired() {
+
+    double yaw_error = getDesiredYawError();
+
+    if(std::fabs(yaw_error) <= param.yaw_tol) return true;
+    return false;
+
+}
+
+
+void NavigationController::publishLineMarkersSegment() {
+  visualization_msgs::Marker line_marker;
+  line_marker.header.frame_id = "map";
+  line_marker.header.stamp = ros::Time::now();
+  line_marker.ns = "navigation_lines";
+  line_marker.id = 0;
+  line_marker.type = visualization_msgs::Marker::LINE_LIST;
+  line_marker.action = visualization_msgs::Marker::ADD;
+  line_marker.pose.orientation.w = 1.0;
+  line_marker.scale.x = 0.05;
+  line_marker.color.a = 1.0;
+  line_marker.lifetime = ros::Duration(0);
+
+  line_marker.points.clear();
+  line_marker.colors.clear();
+
+  if (route_seg_.size() < 2) {
+    lineMarkerPub.publish(line_marker);
+    return;
+  }
+
+  for (auto it = route_seg_.begin(); it != route_seg_.end(); ++it) {
+    auto next_it = std::next(it);
+    if (next_it == route_seg_.end()) break;
+
+    geometry_msgs::Point p1, p2;
+    p1.x = it->pose.x;      p1.y = it->pose.y;      p1.z = 0.0;
+    p2.x = next_it->pose.x; p2.y = next_it->pose.y; p2.z = 0.0;
+
+    std_msgs::ColorRGBA c;
+    if (next_it->backwards) { c.r=0.0; c.g=0.5; c.b=1.0; c.a=1.0; }
+    else                    { c.r=0.0; c.g=1.0; c.b=0.0; c.a=1.0; }
+
+    line_marker.points.push_back(p1);
+    line_marker.points.push_back(p2);
+    line_marker.colors.push_back(c);
+    line_marker.colors.push_back(c);
+  }
+
+  lineMarkerPub.publish(line_marker);
+}
+
+void NavigationController::updateCurrPose(const nav_msgs::Odometry::ConstPtr& msg) {
+
+    poseCurr.x = msg->pose.pose.position.x;
+    poseCurr.y = msg->pose.pose.position.y;
+    poseCurr.theta = tf2::getYaw(msg->pose.pose.orientation);
+
+}
+
+void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::ConstPtr& msg) {
+
+    // Ensure goal is in map frame
+    geometry_msgs::PoseStamped poseInMap;
+    if (msg->header.frame_id != "map") {
+        try {
+            poseInMap = tfBuffer.transform(*msg, "map", ros::Duration(1.0));
+            ROS_INFO("Transformed RViz goal from %s to map frame", msg->header.frame_id.c_str());
+        } catch (const tf2::TransformException& ex) {
+            ROS_ERROR("Failed to transform goal from %s to map: %s", msg->header.frame_id.c_str(), ex.what());
+            return;
+        }
+    } else {
+        poseInMap = *msg;
+    }
+
+    if(!rvizGoalAppend) {
+        route_seg_.clear();
+        // Inicializar previousWaypoint com posição atual do robô
+        previousWaypoint.id = 0;
+        previousWaypoint.pose.x = poseCurr.x;
+        previousWaypoint.pose.y = poseCurr.y;
+        previousWaypoint.pose.theta = poseCurr.theta;
+        previousWaypoint.align = false;
+        previousWaypoint.backwards = false;
+        previousWaypoint.line_switch_ratio = -1.0;
+        previousWaypoint.vel_lin_nom = -1.0;
+        previousWaypoint.is_warehouse = false;
+        ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
+    }
+
+    WayPoint waypoint_temp;
+
+    waypoint_temp.id = route_seg_.empty() ? 1 : (route_seg_.back().id + 1);  // IDs começam em 1 (0 é previousWaypoint)
+    waypoint_temp.pose.x = poseInMap.pose.position.x;
+    waypoint_temp.pose.y = poseInMap.pose.position.y;
+    waypoint_temp.pose.theta = tf2::getYaw(poseInMap.pose.orientation);
+    waypoint_temp.align = true;
+    waypoint_temp.backwards = false;
+    waypoint_temp.line_switch_ratio = -1.0;  // Usar parâmetro global
+    waypoint_temp.vel_lin_nom = -1.0;        // Usar parâmetro global
+
+    route_seg_.push_back(waypoint_temp);
+    ROS_INFO("RViz goal added: x=%.2f y=%.2f yaw=%.2f (map frame)", 
+             waypoint_temp.pose.x, waypoint_temp.pose.y, waypoint_temp.pose.theta);
+
+    updateDesiredPoseSegment();
+           
+    // Publicar linhas de visualização
+    publishLineMarkersSegment();
+
+}
+
+void NavigationController::publishVel() {
+
+    // Only publish if there is real movement (not zeros)
+    // This avoids constantly publishing when idle
+    if (std::abs(v_d) < 1e-6 && std::abs(w_d) < 1e-6) {
+        return;  // Don't publish zeros when stopped
+    }
+
     geometry_msgs::Twist cmd;
-    cmd.linear.x = 0.0;
-    cmd.linear.y = 0.0;
-    cmd.linear.z = 0.0;
+    cmd.linear.x  = v_d;
+    cmd.linear.y  = 0.0;
+    cmd.linear.z  = 0.0;
+    cmd.angular.x = 0.0;
+    cmd.angular.y = 0.0;
+    cmd.angular.z = w_d;
+    velPub.publish(cmd);
+
+}
+
+double NavigationController::normalizeAngle(double theta) {
+
+    while(theta > M_PI) theta -= 2.0 * M_PI;
+    while (theta <= -M_PI) theta += 2.0*M_PI;
+
+    return theta;
+}
+
+void NavigationController::hardStop() {
+
+    w_d = v_d = 0.0;
+    // Force publish zeros to stop robot immediately
+    geometry_msgs::Twist cmd;
+    cmd.linear.x  = 0.0;
+    cmd.linear.y  = 0.0;
+    cmd.linear.z  = 0.0;
     cmd.angular.x = 0.0;
     cmd.angular.y = 0.0;
     cmd.angular.z = 0.0;
     velPub.publish(cmd);
 
-    ROS_INFO("NavigationControllerSS initialized - starting in STOPPED state");
 }
 
-// ============================================================================
-// ODOMETRY CALLBACK
-// ============================================================================
-void NavigationControllerSS::odomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
-    curr_x = msg->pose.pose.position.x;
-    curr_y = msg->pose.pose.position.y;
-    curr_theta = tf2::getYaw(msg->pose.pose.orientation);
+void NavigationController::setTheta() {
+
+    v_d = 0.0;
+
+    // Se não há waypoints, parar imediatamente
+    if(route_seg_.empty()) {
+        w_d = 0.0;
+        return;
+    }
+
+    double yaw_error = getDesiredYawError(); 
+    if(std::fabs(yaw_error) <= param.yaw_tol) {
+
+        w_d = 0.0;
+
+        return;
+    }
+
+    w_d = param.kp_angular * yaw_error;
+
+    if(w_d > param.w_nom) w_d = param.w_nom;
+    else if(w_d < -param.w_nom) w_d = -param.w_nom;
+
 }
 
-// ============================================================================
-// RVIZ GOAL CALLBACK
-// ============================================================================
-void NavigationControllerSS::rvizGoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg) {
-    std::vector<Point> waypoints;
-    
-    // Se já existe um caminho, adiciona o novo goal ao final
-    if (!path.empty()) {
-        waypoints = path;
+void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
+
+    // Update's
+    navigationFsm.update_tis();
+    bool enable = !(mode == "stop" || mode == "pause") && !route_seg_.empty();
+
+    // Compute Transitions
+    if(navigationFsm.state == navigation::states::idle && enable) {
+
+        navigationFsm.new_state = navigation::states::driveToGoal;
+
+    }
+
+    // Quando align=true: usar isPositionArrived() para parar no ponto exato e rodar
+    else if(navigationFsm.state == navigation::states::driveToGoal && isPositionArrived() && enable) {
+                        
+        
+        if (route_seg_.back().pick_box) {
+            navigationFsm.new_state = navigation::states::pickBoxForward;
+            pick_box_forward_start_time = ros::Time::now();
+            in_pick_box_forward = true;           
+        } else {
+            navigationFsm.new_state = navigation::states::turnToFinalYaw;
+        }
+
     }
     
-    // Adiciona o novo goal
-    Point goal;
-    goal.x = msg->pose.position.x;
-    goal.y = msg->pose.position.y;
-    waypoints.push_back(goal);
-    
-    ROS_INFO("RViz goal received: x=%.2f y=%.2f (mode: %s)", goal.x, goal.y, mode.c_str());
-    
-    updatePathFromWaypoints(waypoints);
-    
-    // NOTA: Não inicia navegação automaticamente - precisa chamar serviço "start"
-    // Isso garante que o robô só começa quando explicitamente solicitado
-}
+    else if (navigationFsm.state == navigation::states::driveToGoal && enable) {
 
-// ============================================================================
-// HELPER FUNCTIONS FOR FSM
-// ============================================================================
-double NavigationControllerSS::normalizeAngle(double theta) {
-    while(theta > M_PI) theta -= 2.0 * M_PI;
-    while(theta <= -M_PI) theta += 2.0 * M_PI;
-    return theta;
-}
+        if (isPositionArrived()) {
 
-double NavigationControllerSS::getPositionError() {
-    if (smooth.empty()) return 999.0;
-    const Point& goal = smooth.back();
-    return std::hypot(goal.x - curr_x, goal.y - curr_y);
-}
+            WayPoint seg_goal = route_seg_.back();
+            previousWaypoint = seg_goal;
 
-bool NavigationControllerSS::isPositionArrived() {
-    if (smooth.empty()) return false;
-    
-    // Verificar se já percorreu todo o caminho (seg_idx no último segmento)
-    bool path_completed = (seg_idx >= static_cast<int>(smooth.size()) - 1);
-    
-    // Verificar se está dentro da tolerância do ponto final
-    bool within_tolerance = getPositionError() <= params.end_dist_tol;
-    
-    // Chegou se: (1) percorreu todo o caminho E (2) está dentro da tolerância
-    // OU se está muito próximo do ponto final (caso especial para caminhos curtos)
-    return (path_completed && within_tolerance) || 
-           (within_tolerance && smooth.size() <= 2);  // Para caminhos muito curtos (1 waypoint)
-}
+            // se objetivo do segmento é pick warehouse -> pickBoxForward
+            if (seg_goal.pick_box) {
+            navigationFsm.new_state = navigation::states::pickBoxForward;
+            pick_box_forward_start_time = ros::Time::now();
+            in_pick_box_forward = true;
+            } else {
+            // fecha segmento e abre próximo
+            route_seg_.clear();
+            buildNextSegment();
+            updateDesiredPoseSegment();
+            buildSmoothedPathFromSegment();
+            publishLineMarkersSegment(); // (tens de criar esta versão)
 
-double NavigationControllerSS::getDesiredYawError() {
-    if (smooth.empty()) return 0.0;
-    const Point& goal = smooth.back();
-    double desired_yaw = std::atan2(goal.y - curr_y, goal.x - curr_x);
-    // Se há pelo menos 2 pontos, usar direção do último segmento
-    if (smooth.size() >= 2) {
-        const Point& prev = smooth[smooth.size() - 2];
-        desired_yaw = std::atan2(goal.y - prev.y, goal.x - prev.x);
+            completion_feedback_sent = false;
+
+            if (route_seg_.empty() && route_full_.empty()) navigationFsm.new_state = navigation::states::idle;
+            else navigationFsm.new_state = navigation::states::done;
+            }
+        }
     }
-    return normalizeAngle(desired_yaw - curr_theta);
+
+    else if (navigationFsm.state == navigation::states::turnToFinalYaw && enable && !isPositionArrived()) {
+
+        navigationFsm.new_state = navigation::states::driveToGoal;
+
+    }
+
+    else if(navigationFsm.state == navigation::states::turnToFinalYaw && isYawDesired() && enable) {
+
+        // Guardar waypoint anterior antes de remover
+        bool is_pick_warehouse = false;
+        if(!route_seg_.empty()) {
+            
+            is_pick_warehouse = route.back().pick_box;
+           
+        }
+        
+        // Se é warehouse de pick, NÃO remover ainda - será removido quando sair do estado pickBoxForward
+        if (is_pick_warehouse) {
+            navigationFsm.new_state = navigation::states::pickBoxForward;
+            pick_box_forward_start_time = ros::Time::now();
+            in_pick_box_forward = true;
+            ROS_INFO("NavigationController: Completed turnToFinalYaw at pick warehouse, entering pickBoxForward state");
+        } else {
+                            
+            
+            // Se não há mais waypoints, ir direto para idle
+            if(route_full_.empty()) {
+                navigationFsm.new_state = navigation::states::idle;
+            } else {
+                buildNextSegment();
+                updateDesiredPoseSegment();
+                navigationFsm.new_state = navigation::states::done;
+            }
+        }
+
+    }
+
+    else if(navigationFsm.state == navigation::states::done && enable) {
+
+        navigationFsm.new_state = navigation::states::driveToGoal;
+
+    }
+
+    else if(navigationFsm.state == navigation::states::done && !enable) {
+
+        navigationFsm.new_state = navigation::states::idle;
+
+    }
+
+    // Estado pickBoxForward: andar para frente 2s após chegar a warehouse de pick
+    else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
+        double elapsed_time = (ros::Time::now() - pick_box_forward_start_time).toSec();
+        
+        if (elapsed_time >= 2.0) {
+
+            in_pick_box_forward = false;
+
+            // fecha segmento atual
+            route_seg_.clear();
+
+            // abre próximo
+            buildNextSegment();
+            updateDesiredPoseSegment();
+            buildSmoothedPathFromSegment();
+            publishLineMarkersSegment();
+
+            completion_feedback_sent = false;
+
+            navigationFsm.new_state = (route_seg_.empty() && route_full_.empty())
+                                        ? navigation::states::idle
+                                        : navigation::states::done;
+        }
+    }
+
+    // Set states
+    navigationFsm.set_state();
+
+    // Compute Actions
+    if(navigationFsm.state == navigation::states::driveToGoal && enable) purePursuitFollowPath();
+    else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
+    else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
+        // Andar para frente com velocidade linear 0.1 m/s durante 2s
+        // Se estava indo backwards, andar para trás
+        v_d = 0.1;
+        w_d = 0.0;
+        ROS_INFO_THROTTLE(0.5, "NavigationController: pickBoxForward state - moving at %.2f m/s (backwards=%d)", 
+                         v_d, previousWaypoint.backwards ? 1 : 0);
+    }
+    else {
+        // Parar se não há waypoints ou estado inválido
+        v_d = 0.0;
+        w_d = 0.0;
+    }
+
+    // Affect outputs
+    // Se route está vazia, publicar zeros explicitamente para parar o robô
+    if (route_seg_.empty() && route_full_.empty() && (v_d == 0.0 && w_d == 0.0)) {
+        geometry_msgs::Twist cmd;
+        cmd.linear.x  = 0.0;
+        cmd.linear.y  = 0.0;
+        cmd.linear.z  = 0.0;
+        cmd.angular.x = 0.0;
+        cmd.angular.y = 0.0;
+        cmd.angular.z = 0.0;
+        velPub.publish(cmd);
+        ROS_INFO_THROTTLE(1.0, "NavigationController: Route empty, publishing stop command");
+    } else {
+        publishVel();
+    }
+
 }
 
-bool NavigationControllerSS::isYawDesired() {
-    double yaw_error = getDesiredYawError();
-    return std::fabs(yaw_error) <= params.yaw_tol;
+bool NavigationController::controlSrvCb(navigation_controller::NavigationControl::Request& req, navigation_controller::NavigationControl::Response& res) {
+
+    mode = req.command;
+
+    if (mode == "start") {
+
+        if (load_from_route) {
+            ROS_WARN("pure_pursuit_node: load_from_route=true mas este node nao carrega YAML route. Envia /nav_plan.");
+            res.success = false;
+            res.message = "pure_pursuit_node does not load route.yaml; send /nav_plan";
+            return true;
+        }
+
+        if (route_seg_.empty() && route_full_.empty()) {
+            res.success = false;
+            res.message = "no route loaded, waiting for /nav_plan";
+            ROS_WARN("pure_pursuit_node: No route loaded. Waiting for /nav_plan.");
+            return true;
+        }
+
+        res.success = true;
+        res.message = "started";
+        ROS_INFO("Navigation START");
+        return true;
+    }
+
+    else if(mode == "stop") {
+
+        route.clear();
+        previousWaypoint.id = -1;  // Reset previousWaypoint quando para
+        navigationFsm.new_state = navigation::states::idle;
+        poseDesired = poseCurr;
+        navigationFsm.set_state();
+
+        res.success = true; res.message = "stopped+cleared";
+        ROS_INFO("Navigation STOP");
+        return true;
+
+    }
+
+    else if(mode == "pause") {
+
+        navigationFsm.new_state = navigation::states::idle;
+        navigationFsm.set_state();
+
+        res.success = true; res.message = "paused";
+        ROS_INFO("Navigation PAUSE");
+        return true;
+
+    }
+
+    else if(mode == "unpause") {
+
+        res.success = true; res.message = "unpaused";
+        ROS_INFO("Navigation UNPAUSE");
+        return true;
+
+    }
+    
+    return false;
+
 }
 
-// ============================================================================
-// FUNÇÕES AUXILIARES
-// ============================================================================
-std::pair<double, double> NavigationControllerSS::normalize(double vx, double vy) const {
+void NavigationController::navPlanCallback(const plan_handler::NavPlan::ConstPtr& msg) {
+    ROS_INFO("NavigationController: Received NavPlan with %zu points", msg->points.size());
+    loadRouteFromNavPlan(msg);
+}
+
+
+int NavigationController::nearestPointIndex(const std::vector<Point>& p, double x, double y, int last_idx) {
+  if (p.empty()) return 0;
+  int n = (int)p.size();
+  int start = std::max(0, std::min(last_idx, n-1));
+
+  // procura localmente pra frente (rápido). se quiser robustez, pode ampliar janela.
+  int best = start;
+  double best_d2 = std::numeric_limits<double>::infinity();
+
+  int end = std::min(n, start + 200); // janela
+  for (int i = start; i < end; ++i) {
+    double dx = p[i].x - x, dy = p[i].y - y;
+    double d2 = dx*dx + dy*dy;
+    if (d2 < best_d2) { best_d2 = d2; best = i; }
+  }
+
+  // fallback: se piorou muito, varre tudo (opcional)
+  return best;
+}
+
+int NavigationController::lookaheadTargetIndex(const std::vector<Point>& p, double x, double y, int near_idx, double Ld) {
+  int n = (int)p.size();
+  int target = near_idx;
+  int end = std::min(n, near_idx + 2000);
+  for (int j = near_idx; j < end; ++j) {
+    if (std::hypot(p[j].x - x, p[j].y - y) >= Ld) { target = j; break; }
+  }
+  return target;
+}
+
+void NavigationController::buildSmoothedPathFromSegment() {
+  path_pts_.clear();
+  path_ready_ = false;
+
+  if (route_seg_.empty()) return;
+
+  std::vector<Point> raw;
+  raw.reserve(route_seg_.size() + 1);
+
+  raw.push_back({previousWaypoint.pose.x, previousWaypoint.pose.y});
+  for (const auto& wp : route_seg_) raw.push_back({wp.pose.x, wp.pose.y});
+
+  std::vector<Point> sm = raw;
+  if (raw.size() >= 3) sm = smoothPath(raw, param.smooth_radius_, (int)param.smooth_corner_steps_);
+
+  path_pts_ = std::move(sm);
+  last_near_idx_ = 0;
+  target_idx_ = 0;
+  path_ready_ = (path_pts_.size() >= 2);
+
+  ROS_INFO("PP: segment path built. raw=%zu smoothed=%zu", raw.size(), path_pts_.size());
+}
+
+
+void NavigationController::buildNextSegment() {
+  route_seg_.clear();
+
+  if (route_full_.empty()) {
+    segment_active_ = false;
+    return;
+  }
+
+  while (!route_full_.empty()) {
+
+    // adiciona o ponto atual
+    route_seg_.push_back(route_full_.front());
+    route_full_.pop_front();
+
+    // se acabou, fecha
+    if (route_full_.empty()) break;
+
+    // REGRA: se o PRÓXIMO ponto for backwards=true, fecha segmento AGORA
+    if (route_full_.front().backwards) {
+      break;
+    }
+  }
+
+  segment_active_ = !route_seg_.empty();
+
+  ROS_INFO("Segment built (break if next is backwards): %zu points (remaining full: %zu). Next_backwards=%d",
+           route_seg_.size(), route_full_.size(),
+           (!route_full_.empty() ? (route_full_.front().backwards ? 1 : 0) : 0));
+}
+
+bool NavigationController::isNearSegInit(double tol) const {
+  if (route_seg_.empty()) return true;  // ou false, como preferires
+
+  const WayPoint seg_init = route_seg_.front();
+
+  const double dx = seg_init.pose.x - poseCurr.x;
+  const double dy = seg_init.pose.y - poseCurr.y;
+  const double dist = std::hypot(dx, dy);
+
+  return dist <= tol;
+}
+
+std::pair<double, double> NavigationController::normalize(double vx, double vy) const {
     double length = std::hypot(vx, vy);
     if (length == 0.0) {
         return {0.0, 0.0};
@@ -163,7 +719,7 @@ std::pair<double, double> NavigationControllerSS::normalize(double vx, double vy
     return {vx / length, vy / length};
 }
 
-std::vector<Point> NavigationControllerSS::smoothPath(const std::vector<Point>& path_in,
+std::vector<Point> NavigationController::smoothPath(const std::vector<Point>& path_in,
                                                         double radius,
                                                         int corner_steps) const {
     if (path_in.size() < 2) {
@@ -229,125 +785,7 @@ std::vector<Point> NavigationControllerSS::smoothPath(const std::vector<Point>& 
     return new_path;
 }
 
-// ============================================================================
-// LOAD CONTROLLER PARAMETERS
-// ============================================================================
-void NavigationControllerSS::loadControllerParams() {
-    // Valores padrão
-    params.kx = 1.0;
-    params.ky = 50.0;
-    params.kth = 5.0;
-    params.v_max = 0.4;
-    params.w_max = 3.0;
-    params.v_ref = 0.2;
-    params.end_dist_tol = 0.05;
-    params.yaw_tol = 0.08;  // Tolerância de yaw (rad)
-    params.a_max = 0.5;     // Aceleração máxima (m/s²) - padrão igual ao navigation_controller
-    params.d_max = 0.5;     // Desaceleração máxima (m/s²) - padrão igual ao navigation_controller
-    params.smooth_radius = 0.01;
-    params.smooth_corner_steps = 8;
-    
-    // Carregar do ROS parameter server
-    nh.param("kx", params.kx, params.kx);
-    nh.param("ky", params.ky, params.ky);
-    nh.param("kth", params.kth, params.kth);
-    nh.param("v_max", params.v_max, params.v_max);
-    nh.param("w_max", params.w_max, params.w_max);
-    nh.param("v_ref", params.v_ref, params.v_ref);
-    nh.param("end_dist_tol", params.end_dist_tol, params.end_dist_tol);
-    nh.param("yaw_tol", params.yaw_tol, params.yaw_tol);
-    nh.param("a_max", params.a_max, params.a_max);
-    nh.param("d_max", params.d_max, params.d_max);
-    nh.param("smooth_radius", params.smooth_radius, params.smooth_radius);
-    nh.param("smooth_corner_steps", params.smooth_corner_steps, params.smooth_corner_steps);
-    
-    ROS_INFO("NavigationControllerSS parameters loaded: kx=%.2f, ky=%.2f, kth=%.2f, v_max=%.2f, w_max=%.2f, v_ref=%.2f, end_dist_tol=%.3f, yaw_tol=%.3f, a_max=%.2f, d_max=%.2f",
-              params.kx, params.ky, params.kth, params.v_max, params.w_max, params.v_ref, 
-              params.end_dist_tol, params.yaw_tol, params.a_max, params.d_max);
-}
-
-// ============================================================================
-// LOAD PATH FROM PARAMETERS
-// ============================================================================
-void NavigationControllerSS::loadPathFromParameters() {
-    XmlRpc::XmlRpcValue waypoints;
-    if (!nh.getParam("waypoints", waypoints)) {
-        ROS_WARN("NavigationControllerSS: No waypoints parameter found. Waiting for RViz goal or waypoints parameter.");
-        return;
-    }
-
-    std::vector<Point> waypoint_list;
-    for (int i = 0; i < static_cast<int>(waypoints.size()); ++i) {
-        Point wp;
-        wp.x = static_cast<double>(waypoints[i]["x"]);
-        wp.y = static_cast<double>(waypoints[i]["y"]);
-        waypoint_list.push_back(wp);
-        ROS_INFO("NavigationControllerSS: Waypoint %d: x=%.2f y=%.2f", i, wp.x, wp.y);
-    }
-
-    updatePathFromWaypoints(waypoint_list);
-}
-
-// ============================================================================
-// UPDATE PATH FROM WAYPOINTS
-// ============================================================================
-void NavigationControllerSS::updatePathFromWaypoints(const std::vector<Point>& waypoints) {
-    if (waypoints.empty()) {
-        ROS_WARN("NavigationControllerSS: Empty waypoints list");
-        return;
-    }
-
-    // Atualiza o caminho base
-    path = waypoints;
-    
-    // GARANTIR QUE HÁ PELO MENOS 2 PONTOS PARA O PATH FOLLOWER FUNCIONAR
-    // Se há apenas 1 waypoint, adicionar a posição atual como primeiro ponto
-    if (path.size() == 1) {
-        Point current_pos;
-        current_pos.x = curr_x;
-        current_pos.y = curr_y;
-        
-        // Verificar se já está no waypoint (dentro da tolerância)
-        const Point& goal = path[0];
-        double dist_to_goal = std::hypot(goal.x - curr_x, goal.y - curr_y);
-        
-        if (dist_to_goal <= params.end_dist_tol) {
-            // Já está no waypoint - não criar caminho, considerar que chegou
-            ROS_WARN("NavigationControllerSS: Already at waypoint (dist=%.3f <= tol=%.3f), skipping path creation", 
-                     dist_to_goal, params.end_dist_tol);
-            path.clear();
-            smooth.clear();
-            seg_idx = 0;
-            last_th = 0.0;
-            return;
-        }
-        
-        // Adicionar posição atual como primeiro ponto para criar um segmento válido
-        path.insert(path.begin(), current_pos);
-        ROS_INFO("NavigationControllerSS: Added current position as first point (single waypoint case)");
-    }
-    
-    // Gera o caminho suavizado
-    smooth = smoothPath(path, params.smooth_radius, params.smooth_corner_steps);
-
-    ROS_INFO("smooth size = %zu, path size = %zu", smooth.size(), path.size());
-    ROS_WARN("EFFECTIVE: smooth_radius=%.3f corner_steps=%d",
-         params.smooth_radius, params.smooth_corner_steps);
-    ROS_WARN("OLAAAAAAAAAAAA");
-
-    
-    // Reinicia o índice do segmento
-    seg_idx = 0;
-    last_th = 0.0;
-    
-    ROS_INFO("NavigationControllerSS: Path updated with %zu waypoints, smoothed to %zu points", 
-             path.size(), smooth.size());
-}
-
-// ============================================================================
-// computeRef: calcula referência no caminho (mesma lógica do C++ de simulação)
-// ============================================================================
-RefState NavigationControllerSS::computeRef(double x, double y, double theta,
+RefState NavigationController::computeRef(double x, double y, double theta,
                                             const std::vector<Point>& path_in,
                                             int seg_idx_in)
 {
@@ -403,7 +841,7 @@ RefState NavigationControllerSS::computeRef(double x, double y, double theta,
 // AREA FOR STATE SPACE LOGIC IMPLEMENTATION
 // ============================================================================
 // ============================================================================
-void NavigationControllerSS::computeStateSpaceControl() {
+void NavigationController::computeStateSpaceControl() {
     
     // ========================================================================
     // VERIFICAR SE HÁ CAMINHO DISPONÍVEL
@@ -498,193 +936,3 @@ void NavigationControllerSS::computeStateSpaceControl() {
     // ========================================================================
     w_d = w_target;
 }
-
-// ============================================================================
-// FSM ACTIONS: driveToGoal
-// ============================================================================
-void NavigationControllerSS::driveToGoal() {
-    // Se não há caminho, parar
-    if (smooth.empty()) {
-        v_d = 0.0;
-        w_d = 0.0;
-        return;
-    }
-    
-    // Usar o controlo de espaço de estados existente
-    computeStateSpaceControl();
-}
-
-// ============================================================================
-// FSM ACTIONS: turnToFinalYaw
-// ============================================================================
-void NavigationControllerSS::turnToFinalYaw() {
-    // Se não há caminho, parar
-    if (smooth.empty()) {
-        v_d = 0.0;
-        w_d = 0.0;
-        return;
-    }
-    
-    // Apenas controlo de orientação (velocidade linear = 0)
-    v_d = 0.0;
-    
-    double yaw_error = getDesiredYawError();
-    
-    // Controlo proporcional de yaw
-    w_d = params.kth * yaw_error;
-    
-    // Limitar velocidade angular
-    if (w_d > params.w_max) w_d = params.w_max;
-    else if (w_d < -params.w_max) w_d = -params.w_max;
-}
-
-// ============================================================================
-// FSM RUNNER
-// ============================================================================
-void NavigationControllerSS::navigationFsmRunner(const ros::TimerEvent&) {
-    
-    // ========================================================================
-    // UPDATE FSM TIMES
-    // ========================================================================
-    navigationFsm.update_tis();
-    
-    // ========================================================================
-    // CHECK ENABLE CONDITION
-    // ========================================================================
-    bool enable = !(mode == "stop" || mode == "pause") && !smooth.empty();
-    
-    // ========================================================================
-    // COMPUTE TRANSITIONS
-    // ========================================================================
-    if(navigationFsm.state == navigation_ss::states::idle && enable) {
-        navigationFsm.new_state = navigation_ss::states::driveToGoal;
-    }
-    
-    else if(navigationFsm.state == navigation_ss::states::driveToGoal && isPositionArrived() && enable) {
-        navigationFsm.new_state = navigation_ss::states::turnToFinalYaw;
-    }
-    
-    else if(navigationFsm.state == navigation_ss::states::turnToFinalYaw && isYawDesired() && enable) {
-        // Waypoint concluído - limpar caminho
-        smooth.clear();
-        path.clear();
-        seg_idx = 0;
-        last_th = 0.0;
-        
-        // Se não há mais waypoints, ir para idle
-        if(smooth.empty()) {
-            navigationFsm.new_state = navigation_ss::states::idle;
-        } else {
-            navigationFsm.new_state = navigation_ss::states::done;
-        }
-    }
-    
-    else if(navigationFsm.state == navigation_ss::states::turnToFinalYaw && !isPositionArrived() && enable) {
-        // Se o robô se afastou durante o alinhamento, voltar a navegar
-        navigationFsm.new_state = navigation_ss::states::driveToGoal;
-    }
-    
-    else if(navigationFsm.state == navigation_ss::states::done && enable) {
-        navigationFsm.new_state = navigation_ss::states::driveToGoal;
-    }
-    
-    else if(navigationFsm.state == navigation_ss::states::done && !enable) {
-        navigationFsm.new_state = navigation_ss::states::idle;
-    }
-    
-    // Se não há caminho durante driveToGoal ou turnToFinalYaw, ir para idle
-    if ((navigationFsm.state == navigation_ss::states::driveToGoal || 
-         navigationFsm.state == navigation_ss::states::turnToFinalYaw) && smooth.empty()) {
-        navigationFsm.new_state = navigation_ss::states::idle;
-    }
-    
-    // ========================================================================
-    // APPLY STATE TRANSITION
-    // ========================================================================
-    navigationFsm.set_state();
-    
-    // ========================================================================
-    // COMPUTE ACTIONS BASED ON STATE
-    // ========================================================================
-    if(navigationFsm.state == navigation_ss::states::driveToGoal && enable) {
-        driveToGoal();
-    }
-    else if(navigationFsm.state == navigation_ss::states::turnToFinalYaw && enable) {
-        turnToFinalYaw();
-    }
-    else {
-        // Parar se não há caminho ou estado inválido
-        v_d = 0.0;
-        w_d = 0.0;
-    }
-    
-    // ========================================================================
-    // PUBLISH VELOCITY
-    // ========================================================================
-    geometry_msgs::Twist cmd;
-    cmd.linear.x  = v_d;
-    cmd.linear.y  = 0.0;
-    cmd.linear.z  = 0.0;
-    cmd.angular.x = 0.0;
-    cmd.angular.y = 0.0;
-    cmd.angular.z = w_d;
-    velPub.publish(cmd);
-}
-
-// ============================================================================
-// SERVICE CALLBACK
-// ============================================================================
-bool NavigationControllerSS::controlSrvCb(navigation_controller::NavigationControl::Request& req,
-                                           navigation_controller::NavigationControl::Response& res) {
-    
-    mode = req.command;
-    
-    if(mode == "start") {
-        loadPathFromParameters();
-        
-        if (smooth.empty()) {
-            res.success = false;
-            res.message = "no waypoints in params";
-            return true;
-        }
-        
-        res.success = true;
-        res.message = "started";
-        ROS_INFO("NavigationControllerSS START");
-        return true;
-    }
-    
-    else if(mode == "stop") {
-        smooth.clear();
-        path.clear();
-        seg_idx = 0;
-        last_th = 0.0;
-        navigationFsm.new_state = navigation_ss::states::idle;
-        navigationFsm.set_state();
-        
-        res.success = true;
-        res.message = "stopped+cleared";
-        ROS_INFO("NavigationControllerSS STOP");
-        return true;
-    }
-    
-    else if(mode == "pause") {
-        navigationFsm.new_state = navigation_ss::states::idle;
-        navigationFsm.set_state();
-        
-        res.success = true;
-        res.message = "paused";
-        ROS_INFO("NavigationControllerSS PAUSE");
-        return true;
-    }
-    
-    else if(mode == "unpause") {
-        res.success = true;
-        res.message = "unpaused";
-        ROS_INFO("NavigationControllerSS UNPAUSE");
-        return true;
-    }
-    
-    return false;
-}
-

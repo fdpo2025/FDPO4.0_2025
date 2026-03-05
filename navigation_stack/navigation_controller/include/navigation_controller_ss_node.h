@@ -1,7 +1,5 @@
 //
-//  Navigation Controller - State Space Template
-//  Template with basic ROS integration (subscriptions/publications)
-//  State space control logic to be implemented
+//  Created by afonso on 07/09/2025
 //
 
 #pragma once
@@ -9,55 +7,59 @@
 #include <ros/ros.h>
 #include <geometry_msgs/Twist.h>
 #include <nav_msgs/Odometry.h>
-#include <geometry_msgs/PoseStamped.h>
-#include <tf2/utils.h>
-#include <XmlRpcValue.h>
-#include <navigation_controller/NavigationControl.h>
-#include "fsm.h"
-
-#include <vector>
-#include <utility>
+#include <tf2/utils.h> 
 #include <cmath>
 #include <algorithm>
+#include <deque> 
+#include <XmlRpcValue.h>
+#include <geometry_msgs/PoseStamped.h> 
+#include <navigation_controller/NavigationControl.h> 
 #include <string>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <dynamic_reconfigure/server.h>
+#include <navigation_controller/NavigationConfig.h>  
+#include <boost/bind.hpp>
+#include <visualization_msgs/Marker.h>                            
+#include <plan_handler/NavPlan.h>
+#include <plan_handler/CompletionFeedback.h>
 
-// ============================================================================
-// MAIN CLASS - NavigationControllerSS
-// ============================================================================
-// This class has only basic ROS infrastructure.
-// Colleague should implement state space control logic.
-// ============================================================================
 
-// ============================================================================
-// ESTRUTURA DE PARÂMETROS DO CONTROLADOR
-// ============================================================================
-struct SSControllerParams {
-    double kx;
-    double ky;
-    double kth;
-    double v_max;
-    double w_max;
-    double v_ref;
-    double end_dist_tol;
-    double yaw_tol;         // Tolerância de yaw para alinhamento final
-    double a_max;           // Aceleração máxima (m/s²)
-    double d_max;           // Desaceleração máxima (m/s²)
-    double smooth_radius;
-    int smooth_corner_steps;
-};
+#include "fsm.h"
 
-// ============================================================================
-// ESTRUTURAS DE DADOS
-// ============================================================================
-struct Point {
-    double x;
-    double y;
-};
 
 struct Pose {
-    double x;
-    double y;
-    double theta;
+
+    double x, y, theta;
+
+};
+
+struct WayPoint {
+
+    int id;
+    Pose pose;
+    bool align;
+    bool backwards;
+    double line_switch_ratio;  // % da linha para mudar para próxima (0.9 = 90%), -1 = usar global
+    double vel_lin_nom;        // Velocidade linear nominal para esta linha, -1 = usar global
+    bool pick_box;             // Se é warehouse de pick (true) ou drop (false)
+    bool is_warehouse;          // Se o ponto final é uma warehouse
+
+};
+
+struct Line{
+
+    WayPoint pi;
+    WayPoint pf;
+    
+};
+
+struct Point {
+  double x{0}, y{0};
+};
+
+struct PPState {
+  double x{0}, y{0}, yaw{0}, v{0};
 };
 
 struct RefState {
@@ -69,110 +71,164 @@ struct RefState {
     int seg_idx;
 };
 
-class NavigationControllerSS {
+
+class NavigationController {
 
     public:
-        NavigationControllerSS(ros::NodeHandle& nh_);
+        NavigationController(ros::NodeHandle& nh_);
+        void reconfigCb(navigation_controller::NavigationConfig &cfg, uint32_t level);
 
     private:
         ros::NodeHandle& nh;
 
-        // ====================================================================
-        // ROS INFRASTRUCTURE
-        // ====================================================================
+        tf2_ros::Buffer tfBuffer;
+        tf2_ros::TransformListener tfListener;
+
+        std::string mode; // "start" | "pause" | "unpause" | "stop""
+
+        Fsm navigationFsm;        
+        // both with respect to the map frame
+        Pose poseCurr, poseDesired;
+        double v_d, w_d;
+        double k1;  // dist2Line result (perpendicular distance with sign)
+        double line_progress;  // dist2Line result (0 = at pi, 1 = at pf, >1 = past pf)
+        WayPoint currentWaypoint, previousWaypoint;  // currentWaypoint: pi; previousWaypoint: pf
+
+        std::deque<WayPoint> route_full_;   // rota completa (tudo do NavPlan)
+        std::deque<WayPoint> route_seg_;    // segmento atual (até próxima warehouse)
+        bool path_ready_{false};
+        int last_near_idx_{0};
+        int target_idx_{0};
+
+        bool segment_active_ = false;
+
+        std::vector<Point> path_pts_;
+        
+        struct Parameters {
+
+            double v_nom, w_nom, w_min;
+            double v_min;  
+            double v_max;  
+            double a_max;  
+            double d_max;  
+            double kp_linear, kp_angular;
+            double k_line;  
+            double arrive_radius, yaw_tol;
+            int loop_rate_hz;
+            bool invert_odom_theta;                   
+                    
+            double kx;
+            double ky;
+            double kth;
+            double v_max;
+            double w_max;
+            double v_ref;
+            double a_max;           
+            double d_max;           
+            double smooth_radius;
+            int smooth_corner_steps;
+
+        };
+
+        dynamic_reconfigure::Server<navigation_controller::NavigationConfig> dr_srv_;
+        Parameters param;
+        void loadNavigationParams();
+
+        double normalizeAngle(double theta);
+
+        // Check if is suppose to move backwards
+        bool isBackwards();
+        // Align to reach the desired position
+        double getAlignYawError();
+        bool checkAlignYaw();
+        // Go to desired position
+        double getPositionError();
+        bool isPositionArrived();
+        // Align to the desired theta
+        double getDesiredYawError();
+        bool isYawDesired();
+
+        // Follow line functions
+        void dist2Line(double xi, double yi, double xf, double yf, double xr, double yr, double& distLine);
+        double getLineAngle(double pi_x, double pi_y, double pf_x, double pf_y);
+        double getLineError();
+        double getAlignLineYawError();
+
+        void hardStop();
+        void setTheta();              
+
+        std::deque<WayPoint> route;
+        void updateDesiredPoseSegment();
+        void loadRouteFromParameters();
+        
         ros::Subscriber odomSub;
-        ros::Subscriber rvizGoalSub;
+        void updateCurrPose(const nav_msgs::Odometry::ConstPtr& msg);
+
         ros::Publisher velPub;
+        void publishVel();
+        
+        ros::Publisher lineMarkerPub;
+        void publishLineMarkers();
+        
+        ros::Publisher navCompletionFeedbackPub;
+        bool completion_feedback_sent;  // Para enviar feedback apenas uma vez por linha
+        
+        // Estado para pick box forward
+        ros::Time pick_box_forward_start_time;
+        bool in_pick_box_forward;  // Se está no estado de andar para frente após pick
+        void skipNearbyWaypoints();  // Skip waypoints se já estamos perto deles
+
         ros::Timer controlTimer;
-        ros::ServiceServer controlSrv;
+        void navigationFsmRunner(const ros::TimerEvent&);
 
-        // ====================================================================
-        // CALLBACKS ROS
-        // ====================================================================
-        void odomCallback(const nav_msgs::Odometry::ConstPtr& msg);
-        void rvizGoalCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
+        bool rvizGoalAppend;
+        ros::Subscriber rvizGoalSub;
+        void rvizGoalCallBack(const geometry_msgs::PoseStamped::ConstPtr& msg);
 
-        // ====================================================================
-        // DATA AVAILABLE FOR CONTROLLER
-        // ====================================================================
-        // Colleague can use these variables in control logic
-        double curr_x, curr_y, curr_theta;  // Current robot pose
-        double v_d, w_d;                    // Desired velocities (output)
-        int loop_rate_hz;                   // Control loop rate (Hz)
+        ros::Subscriber navPlanSub;
+        void navPlanCallback(const plan_handler::NavPlan::ConstPtr& msg);
+        void loadRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg);
         
-        // ====================================================================
-        // FSM AND CONTROL MODE
-        // ====================================================================
-        Fsm navigationFsm;
-        std::string mode;  // "idle" | "start" | "pause" | "stop"
-        
-        // ====================================================================
-        // PARÂMETROS DO CONTROLADOR
-        // ====================================================================
-        SSControllerParams params;
-        void loadControllerParams();
+        bool load_from_route;  // Se deve carregar waypoints do route.yaml
 
-        // ====================================================================
-        // AREA FOR STATE SPACE LOGIC IMPLEMENTATION
-        // ====================================================================
-        // TODO: Add controller state variables
-        // TODO: Implement control calculation function
-        std::vector<Point> path;      // caminho base (poucos pontos)
-        std::vector<Point> smooth;    // caminho suavizado
-        int seg_idx;                  // índice do segmento atual
-        double last_th;               // último theta de referência
-        
-        // Funções auxiliares
+        // Services        
+        ros::ServiceServer controlSrv; 
+        bool controlSrvCb(navigation_controller::NavigationControl::Request& req, navigation_controller::NavigationControl::Response& res);
+      
+        int nearestPointIndex(const std::vector<Point>& p, double x, double y, int last_idx);
+        int lookaheadTargetIndex(const std::vector<Point>& p, double x, double y, int near_idx, double Ld);
+        void buildSmoothedPathFromSegment();
+        void purePursuitFollowPath();
+        void buildNextSegment();      
+        void publishLineMarkersSegment();               
+        bool isNearSegInit(double tol) const;
+
         std::pair<double,double> normalize(double vx, double vy) const;
         std::vector<Point> smoothPath(const std::vector<Point>& path_in,
                                       double radius,
-                                      int corner_steps) const;
-        
-        // Carregamento de waypoints
-        void loadPathFromParameters();
-        void updatePathFromWaypoints(const std::vector<Point>& waypoints);
-        
-        // Controlo
-        RefState computeRef(double x, double y, double theta,
-                            const std::vector<Point>& path,
-                            int seg_idx);
-        void computeStateSpaceControl();
-        
-        // ====================================================================
-        // FSM LOGIC
-        // ====================================================================
-        void navigationFsmRunner(const ros::TimerEvent&);
-        void driveToGoal();
-        void turnToFinalYaw();
-        
-        // ====================================================================
-        // HELPER FUNCTIONS FOR FSM
-        // ====================================================================
-        double normalizeAngle(double theta);
-        bool isPositionArrived();
-        bool isYawDesired();
-        double getPositionError();
-        double getDesiredYawError();
-        
-        // ====================================================================
-        // SERVICE CALLBACK
-        // ====================================================================
-        bool controlSrvCb(navigation_controller::NavigationControl::Request& req,
-                         navigation_controller::NavigationControl::Response& res);
+                                      int corner_steps) const;~
 
+        void computeStateSpaceControl()
+        RefState computeRef(double x, double y, double theta,
+                                            const std::vector<Point>& path_in,
+                                            int seg_idx_in)
+        
 };
 
-// ============================================================================
-// NAMESPACE FOR FSM STATES
-// ============================================================================
-namespace navigation_ss {
+namespace navigation {
+
     namespace states {
+
         enum {
+
             idle = 0,
             driveToGoal,
             turnToFinalYaw,
+            pickBoxForward,  // Estado para andar para frente após chegar a warehouse de pick
             done
-        };
-    }
-}
 
+        }; 
+    }
+    
+    
+}
