@@ -662,7 +662,7 @@ void NavigationController::buildSmoothedPathFromSegment() {
   for (const auto& wp : route_seg_) raw.push_back({wp.pose.x, wp.pose.y});
 
   std::vector<Point> sm = raw;
-  if (raw.size() >= 3) sm = smoothPath(raw, param.smooth_radius_, (int)param.smooth_corner_steps_);
+  if (raw.size() >= 3) sm = smoothPath(raw, param.smooth_radius, (int)param.smooth_corner_steps);
 
   path_pts_ = std::move(sm);
   last_near_idx_ = 0;
@@ -853,7 +853,7 @@ void NavigationController::computeStateSpaceControl() {
     double dy_goal = goal.y - poseCurr.y;
     double dist_goal = std::hypot(dx_goal, dy_goal);
 
-    if (dist_goal < end_dist_tol_ && seg_idx_ >= static_cast<int>(path_pts_.size()) - 1) {
+    if (dist_goal < param.end_dist_tol_ && seg_idx >= static_cast<int>(path_pts_.size()) - 1) {
         v_d = 0.0;
         w_d = 0.0;
         return;
@@ -862,10 +862,10 @@ void NavigationController::computeStateSpaceControl() {
     // ========================================================================
     // CALCULAR REFERÊNCIA NO CAMINHO SUAVIZADO
     // ========================================================================
-    RefState ref = computeRef(poseCurr.x, poseCurr.y, poseCurr.theta, path_pts_, seg_idx_);
+    RefState ref = computeRef(poseCurr.x, poseCurr.y, poseCurr.theta, path_pts_, seg_idx);
 
-    seg_idx_ = ref.seg_idx;
-    last_th_ = ref.theta_r;
+    seg_idx = ref.seg_idx;
+    last_th = ref.theta_r;
 
     const double xr      = ref.xr;
     const double yr      = ref.yr;
