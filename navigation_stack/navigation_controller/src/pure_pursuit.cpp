@@ -139,6 +139,7 @@ void NavigationController::loadNavigationParams() {
     nh.param("pp_kv",     param.pp_kv_,     1.0);
     nh.param("pp_Ld_min", param.pp_Ld_min_, 0.25);
     nh.param("pp_Ld_max", param.pp_Ld_max_, 1.20);
+    nh.param("pp_kc", param.pp_kc, 0.2);
             
 }
 
@@ -710,7 +711,7 @@ void NavigationController::purePursuitFollowPath() {
   const double alpha   = normalizeAngle(angle_to_target - yaw_eff);
 
   // Curvatura e comandos
-  const double kappa = 2.0 * std::sin(alpha) / std::max(1e-3, Ld);
+  const double kappa = 2.0 * std::sin(alpha) / std::max(1e-3, param.pp_kc);
 
   // Velocidade nominal do segmento:
   // Podes escolher: usar a velocidade do goal (warehouse) ou a mínima do segmento.

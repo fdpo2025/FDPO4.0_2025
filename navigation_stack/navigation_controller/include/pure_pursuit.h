@@ -117,6 +117,7 @@ class NavigationController {
             double pp_kv_;
             double pp_Ld_min_;
             double pp_Ld_max_;
+            double pp_kc;
 
         };
 
