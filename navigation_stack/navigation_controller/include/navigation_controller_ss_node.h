@@ -114,7 +114,7 @@ class NavigationController {
             double v_min;                         
             double kp_linear, kp_angular;
             double k_line;  
-            double arrive_radius, yaw_tol;
+            double arrive_radius;
             int loop_rate_hz;
             bool invert_odom_theta;                   
                     
