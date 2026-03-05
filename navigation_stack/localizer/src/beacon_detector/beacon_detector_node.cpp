@@ -20,8 +20,8 @@ BeaconDetector::BeaconDetector(ros::NodeHandle& nh, ros::NodeHandle& nh_priv) : 
     // Subscribe usando NodeHandle público (tópicos globais com "/" para absoluto)
     if (input_topic_type == "point_cloud") {
         // Usa a point cloud já compensada pelo mdistortion_compensator_node
-        pointCloudSub = nh.subscribe("/laser_scan_point_cloud_compensated", 10, &BeaconDetector::processPointCloud, this);
-        ROS_INFO("BeaconDetector subscribed to compensated PointCloud topic: /laser_scan_point_cloud_compensated");
+        pointCloudSub = nh.subscribe("/laser_scan_point_cloud", 10, &BeaconDetector::processPointCloud, this);
+        ROS_INFO("BeaconDetector subscribed to compensated PointCloud topic: /laser_scan_point_cloud");
     } else {
         sensorDataSub = nh.subscribe("/base_scan", 10, &BeaconDetector::processSensorData, this);
         ROS_INFO("BeaconDetector subscribed to LaserScan topic: /base_scan");
