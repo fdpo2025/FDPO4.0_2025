@@ -853,7 +853,7 @@ void NavigationController::computeStateSpaceControl() {
     double dy_goal = goal.y - poseCurr.y;
     double dist_goal = std::hypot(dx_goal, dy_goal);
 
-    if (dist_goal < param.end_dist_tol_ && seg_idx >= static_cast<int>(path_pts_.size()) - 1) {
+    if (dist_goal < param.end_dist_tol && seg_idx >= static_cast<int>(path_pts_.size()) - 1) {
         v_d = 0.0;
         w_d = 0.0;
         return;
