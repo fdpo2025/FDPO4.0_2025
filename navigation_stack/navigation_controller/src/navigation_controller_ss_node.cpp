@@ -924,11 +924,12 @@ void NavigationController::computeStateSpaceControl() {
     w_d = w_target;
 
     if(backwards){
-        v_d = -v_r;
+        v_d = -v_r/2;
         w_d = 0;
 
         if (isNearSegInit(0.1)) {  
-         route_seg_.front().backwards = false;
+         route_seg_.front().backwards = true;
+         v_d = 0;
         } 
     }
 }
