@@ -28,7 +28,7 @@ pp_vref: 0.2
 smooth_radius: 0.1
 smooth_corner_steps: 30
 
-pp_L0: 0.01
+pp_L0: 0.1
 pp_kv: 0.0
 pp_Ld_min: 0.25
 pp_Ld_max: 1.20
