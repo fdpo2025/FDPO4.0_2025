@@ -927,7 +927,7 @@ void NavigationController::computeStateSpaceControl() {
         v_d = -v_r;
         w_d = 0;
 
-        if (isNearSegInit(0.05)) {  
+        if (isNearSegInit(0.1)) {  
          route_seg_.front().backwards = false;
         } 
     }
