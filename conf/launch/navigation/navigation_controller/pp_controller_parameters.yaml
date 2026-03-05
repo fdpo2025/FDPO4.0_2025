@@ -1,0 +1,35 @@
+# ============================================================================
+# PARÂMETROS GERAIS (usados por ambos goToXY e followLine)
+# ============================================================================
+
+loop_rate_hz: 100  # Frequência do control loop (Hz)
+
+# Limites de velocidade
+v_nom: 0.2          # Velocidade linear nominal (m/s)
+v_max: 0.2          # Velocidade linear máxima (m/s) - limite absoluto
+v_min: 0.01         # Velocidade linear mínima (m/s)
+w_nom: 1.0          # Velocidade angular nominal (rad/s)
+w_min: 0.0          # Velocidade angular mínima (rad/s)
+
+# Limites de aceleração/desaceleração
+a_max: 0.5          # Aceleração máxima (m/s²)
+d_max: 0.5          # Desaceleração máxima (m/s²)
+
+# Tolerâncias gerais
+arrive_radius: 0.05 # Raio de chegada ao waypoint (m)
+yaw_tol: 0.08       # Tolerância de orientação (rad)
+
+# ============================================================================
+# PARÂMETROS Pure Pursuit
+# ============================================================================
+
+pp_Ld: 0.9
+pp_vref: 0.2
+smooth_radius: 0.1
+smooth_corner_steps: 30
+
+pp_L0: 0.05
+pp_kv: 0.0
+pp_Ld_min: 0.25
+pp_Ld_max: 1.20
+pp_kc: 0.2

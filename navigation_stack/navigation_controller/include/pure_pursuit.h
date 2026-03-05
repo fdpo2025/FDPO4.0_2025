@@ -62,15 +62,6 @@ struct PPState {
   double x{0}, y{0}, yaw{0}, v{0};
 };
 
-struct RefState {
-    double xr;
-    double yr;
-    double theta_r;
-    double v_r;
-    double w_r;
-    int seg_idx;
-};
-
 
 class NavigationController {
 
@@ -100,10 +91,6 @@ class NavigationController {
         int last_near_idx_{0};
         int target_idx_{0};
 
-        int seg_idx{0};
-        double last_th{0.0};
-        
-
         bool segment_active_ = false;
 
         std::vector<Point> path_pts_;
@@ -111,25 +98,26 @@ class NavigationController {
         struct Parameters {
 
             double v_nom, w_nom, w_min;
-            double v_min;                         
+            double v_min;  
+            double v_max;  
+            double a_max;  
+            double d_max;  
             double kp_linear, kp_angular;
             double k_line;  
-            double arrive_radius;
+            double arrive_radius, yaw_tol;
             int loop_rate_hz;
-            bool invert_odom_theta;                   
-                    
-            double kx;
-            double ky;
-            double kth;
-            double v_max;
-            double w_max;
-            double v_ref;
-            double end_dist_tol;
-            double yaw_tol;         // Tolerância de yaw para alinhamento final
-            double a_max;           
-            double d_max;           
-            double smooth_radius;
-            int smooth_corner_steps;
+            bool invert_odom_theta;  
+            
+            
+            double pp_Ld_;
+            double pp_vref_;
+            double smooth_radius_;
+            int smooth_corner_steps_;
+            double pp_L0_;
+            double pp_kv_;
+            double pp_Ld_min_;
+            double pp_Ld_max_;
+            double pp_kc;
 
         };
 
@@ -210,11 +198,7 @@ class NavigationController {
         std::vector<Point> smoothPath(const std::vector<Point>& path_in,
                                       double radius,
                                       int corner_steps) const;
-
-        void computeStateSpaceControl();
-        RefState computeRef(double x, double y, double theta,
-                                            const std::vector<Point>& path_in,
-                                            int seg_idx_in);       
+       
         
 };
 

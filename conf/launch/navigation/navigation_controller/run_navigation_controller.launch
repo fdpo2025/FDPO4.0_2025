@@ -1,22 +1,37 @@
 <launch>
 
-    <arg name="odom_topic" default="/odometry/filtered" doc="Tópico de odometria a subscrever"/>
-    <arg name="ss" default="false" doc="Use state space controller (true) or original controller (false)"/>
-    
-    <!-- Original Controller -->
-    <node unless="$(arg ss)" pkg="navigation_controller" type="navigation_controller_node" name="navigation_controller_node" output="screen">
-        <rosparam file="$(find conf)/launch/navigation/navigation_controller/route.yaml" command="load"/>
-        <rosparam file="$(find conf)/launch/navigation/navigation_controller/navigation_parameters.yaml" command="load"/>
-        <param name="odom_topic" value="$(arg odom_topic)"/>
-        <param name="load_from_route" value="false"/>
-    </node>
-    
-    <!-- State Space Controller -->
-    <node if="$(arg ss)" pkg="navigation_controller" type="navigation_controller_ss_node" name="navigation_controller_node" output="screen">
-        <rosparam file="$(find conf)/launch/navigation/navigation_controller/route.yaml" command="load"/>
-        <rosparam file="$(find conf)/launch/navigation/navigation_controller/ss_controller_parameters.yaml" command="load"/>
-        <param name="odom_topic" value="$(arg odom_topic)"/>
-        <param name="load_from_route" value="false"/>
-    </node>
-    
+  <arg name="odom_topic" default="/odometry/filtered" doc="Tópico de odometria a subscrever"/>
+  <arg name="ss" default="false" doc="Use state space controller (true) or original controller (false)"/>
+  <arg name="pp" default="false" doc="Use pure pursuit controller (true)"/>
+
+  <!-- Original Controller: só se NÃO for ss E NÃO for pp -->
+  <node if="$(eval (not arg('ss')) and (not arg('pp')) )"
+        pkg="navigation_controller" type="navigation_controller_node"
+        name="navigation_controller_node" output="screen">
+    <rosparam file="$(find conf)/launch/navigation/navigation_controller/route.yaml" command="load"/>
+    <rosparam file="$(find conf)/launch/navigation/navigation_controller/navigation_parameters.yaml" command="load"/>
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+    <param name="load_from_route" value="false"/>
+  </node>
+
+  <!-- State Space Controller -->
+  <node if="$(arg ss)"
+        pkg="navigation_controller" type="navigation_controller_ss_node"
+        name="navigation_controller_ss_node" output="screen">
+    <rosparam file="$(find conf)/launch/navigation/navigation_controller/route.yaml" command="load"/>
+    <rosparam file="$(find conf)/launch/navigation/navigation_controller/ss_controller_parameters.yaml" command="load"/>
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+    <param name="load_from_route" value="false"/>
+  </node>
+
+  <!-- Pure Pursuit Controller -->
+  <node if="$(arg pp)"
+        pkg="navigation_controller" type="pure_pursuit_node"
+        name="pure_pursuit_node" output="screen">
+    <rosparam file="$(find conf)/launch/navigation/navigation_controller/route.yaml" command="load"/>
+    <rosparam file="$(find conf)/launch/navigation/navigation_controller/pp_controller_parameters.yaml" command="load"/>
+    <param name="odom_topic" value="$(arg odom_topic)"/>
+    <param name="load_from_route" value="false"/>
+  </node>
+
 </launch>

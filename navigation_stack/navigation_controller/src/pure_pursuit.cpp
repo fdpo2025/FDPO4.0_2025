@@ -1,4 +1,4 @@
-#include "navigation_controller_ss_node.h"
+#include "pure_pursuit.h"
 #include <cmath>
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0), 
@@ -117,37 +117,29 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
 
 void NavigationController::loadNavigationParams() {
 
-    
-    nh.param("w_nom", param.w_nom, 1.2);             
+    nh.param("v_nom", param.v_nom, 0.4);
+    nh.param("w_nom", param.w_nom, 1.2);
+    nh.param("w_min", param.w_min, 0.1);
+    nh.param("v_min", param.v_min, 0.07);
+    nh.param("v_max", param.v_max, 0.5);  // Limite máximo de velocidade (m/s)
+    nh.param("a_max", param.a_max, 0.5);
+    nh.param("d_max", param.d_max, 0.5);
+    nh.param("kp_linear", param.kp_linear, 5.0);
+    nh.param("kp_angular", param.kp_angular, 2.0/M_PI * param.w_nom);
+    nh.param("k_line", param.k_line, 1.0);  // Ganho para correção de linha (default: 2.0)
     nh.param("arrive_radius",  param.arrive_radius, 0.05);
     nh.param("yaw_tol",param.yaw_tol, 0.08);
     nh.param("loop_rate_hz", param.loop_rate_hz, 30);
-
-    param.kx = 1.0;
-    param.ky = 50.0;
-    param.kth = 5.0;
-    param.v_max = 0.4;
-    param.w_max = 3.0;
-    param.v_ref = 0.2; 
-    param.end_dist_tol = 0.05;
-    param.yaw_tol = 0.08;  // Tolerância de yaw (rad)   
-    param.a_max = 0.5;     // Aceleração máxima (m/s²) - padrão igual ao navigation_controller
-    param.d_max = 0.5;     // Desaceleração máxima (m/s²) - padrão igual ao navigation_controller
-    param.smooth_radius = 0.01;
-    param.smooth_corner_steps = 8;
        
-    nh.param("kx", param.kx, param.kx);
-    nh.param("ky", param.ky, param.ky);
-    nh.param("kth", param.kth, param.kth);
-    nh.param("v_max", param.v_max, param.v_max);
-    nh.param("w_max", param.w_max, param.w_max);
-    nh.param("v_ref", param.v_ref, param.v_ref); 
-    nh.param("end_dist_tol", param.end_dist_tol, param.end_dist_tol);
-    nh.param("yaw_tol", param.yaw_tol, param.yaw_tol);   
-    nh.param("a_max", param.a_max, param.a_max);
-    nh.param("d_max", param.d_max, param.d_max);
-    nh.param("smooth_radius", param.smooth_radius, param.smooth_radius);
-    nh.param("smooth_corner_steps", param.smooth_corner_steps, param.smooth_corner_steps);
+    nh.param("pp_Ld", param.pp_Ld_, 0.9);
+    nh.param("pp_vref", param.pp_vref_, 0.3);
+    nh.param("smooth_radius", param.smooth_radius_, 0.25);
+    nh.param("smooth_corner_steps", param.smooth_corner_steps_, 6);
+    nh.param("pp_L0",     param.pp_L0_,     0.35);
+    nh.param("pp_kv",     param.pp_kv_,     1.0);
+    nh.param("pp_Ld_min", param.pp_Ld_min_, 0.25);
+    nh.param("pp_Ld_max", param.pp_Ld_max_, 1.20);
+    nh.param("pp_kc", param.pp_kc, 0.2);
             
 }
 
@@ -516,7 +508,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     navigationFsm.set_state();
 
     // Compute Actions
-    if(navigationFsm.state == navigation::states::driveToGoal && enable) computeStateSpaceControl();
+    if(navigationFsm.state == navigation::states::driveToGoal && enable) purePursuitFollowPath();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         // Andar para frente com velocidade linear 0.1 m/s durante 2s
@@ -662,7 +654,7 @@ void NavigationController::buildSmoothedPathFromSegment() {
   for (const auto& wp : route_seg_) raw.push_back({wp.pose.x, wp.pose.y});
 
   std::vector<Point> sm = raw;
-  if (raw.size() >= 3) sm = smoothPath(raw, param.smooth_radius, (int)param.smooth_corner_steps);
+  if (raw.size() >= 3) sm = smoothPath(raw, param.smooth_radius_, (int)param.smooth_corner_steps_);
 
   path_pts_ = std::move(sm);
   last_near_idx_ = 0;
@@ -672,6 +664,118 @@ void NavigationController::buildSmoothedPathFromSegment() {
   ROS_INFO("PP: segment path built. raw=%zu smoothed=%zu", raw.size(), path_pts_.size());
 }
 
+void NavigationController::purePursuitFollowPath() {
+  // Agora o PP usa o segmento ativo
+  if (!path_ready_ || path_pts_.size() < 2 || route_seg_.empty()) {
+    v_d = 0.0; w_d = 0.0;
+    return;
+  }
+
+  // Estado atual
+  PPState st;
+  st.x   = poseCurr.x;
+  st.y   = poseCurr.y;
+  st.yaw = poseCurr.theta;
+  st.v   = std::abs(v_d);
+
+  // Waypoint final do segmento (normalmente a warehouse)
+  const WayPoint seg_init = route_seg_.front();
+  const WayPoint& seg_goal = route_seg_.back();
+  
+  // Lookahead (fixo)
+  //const double Ld = pp_Ld_;
+
+  // velocidade "do controlador" (usa o que tens agora + o que queres impor)
+  const double v_abs = std::abs(v_d);  // ou std::abs(st.v), mas v_d é o comando atual
+
+  double Ld = param.pp_L0_ + param.pp_kv_ * v_abs;
+  //Ld = std::clamp(Ld, param.pp_Ld_min_, param.pp_Ld_max_);
+
+  // nearest e target no path suavizado
+  int near_idx = nearestPointIndex(path_pts_, st.x, st.y, last_near_idx_);
+  int tgt_idx  = lookaheadTargetIndex(path_pts_, st.x, st.y, near_idx, Ld);
+
+  last_near_idx_ = near_idx;
+  target_idx_    = tgt_idx;
+
+  const auto& tgt = path_pts_[tgt_idx];
+
+  // Ângulo para o target
+  const double angle_to_target = std::atan2(tgt.y - st.y, tgt.x - st.x);
+
+  // -------------------------------------------------------
+  // BACKWARDS: calcular alpha com yaw invertido (se segmento em ré)
+  // -------------------------------------------------------
+  const bool backwards = seg_init.backwards; // ou isBackwards() se já estiver adaptado
+  const double yaw_eff = backwards ? normalizeAngle(st.yaw + M_PI) : st.yaw;
+  const double alpha   = normalizeAngle(angle_to_target - yaw_eff);
+
+  // Curvatura e comandos
+  const double kappa = 2.0 * std::sin(alpha) / std::max(1e-3, param.pp_kc);
+
+  // Velocidade nominal do segmento:
+  // Podes escolher: usar a velocidade do goal (warehouse) ou a mínima do segmento.
+  double v_ref = param.pp_vref_;
+
+  // opção A (simples): usar vel do waypoint final se existir
+  //if (seg_goal.vel_lin_nom > 0) v_ref = seg_goal.vel_lin_nom;
+
+  // opcional: reduzir velocidade ao aproximar do fim do segmento
+  // (fica suave e evita overshoot)
+  const double dist_to_goal = std::hypot(seg_goal.pose.x - st.x, seg_goal.pose.y - st.y);
+  if (dist_to_goal < 0.20) {               // 20 cm antes do fim
+    v_ref = std::min(v_ref, 0.10);         // limita a 0.10 m/s
+  }
+  if (dist_to_goal < 0.10) {               // 10 cm
+    v_ref = std::min(v_ref, 0.05);         // limita a 0.05 m/s
+  }
+
+  double w_cmd = v_ref * kappa;
+
+  // Saturação de w
+  if (w_cmd > param.w_nom)       w_cmd = param.w_nom;
+  else if (w_cmd < -param.w_nom) w_cmd = -param.w_nom;
+
+  // v_target com limites + acel/dec
+  const double dt = 1.0 / param.loop_rate_hz;
+
+  double v_target = std::clamp(v_ref, 0.0, param.v_max);
+  if (v_target > 0.0 && v_target < param.v_min) v_target = param.v_min;
+
+  const double v_curr_abs = std::abs(v_d);
+
+  double v_next = v_curr_abs;
+  if (v_target > v_curr_abs) {
+    v_next += param.a_max * dt;
+    if (v_next > v_target) v_next = v_target;
+  } else {
+    v_next -= param.d_max * dt;
+    if (v_next < v_target) v_next = v_target;
+  }
+
+  // Se erro angular muito grande, zera linear (mantém tua lógica)
+  const double alpha_deg = std::abs(alpha) * 180.0 / M_PI;
+  if (alpha_deg > 93.0) v_next = 0.0;
+
+  // Aplicar sinal de velocidade conforme backwards
+  v_d = v_next;
+  w_d = w_cmd;
+
+  if(backwards){
+    v_d = -v_next;
+    w_d = 0;
+
+    if (isNearSegInit(0.05)) {  
+       route_seg_.pop_front();
+    } 
+  }
+
+
+  ROS_INFO_THROTTLE(0.5,
+    "[PP_SEG] near=%d tgt=%d Ld=%.2f dist_goal=%.2f v=%.2f w=%.2f backwards=%d",
+    near_idx, tgt_idx, Ld, dist_to_goal, v_d, w_d, backwards ? 1 : 0
+  );
+}
 
 void NavigationController::buildNextSegment() {
   route_seg_.clear();
@@ -703,6 +807,17 @@ void NavigationController::buildNextSegment() {
            (!route_full_.empty() ? (route_full_.front().backwards ? 1 : 0) : 0));
 }
 
+bool NavigationController::isNearSegInit(double tol) const {
+  if (route_seg_.empty()) return true;  // ou false, como preferires
+
+  const WayPoint seg_init = route_seg_.front();
+
+  const double dx = seg_init.pose.x - poseCurr.x;
+  const double dy = seg_init.pose.y - poseCurr.y;
+  const double dist = std::hypot(dx, dy);
+
+  return dist <= tol;
+}
 
 std::pair<double, double> NavigationController::normalize(double vx, double vy) const {
     double length = std::hypot(vx, vy);
@@ -776,172 +891,4 @@ std::vector<Point> NavigationController::smoothPath(const std::vector<Point>& pa
 
     new_path.push_back(path_in.back());
     return new_path;
-}
-
-RefState NavigationController::computeRef(double x, double y, double theta,
-                                            const std::vector<Point>& path_in,
-                                            int seg_idx_in)
-{
-    // Acede aos parâmetros via membro da classe
-    double v_ref = param.v_ref;
-    
-    int N = static_cast<int>(path_in.size());
-
-    if (seg_idx_in >= N - 1) {
-        Point last = path_in.back();
-        // Usa o último theta conhecido ou calcula a partir da posição atual
-        double theta_final = (N >= 2) ? std::atan2(last.y - path_in[N-2].y, 
-                                                     last.x - path_in[N-2].x) : last_th;
-        return { last.x, last.y, theta_final, 0.0, 0.0, seg_idx_in };
-    }
-
-    Point A = path_in[seg_idx_in];
-    Point B = path_in[seg_idx_in + 1];
-
-    double ABx = B.x - A.x;
-    double ABy = B.y - A.y;
-    double APx = x - A.x;
-    double APy = y - A.y;
-
-    double AB2 = ABx*ABx + ABy*ABy;
-    if (AB2 < 1e-6) {
-        // Segmento degenerado: tenta o seguinte
-        return computeRef(x, y, theta, path_in, seg_idx_in + 1);
-    }
-
-    // projeção escalar
-    double s = (APx * ABx + APy * ABy) / AB2;
-
-    // passou do fim? avança segmento
-    if (s > 1.0) {
-        return computeRef(x, y, theta, path_in, seg_idx_in + 1);
-    }
-
-    // clamp [0,1]
-    if (s < 0.0) s = 0.0;
-    if (s > 1.0) s = 1.0;
-
-    double xr = A.x + s * ABx;
-    double yr = A.y + s * ABy;
-    double theta_r = std::atan2(ABy, ABx);
-
-    return { xr, yr, theta_r, v_ref, 0.0, seg_idx_in };
-}
-
-
-// ============================================================================
-// ============================================================================
-// AREA FOR STATE SPACE LOGIC IMPLEMENTATION
-// ============================================================================
-// ============================================================================
-void NavigationController::computeStateSpaceControl() {
-
-    // ========================================================================
-    // VERIFICAR SE HÁ CAMINHO DISPONÍVEL
-    // ========================================================================
-    if (path_pts_.empty()) {
-        v_d = 0.0;
-        w_d = 0.0;
-        return;
-    }
-    
-    const WayPoint seg_init = route_seg_.front();
-    const bool backwards = seg_init.backwards; // ou isBackwards() se já estiver adaptado
-
-    // ========================================================================
-    // VERIFICAR SE JÁ ESTAMOS NO FIM DO CAMINHO
-    // ========================================================================
-    const Point& goal = path_pts_.back();
-    double dx_goal = goal.x - poseCurr.x;
-    double dy_goal = goal.y - poseCurr.y;
-    double dist_goal = std::hypot(dx_goal, dy_goal);
-
-    if (dist_goal < param.end_dist_tol && seg_idx >= (int)path_pts_.size() - 2) {
-        v_d = 0.0; w_d = 0.0; return;
-    }
-
-    // ========================================================================
-    // CALCULAR REFERÊNCIA NO CAMINHO SUAVIZADO
-    // ========================================================================
-    RefState ref = computeRef(poseCurr.x, poseCurr.y, poseCurr.theta, path_pts_, seg_idx);
-
-    seg_idx = ref.seg_idx;
-    last_th = ref.theta_r;
-
-    const double xr      = ref.xr;
-    const double yr      = ref.yr;
-    const double theta_r = ref.theta_r;
-    const double v_r     = ref.v_r;
-    const double w_r     = ref.w_r;
-
-    const double theta = poseCurr.theta;
-
-    // ========================================================================
-    // CALCULAR ERRO NO REFERENCIAL DO ROBÔ
-    // ========================================================================
-    const double dx = xr - poseCurr.x;
-    const double dy = yr - poseCurr.y;
-
-    const double ex =  std::cos(theta) * dx + std::sin(theta) * dy;
-    const double ey = -std::sin(theta) * dx + std::cos(theta) * dy;
-
-    double e_theta = theta_r - theta;
-    e_theta = std::atan2(std::sin(e_theta), std::cos(e_theta)); // [-pi, pi]
-
-    // ========================================================================
-    // APLICAR LEI DE CONTROLO DE ESPAÇO DE ESTADOS
-    // ========================================================================
-    double v_target = v_r * std::cos(e_theta) + param.kx * ex;
-    double w_target = w_r + param.ky * v_r * ey + param.kth * std::sin(e_theta);
-    
-    // ========================================================================
-    // SATURAÇÃO DE VELOCIDADES (limites máximos)
-    // ========================================================================
-    if (v_target >  param.v_max) v_target =  param.v_max;
-    if (v_target < -param.v_max) v_target = -param.v_max;
-    if (w_target >  param.w_max) w_target =  param.w_max;
-    if (w_target < -param.w_max) w_target = -param.w_max;
-
-    // ========================================================================
-    // LIMITAÇÃO DE ACELERAÇÃO/DESACELERAÇÃO
-    // ========================================================================
-    const double dt = 1.0 / std::max(1, param.loop_rate_hz);
-
-    if (v_target > v_d) {
-        v_d += param.a_max * dt;
-        if (v_d > v_target) v_d = v_target;
-    } else {
-        v_d -= param.d_max * dt;
-        if (v_d < v_target) v_d = v_target;
-    }
-
-    if (v_d >  param.v_max) v_d =  param.v_max;
-    if (v_d < -param.v_max) v_d = -param.v_max;
-
-    // ========================================================================
-    // VELOCIDADE ANGULAR (direto)
-    // ========================================================================
-    w_d = w_target;
-
-    if(backwards){
-        v_d = -v_r/2;
-        w_d = 0;
-
-        if (isNearSegInit(0.1)) {  
-         route_seg_.front().backwards = true;
-         v_d = 0;
-        } 
-    }
-}
-
-bool NavigationController::isNearSegInit(double tol) const {
-  if (route_seg_.empty()) return true;  // ou false, como preferires
-
-  const WayPoint seg_init = route_seg_.front();
-
-  const double dx = seg_init.pose.x - poseCurr.x;
-  const double dy = seg_init.pose.y - poseCurr.y;
-  const double dist = std::hypot(dx, dy);
-
-  return dist <= tol;
 }
