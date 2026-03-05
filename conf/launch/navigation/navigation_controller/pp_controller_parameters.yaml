@@ -25,8 +25,8 @@ yaw_tol: 0.08       # Tolerância de orientação (rad)
 
 pp_Ld: 0.9
 pp_vref: 0.2
-smooth_radius: 0.25
-smooth_corner_steps: 20
+smooth_radius: 0.1
+smooth_corner_steps: 30
 
 pp_L0: 0.01
 pp_kv: 0.0
