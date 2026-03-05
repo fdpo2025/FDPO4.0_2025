@@ -156,7 +156,7 @@ void NavigationController::loadNavigationParams() {
     // FollowLine parameters (from Pascal code)
     nh.param("gain_fwd", param.gain_fwd, 1.0);      // GAIN_FWD
     nh.param("vel_lin_nom", param.vel_lin_nom, 0.3);  // VEL_LIN_NOM
-    nh.param("dist_da", param.dist_da, 0.3);       // DIST_DA
+    nh.param("dist_da", param.dist_da, 0.15);       // DIST_DA
     nh.param("tol_findist", param.tol_findist, 0.05); // TOL_FINDIST
     nh.param("max_etf", param.max_etf, 0.2);       // MAX_ETF (rad)
     nh.param("tol_init_line", param.tol_init_line, 0.1); // Tolerância de distância à linha para GoTo_Init -> Follow_Line (m)
@@ -781,39 +781,36 @@ void NavigationController::followLine() {
         
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-        // 1. CÁLCULO DA VELOCIDADE ANGULAR (Mantém o foco na linha)
-        // Usamos os ganhos já definidos para garantir que ele não sai do trilho
+        // 1. CÁLCULO ANGULAR (Mantém o trilho)
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
-
-        // Limitar velocidade angular para segurança
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
-        // 2. CÁLCULO DA VELOCIDADE LINEAR DINÂMICA
-        // Queremos que ele use a velocidade nominal (vel_lin_nom_eff) enquanto puder
-        // e que abrande proporcionalmente ao erro de distância (kp_linear * error_dist)
-        double v_ramp = param.kp_linear * error_dist;
-        
-        // O v_target será o menor valor entre a rampa e a velocidade máxima permitida
+        // 2. RAMPA DE DESACELERAÇÃO POR DISTÂNCIA
+        // Para a descida ser visível em distâncias curtas (0.15m), precisamos de um kp_linear menor
+        // ou de uma lógica que sinta a proximidade.
+        // Exemplo: se error_dist = 0.05m, v_ramp será 0.1m/s (com kp=2.0)
+        double v_ramp = 2.0 * error_dist; 
         double v_target = std::min(v_ramp, vel_lin_nom_eff);
 
-        // 3. FATOR DE AMORTECIMENTO POR ORIENTAÇÃO (O "Travão")
-        // Se o erro angular for grande, o cosseno aproxima-se de 0, abrandando o robô.
-        // Se estiver perfeitamente alinhado (0 rad), o fator é 1.0 (velocidade máxima).
-        double alignment_factor = std::cos(error_ang);
-        if (alignment_factor < 0) alignment_factor = 0; // Evita velocidades negativas aqui
+        // 3. O "DEGRAU" POR ORIENTAÇÃO (A descida no meio do gráfico)
+        // Em vez de um cosseno suave, vamos penalizar agressivamente se o erro angular > 5 graus
+        double orientation_penalty = 1.0;
+        double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
 
-        // Aplicamos o fator de alinhamento à velocidade alvo
-        v_d = v_target * alignment_factor;
-
-        // 4. GARANTIA DE MOVIMENTO (v_min)
-        // Para não deixar o robô "morrer" a 1cm da caixa, garantimos uma v_min
-        if (v_d < param.v_min && error_dist > param.arrive_radius) {
-            v_d = param.v_min;
+        if (error_ang_deg > 5.0) {
+            // Se estiver mal orientado, corta a velocidade para metade ou menos
+            orientation_penalty = 0.3; 
         }
-        
-        ROS_INFO_THROTTLE(0.5, "[APPROACHING] Dist: %.3f | V_target: %.2f | Align: %.2f | Final V: %.2f", 
-                        error_dist, v_target, alignment_factor, v_d);
+
+        // 4. VELOCIDADE FINAL
+        v_d = v_target * orientation_penalty;
+
+        // Garante que não para totalmente antes do contacto, mas numa velocidade de aproximação segura
+        if (v_d < param.v_min) v_d = param.v_min;
+
+        ROS_INFO_THROTTLE(0.2, "[APPROACHING] Dist: %.3f | ErrAng: %.1f deg | V: %.2f", 
+                        error_dist, error_ang_deg, v_d);
     }
 
     // Zerar velocidade linear se erro angular > 93°
