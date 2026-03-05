@@ -516,7 +516,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     navigationFsm.set_state();
 
     // Compute Actions
-    if(navigationFsm.state == navigation::states::driveToGoal && enable) purePursuitFollowPath();
+    if(navigationFsm.state == navigation::states::driveToGoal && enable) computeStateSpaceControl();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         // Andar para frente com velocidade linear 0.1 m/s durante 2s
