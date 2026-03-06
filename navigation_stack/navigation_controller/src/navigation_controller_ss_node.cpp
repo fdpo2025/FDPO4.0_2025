@@ -516,11 +516,18 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     navigationFsm.set_state();
 
     // Compute Actions
-    if(navigationFsm.state == navigation::states::driveToGoal && enable) computeStateSpaceControl();
-    else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
+    if(navigationFsm.state == navigation::states::driveToGoal && enable){
+        ROS_WARN("DRIVE_TO_GOAL");
+        computeStateSpaceControl();
+    } 
+    else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable){
+        ROS_WARN("TURN_TO_YAW");
+        setTheta();
+    } 
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         // Andar para frente com velocidade linear 0.1 m/s durante 2s
         // Se estava indo backwards, andar para trás
+        ROS_WARN("PICK_FORWARD");
         v_d = 0.1;
         w_d = 0.0;
         ROS_INFO_THROTTLE(0.5, "NavigationController: pickBoxForward state - moving at %.2f m/s (backwards=%d)", 
@@ -875,6 +882,8 @@ void NavigationController::computeStateSpaceControl() {
     const double w_r     = ref.w_r;
 
     const double theta = poseCurr.theta;
+
+    if(dist_goal < 0.35) v_r = 0.15;
 
     if(dist_goal < 0.2) v_r = 0.1;
 
