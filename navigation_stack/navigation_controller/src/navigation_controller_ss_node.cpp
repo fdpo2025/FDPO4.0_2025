@@ -668,6 +668,10 @@ void NavigationController::buildSmoothedPathFromSegment() {
   raw.push_back({previousWaypoint.pose.x, previousWaypoint.pose.y});
   for (const auto& wp : route_seg_) raw.push_back({wp.pose.x, wp.pose.y});
 
+  ROS_WARN("buildSmoothedPathFromSegment: smooth_radius=%.6f smooth_corner_steps=%d",
+         param.smooth_radius,
+         param.smooth_corner_steps);
+
   std::vector<Point> sm = raw;
   if (raw.size() >= 3) sm = smoothPath(raw, param.smooth_radius, (int)param.smooth_corner_steps);
 
