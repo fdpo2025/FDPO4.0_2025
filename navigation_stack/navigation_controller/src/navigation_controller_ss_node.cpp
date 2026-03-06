@@ -666,7 +666,16 @@ void NavigationController::buildSmoothedPathFromSegment() {
   raw.reserve(route_seg_.size() + 1);
 
   raw.push_back({previousWaypoint.pose.x, previousWaypoint.pose.y});
-  for (const auto& wp : route_seg_) raw.push_back({wp.pose.x, wp.pose.y});
+
+  size_t start_idx = 0;
+  if (!route_seg_.empty() && route_seg_.front().backwards) {
+      start_idx = 1;  // ignora o primeiro waypoint
+  }
+
+  for (size_t i = start_idx; i < route_seg_.size(); ++i) {
+      const auto& wp = route_seg_[i];
+      raw.push_back({wp.pose.x, wp.pose.y});
+  }
 
   ROS_WARN("buildSmoothedPathFromSegment: smooth_radius=%.6f smooth_corner_steps=%d",
          param.smooth_radius,
@@ -681,18 +690,7 @@ void NavigationController::buildSmoothedPathFromSegment() {
   }
 
   path_pts_ = std::move(sm);
-
-  // Remover os 20 primeiros pontos se existirem
-  const size_t points_to_remove = 20;
-
-  if (path_pts_.size() > points_to_remove) {
-      path_pts_.erase(path_pts_.begin(), path_pts_.begin() + points_to_remove);
-  } else {
-      // se houver poucos pontos, mantém pelo menos 2
-    if (path_pts_.size() > 2)
-            path_pts_.erase(path_pts_.begin(), path_pts_.end() - 2);
-    }
-    
+      
   last_near_idx_ = 0;
   target_idx_ = 0;
   path_ready_ = (path_pts_.size() >= 2);
