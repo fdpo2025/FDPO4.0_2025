@@ -871,7 +871,7 @@ void NavigationController::computeStateSpaceControl() {
     const double xr      = ref.xr;
     const double yr      = ref.yr;
     const double theta_r = ref.theta_r;
-    const double v_r     = ref.v_r;
+    double v_r     = ref.v_r;
     const double w_r     = ref.w_r;
 
     const double theta = poseCurr.theta;
