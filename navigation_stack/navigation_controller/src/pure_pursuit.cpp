@@ -727,7 +727,7 @@ void NavigationController::purePursuitFollowPath() {
     v_ref = std::min(v_ref, 0.10);         // limita a 0.10 m/s
   }
   if (dist_to_goal < 0.10) {               // 10 cm
-    v_ref = std::min(v_ref, 0.05);         // limita a 0.05 m/s
+    v_ref = std::min(v_ref, 0.10);         // limita a 0.05 m/s
   }
 
   double w_cmd = v_ref * kappa;
@@ -755,7 +755,7 @@ void NavigationController::purePursuitFollowPath() {
 
   // Se erro angular muito grande, zera linear (mantém tua lógica)
   const double alpha_deg = std::abs(alpha) * 180.0 / M_PI;
-  if (alpha_deg > 93.0) v_next = 0.0;
+  //if (alpha_deg > 93.0) v_next = 0.0;
 
   // Aplicar sinal de velocidade conforme backwards
   v_d = v_next;
