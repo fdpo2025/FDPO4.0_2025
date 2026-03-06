@@ -876,6 +876,8 @@ void NavigationController::computeStateSpaceControl() {
 
     const double theta = poseCurr.theta;
 
+    if(dist_goal < 0.2) v_r = 0.1;
+
     // ========================================================================
     // CALCULAR ERRO NO REFERENCIAL DO ROBÔ
     // ========================================================================
