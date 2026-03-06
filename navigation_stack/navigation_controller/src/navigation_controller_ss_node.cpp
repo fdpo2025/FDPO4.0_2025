@@ -958,6 +958,8 @@ void NavigationController::computeStateSpaceControl() {
         v_d = -v_r/2;
         w_d = 0;
 
+        ROS_WARN("BACK");
+
         if (isNearSegInit(0.1)) {  
          route_seg_.front().backwards = false;
          ROS_WARN("PAROUUUU!!!");
