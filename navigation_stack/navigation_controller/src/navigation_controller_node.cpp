@@ -835,47 +835,74 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     navigationFsm.update_tis();
     bool enable = !(mode == "stop" || mode == "pause") && !route.empty();
 
-    // Transição inicial
+    // Compute Transitions
     if(navigationFsm.state == navigation::states::idle && enable) {
+
         navigationFsm.new_state = navigation::states::driveToGoal;
+
     }
 
-    // LÓGICA DE TRANSIÇÃO DE WAYPOINT / LINHA
-    else if(navigationFsm.state == navigation::states::driveToGoal && enable) {
+    // Quando align=true: usar isPositionArrived() para parar no ponto exato e rodar
+    else if(navigationFsm.state == navigation::states::driveToGoal && isPositionArrived() && route.front().align && enable) {
         
-        // --- NOVIDADE: GATILHO PARA O APPROACHING ---
-        // Se for armazém e estivermos perto (dist_da), mudamos a FSM secundária interna
-        if (route.front().is_warehouse && error_dist < param.dist_da && followLineFsm.state == navigation::followLineStates::Follow_Line) {
-            followLineFsm.new_state = navigation::followLineStates::Approaching;
-            followLineFsm.set_state();
-            ROS_INFO(">>> [TRANSITION] Perto do armazem (%.3fm). A iniciar Aproximacao Dinamica.", error_dist);
+        // Guardar waypoint anterior antes de remover
+        previousWaypoint = route.front();
+        
+        // Se é warehouse de pick, entrar no estado pickBoxForward
+        if (route.front().pick_box) {
+            navigationFsm.new_state = navigation::states::pickBoxForward;
+            pick_box_forward_start_time = ros::Time::now();
+            in_pick_box_forward = true;
+            ROS_INFO("NavigationController: Arrived at pick warehouse (id=%d, x=%.2f, y=%.2f, backwards=%d), entering pickBoxForward state", 
+                     previousWaypoint.id, previousWaypoint.pose.x, previousWaypoint.pose.y, previousWaypoint.backwards ? 1 : 0);
+        } else {
+            navigationFsm.new_state = navigation::states::turnToFinalYaw;
         }
 
-        // Determinar se a linha acabou (por distância ou por progresso %)
-        double switch_ratio = (route.front().line_switch_ratio > 0) ? route.front().line_switch_ratio : param.line_switch_ratio;
-        bool arrived = route.front().align ? isPositionArrived() : (line_progress >= switch_ratio);
+    }
 
-        if (arrived) {
+    // Quando align=false: usar line_progress para mudar de linha mais cedo (suaviza transições)
+    // Usar line_switch_ratio do waypoint se definido (>0), senão usar parâmetro global
+    else if(navigationFsm.state == navigation::states::driveToGoal && !route.front().align && enable) {
+        
+        double switch_ratio = (route.front().line_switch_ratio > 0) ? 
+                               route.front().line_switch_ratio : param.line_switch_ratio;
+        
+        if (line_progress >= switch_ratio) {
+            // Guardar waypoint anterior antes de remover
             previousWaypoint = route.front();
+            
+            // Verificar se é warehouse de pick antes de remover
             bool is_pick_warehouse = route.front().pick_box;
-
+            
+            ROS_INFO("Line switch at %.0f%% (threshold=%.0f%%): waypoint (id=%d, x=%.2f, y=%.2f, pick_box=%d, backwards=%d). Remaining: %zu", 
+                     line_progress * 100, switch_ratio * 100,
+                     previousWaypoint.id, previousWaypoint.pose.x, previousWaypoint.pose.y, is_pick_warehouse ? 1 : 0, 
+                     previousWaypoint.backwards ? 1 : 0, route.size() - 1);
+        
+            // Se é warehouse de pick, NÃO remover ainda - será removido quando sair do estado pickBoxForward
             if (is_pick_warehouse) {
-                // Se é pick, vai para o estado de avanço final (pickBoxForward)
                 navigationFsm.new_state = navigation::states::pickBoxForward;
                 pick_box_forward_start_time = ros::Time::now();
                 in_pick_box_forward = true;
-                ROS_INFO("NavigationController: Linha concluida no armazem. Entrando em pickBoxForward");
+                ROS_INFO("NavigationController: Completed line to pick warehouse, entering pickBoxForward state");
             } else {
-                // Se não é pick, remove e passa para o próximo ou roda (turnToFinalYaw)
-                if (route.front().align) {
-                    navigationFsm.new_state = navigation::states::turnToFinalYaw;
+                // Não é warehouse de pick, remover normalmente
+                route.pop_front();
+                updateDesiredPose();
+                
+                // Reinicializar followLine FSM para nova linha
+                followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+                followLineFsm.set_state();
+                
+                // Reset completion feedback flag para nova linha
+                completion_feedback_sent = false;
+                
+                // Se não há mais waypoints, ir direto para idle
+                if(route.empty()) {
+                    navigationFsm.new_state = navigation::states::idle;
                 } else {
-                    route.pop_front();
-                    updateDesiredPose();
-                    followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-                    followLineFsm.set_state();
-                    completion_feedback_sent = false;
-                    navigationFsm.new_state = route.empty() ? navigation::states::idle : navigation::states::done;
+                    navigationFsm.new_state = navigation::states::done;
                 }
             }
         }
@@ -941,7 +968,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         double elapsed_time = (ros::Time::now() - pick_box_forward_start_time).toSec();
         
-        //if (elapsed_time >= 0.7) {
+        if (error_dist < 0.05/*elapsed_time >= 0.7*/) {
             // Passou 2 segundos, remover waypoint e continuar para próximo
             in_pick_box_forward = false;
             if (!route.empty()) {
@@ -959,7 +986,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
                 navigationFsm.new_state = navigation::states::done;
             }
             ROS_INFO("NavigationController: Completed pickBoxForward (2s), continuing to next waypoint");
-        //}
+        }
     }
 
     // Set states
@@ -969,12 +996,37 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     if(navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
-        // Andar para frente com velocidade linear 0.1 m/s durante 2s
-        // Se estava indo backwards, andar para trás
-        v_d = previousWaypoint.backwards ? -0.1 : 0.1;
-        w_d = 0.0;
-        ROS_INFO_THROTTLE(0.5, "NavigationController: pickBoxForward state - moving at %.2f m/s (backwards=%d)", 
-                         v_d, previousWaypoint.backwards ? 1 : 0);
+        // 1. CÁLCULO DA VELOCIDADE LINEAR DINÂMICA (A RAMPA)
+        // Em vez de 0.1 fixo, usamos uma rampa baseada na distância que falta
+        // v_ramp será alta se estiver longe e diminuirá até 0.05 (ou v_min)
+        double v_ramp = 1.5 * error_dist; 
+        
+        // Limitamos a velocidade máxima de aproximação (ex: 0.25 m/s) para não ser brusco
+        double v_max_approach = 0.25;
+        double v_target = std::min(v_ramp, v_max_approach);
+
+        // 2. O "TRAVÃO" POR ORIENTAÇÃO (A DESCIDA NO DESENHO)
+        // Se o robô estiver desalinhado (> 5 graus), abrandamos drasticamente
+        double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
+        double alignment_penalty = (error_ang_deg > 5.0) ? 0.3 : 1.0;
+
+        // 3. APLICAÇÃO DAS VELOCIDADES
+        // v_d adaptativo
+        double v_final = v_target * alignment_penalty;
+        
+        // Garantimos que ele mantém um mínimo para conseguir encostar na caixa
+        if (v_final < 0.05) v_final = 0.05; 
+
+        v_d = previousWaypoint.backwards ? -v_final : v_final;
+
+        // 4. CORREÇÃO ANGULAR (OPCIONAL MAS RECOMENDADA)
+        // No teu original w_d era 0.0. Mas se queres que ele se oriente se estiver "mal",
+        // podemos manter um ganho pequeno de correção:
+        w_d = param.gain_fwd * error_ang; 
+
+        // 5. LOG PARA DIAGNÓSTICO
+        ROS_INFO(">>> [PICK_FORWARD] Dist: %.3f | AngErr: %.1f deg | V: %.2f", 
+                 error_dist, error_ang_deg, v_d);
     }
     else {
         // Parar se não há waypoints ou estado inválido
