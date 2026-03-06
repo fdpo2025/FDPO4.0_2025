@@ -964,7 +964,7 @@ void NavigationController::computeStateSpaceControl() {
     w_d = w_target;
 
     if(backwards){
-        v_d = -0.1;
+        v_d = -0.05;
         w_d = 0;
 
         ROS_WARN("BACK");
