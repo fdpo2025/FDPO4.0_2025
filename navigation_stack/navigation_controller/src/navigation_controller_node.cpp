@@ -835,6 +835,20 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     navigationFsm.update_tis();
     bool enable = !(mode == "stop" || mode == "pause") && !route.empty();
 
+    // 2. CÁLCULO DE ERROS GLOBAIS (Necessário para a lógica dinâmica que pediste)
+    // Precisamos disto aqui porque o pickBoxForward não chama a followLine()
+    double error_dist = 0.0;
+    double error_ang = 0.0;
+    if (!route.empty()) {
+        double dx = route.front().pose.x - currPose.x;
+        double dy = route.front().pose.y - currPose.y;
+        error_dist = std::sqrt(dx * dx + dy * dy);
+        
+        double desired_yaw = route.front().backwards ? 
+                             std::atan2(-dy, -dx) : std::atan2(dy, dx);
+        error_ang = angles::shortest_angular_distance(currPose.theta, desired_yaw);
+    }
+
     // Compute Transitions
     if(navigationFsm.state == navigation::states::idle && enable) {
 
