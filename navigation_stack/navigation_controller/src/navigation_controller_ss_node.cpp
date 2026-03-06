@@ -673,7 +673,12 @@ void NavigationController::buildSmoothedPathFromSegment() {
          param.smooth_corner_steps);
 
   std::vector<Point> sm = raw;
-  if (raw.size() >= 3) sm = smoothPath(raw, param.smooth_radius, (int)param.smooth_corner_steps);
+  
+  if (raw.size() >= 3 && param.smooth_radius > 1e-3 && param.smooth_corner_steps > 0) {
+    sm = smoothPath(raw, param.smooth_radius, (int)param.smooth_corner_steps);
+  } else {
+    sm = raw;
+  }
 
   path_pts_ = std::move(sm);
   last_near_idx_ = 0;
