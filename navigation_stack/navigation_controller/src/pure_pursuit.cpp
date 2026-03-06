@@ -766,7 +766,8 @@ void NavigationController::purePursuitFollowPath() {
     w_d = 0;
 
     if (isNearSegInit(0.05)) {  
-       route_seg_.pop_front();
+       route_seg_.front().backwards = false;
+       ROS_WARN("PAROUUUU!!!");
     } 
   }
 
