@@ -856,6 +856,7 @@ RefState NavigationController::computeRef(double x, double y, double theta,
 // ============================================================================
 void NavigationController::computeStateSpaceControl() {
 
+    
     // ========================================================================
     // VERIFICAR SE HÁ CAMINHO DISPONÍVEL
     // ========================================================================
@@ -867,6 +868,12 @@ void NavigationController::computeStateSpaceControl() {
     
     const WayPoint seg_init = route_seg_.front();
     const bool backwards = seg_init.backwards; // ou isBackwards() se já estiver adaptado
+
+    ROS_WARN_THROTTLE(0.5, "route_seg_.front(): id=%d backwards=%d dist_to_seg_init=%.3f",
+                  route_seg_.front().id,
+                  route_seg_.front().backwards ? 1 : 0,
+                  std::hypot(route_seg_.front().pose.x - poseCurr.x,
+                             route_seg_.front().pose.y - poseCurr.y));
 
     // ========================================================================
     // VERIFICAR SE JÁ ESTAMOS NO FIM DO CAMINHO
