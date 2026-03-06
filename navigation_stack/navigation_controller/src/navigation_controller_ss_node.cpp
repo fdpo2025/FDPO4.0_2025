@@ -708,15 +708,19 @@ void NavigationController::buildNextSegment() {
   ROS_INFO("Segment built (break if next is backwards): %zu points (remaining full: %zu). Next_backwards=%d",
            route_seg_.size(), route_full_.size(),
            (!route_full_.empty() ? (route_full_.front().backwards ? 1 : 0) : 0));
-    
-  std::stringstream ss;
-  ss << "Segment waypoint IDs: ";
+
+  ROS_INFO("---- Current Segment Waypoints ----");
 
   for (const auto& wp : route_seg_) {
-  ss << wp.id << " ";
+    ROS_INFO("id=%d  x=%.3f  y=%.3f  backwards=%d",
+            wp.id,
+            wp.pose.x,
+            wp.pose.y,
+            wp.backwards ? 1 : 0);
   }
 
-  ROS_INFO("%s", ss.str().c_str());
+  ROS_INFO("------------------------------------");
+      
 }
 
 
