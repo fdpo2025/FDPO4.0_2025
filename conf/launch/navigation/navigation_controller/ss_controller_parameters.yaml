@@ -8,7 +8,7 @@ kth: 3.0         # Ganho de erro angular
 # Limites de velocidade
 v_max: 0.3       # Velocidade linear máxima (m/s)
 w_max: 1.0       # Velocidade angular máxima (rad/s)
-v_ref: 0.2       # Velocidade de referência (m/s)
+v_ref: 0.1       # Velocidade de referência (m/s)
 
 # Limites de aceleração
 a_max: 0.1       # Aceleração máxima (m/s²)
