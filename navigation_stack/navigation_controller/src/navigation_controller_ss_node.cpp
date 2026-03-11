@@ -693,7 +693,10 @@ void NavigationController::buildSmoothedPathFromSegment() {
       
   last_near_idx_ = 0;
   target_idx_ = 0;
+  seg_idx = 0;
+  last_th = poseCurr.theta;
   path_ready_ = (path_pts_.size() >= 2);
+  
 
   ROS_INFO("PP: segment path built. raw=%zu smoothed=%zu", raw.size(), path_pts_.size());
 }
