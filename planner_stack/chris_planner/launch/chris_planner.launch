@@ -1,9 +1,23 @@
 <launch>
-  <arg name="node_name" default="chris_planner_node" />
-  <arg name="planning_method" default="closest" />
 
-  <node name="$(arg node_name)" pkg="chris_planner" type="chris_planner_node.py" output="screen">
+  <arg name="node_name" default="multi_planner_node" />
+  <arg name="planning_method" default="closest" />
+  <arg name="robot_id" default="1" />
+
+  <!-- Planner -->
+  <node name="$(arg node_name)"
+        pkg="chris_planner"
+        type="multi_planner_node.py"
+        output="screen">
     <param name="planning_method" value="$(arg planning_method)" />
   </node>
-</launch>
 
+  <!-- Communications -->
+  <node name="comunicacoes"
+        pkg="chris_planner"
+        type="comunicacoes_node.py"
+        output="screen">
+    <param name="robot_id" value="$(arg robot_id)" />
+  </node>
+
+</launch>

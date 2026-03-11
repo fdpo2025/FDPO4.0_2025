@@ -23,6 +23,7 @@ struct ControllerPoint {
     bool pick_box = false; // if false: drops box
     bool should_pub = false;
     bool is_warehouse = false; // Se o ponto final é uma warehouse
+    int node_id;
    
 };
 

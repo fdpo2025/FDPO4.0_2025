@@ -154,7 +154,9 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             continue;
         }
 
+        
         ControllerPoint point;
+        point.node_id = value;
 
         point.x = factory_coordinates[value].x;
         point.y = factory_coordinates[value].y;
@@ -290,6 +292,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             nav_plan.points[i].vel_lin_nom = cp.vel_lin_nom;
             nav_plan.points[i].backwards = cp.backwards;
             nav_plan.points[i].pick_box = cp.pick_box;
+            nav_plan.points[i].node_id = cp.node_id;
         }
         
         navPlanPub.publish(nav_plan);
