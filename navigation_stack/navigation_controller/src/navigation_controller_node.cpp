@@ -840,13 +840,13 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     double error_dist = 0.0;
     double error_ang = 0.0;
     if (!route.empty()) {
-        double dx = route.front().pose.x - currPose.x;
-        double dy = route.front().pose.y - currPose.y;
+        double dx = route.front().pose.x - poseCurr.x;
+        double dy = route.front().pose.y - poseCurr.y;
         error_dist = std::sqrt(dx * dx + dy * dy);
         
-        double desired_yaw = route.front().backwards ? 
-                             std::atan2(-dy, -dx) : std::atan2(dy, dx);
-        error_ang = angles::shortest_angular_distance(currPose.theta, desired_yaw);
+        double tr = std::atan2(dy, dx);
+        if (route.front().backwards) tr = normalizeAngle(tr + M_PI);
+        error_ang = normalizeAngle(tr - poseCurr.theta);
     }
 
     // Compute Transitions
@@ -1010,37 +1010,41 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     if(navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
-        // 1. CÁLCULO DA VELOCIDADE LINEAR DINÂMICA (A RAMPA)
-        // Em vez de 0.1 fixo, usamos uma rampa baseada na distância que falta
-        // v_ramp será alta se estiver longe e diminuirá até 0.05 (ou v_min)
         double v_ramp = 1.5 * error_dist; 
-        
-        // Limitamos a velocidade máxima de aproximação (ex: 0.25 m/s) para não ser brusco
         double v_max_approach = 0.25;
         double v_target = std::min(v_ramp, v_max_approach);
 
-        // 2. O "TRAVÃO" POR ORIENTAÇÃO (A DESCIDA NO DESENHO)
-        // Se o robô estiver desalinhado (> 5 graus), abrandamos drasticamente
+        // 2. TRAVÃO POR ORIENTAÇÃO
         double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
-        double alignment_penalty = (error_ang_deg > 5.0) ? 0.3 : 1.0;
+        
+        // Se o erro for muito grande (ex: > 45º), talvez o robô esteja a tentar ir de lado
+        // Vamos aumentar a tolerância para 10 graus e ver o penalty no log
+        double alignment_penalty = (error_ang_deg > 10.0) ? 0.3 : 1.0;
 
-        // 3. APLICAÇÃO DAS VELOCIDADES
-        // v_d adaptativo
+        // 3. CÁLCULO FINAL
+        double v_before_penalty = v_target;
         double v_final = v_target * alignment_penalty;
         
-        // Garantimos que ele mantém um mínimo para conseguir encostar na caixa
-        if (v_final < 0.05) v_final = 0.05; 
+        // Guardamos o estado do "trinco" do mínimo para o log
+        bool hit_min = false;
+        if (v_final < 0.05) {
+            v_final = 0.05;
+            hit_min = true;
+        }
 
         v_d = previousWaypoint.backwards ? -v_final : v_final;
-
-        // 4. CORREÇÃO ANGULAR (OPCIONAL MAS RECOMENDADA)
-        // No teu original w_d era 0.0. Mas se queres que ele se oriente se estiver "mal",
-        // podemos manter um ganho pequeno de correção:
         w_d = param.gain_fwd * error_ang; 
 
-        // 5. LOG PARA DIAGNÓSTICO
-        ROS_INFO(">>> [PICK_FORWARD] Dist: %.3f | AngErr: %.1f deg | V: %.2f", 
-                 error_dist, error_ang_deg, v_d);
+        // 4. LOGS DE DIAGNÓSTICO APROFUNDADO
+        // Removido o Throttle para veres o fluxo contínuo
+        ROS_INFO("--- [DEBUG PICK] ---");
+        ROS_INFO("Dist: %.3f | Ang: %.1f deg", error_dist, error_ang_deg);
+        ROS_INFO("V_Ramp: %.3f | Penalty: %.1f | V_Final: %.3f %s", 
+                 v_before_penalty, alignment_penalty, v_final, hit_min ? "(HIT MIN)" : "");
+        
+        if (error_ang_deg > 15.0) {
+            ROS_WARN("[ALERTA] Erro angular muito alto (15 graus) no encosto! O robô está atravessado.");
+        }
     }
     else {
         // Parar se não há waypoints ou estado inválido
