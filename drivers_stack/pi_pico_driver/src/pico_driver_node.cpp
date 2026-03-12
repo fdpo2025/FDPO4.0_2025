@@ -221,28 +221,29 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
   // ---------------- PATH ----------------
   size_t path_idx = msg.find("PATH:");
   if (path_idx != std::string::npos) {
-
     std::string path_part = msg.substr(path_idx + 5);
 
-    // remover espaços no início
     while (!path_part.empty() && path_part.front() == ' ') {
       path_part.erase(path_part.begin());
     }
 
-    // remover newline / espaços no fim
     while (!path_part.empty() &&
-          (path_part.back() == '\n' || path_part.back() == '\r' || path_part.back() == ' ')) {
+           (path_part.back() == '\n' || path_part.back() == '\r' || path_part.back() == ' ')) {
       path_part.pop_back();
-    }
-
-    // ---- NOVO: ignorar PATH:99 ----
-    if (path_part == "99") {
-      // não atualizar nem publicar
-      return;
     }
 
     messageToReceive.path_rcv = parsePathList(path_part);
     found_any = true;
+  }
+
+  if (cp_idx != std::string::npos || path_idx != std::string::npos) {
+    pubExtraMsgs();
+  }
+
+  if (!found_any) {
+    ROS_WARN_THROTTLE(10.0,
+                      "Mensagem desconhecida (mostrando 1 a cada 10s): %s",
+                      msg.substr(0, 80).c_str());
   }
 }
 
