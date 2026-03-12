@@ -12,7 +12,34 @@ PACKAGE_DIR = os.path.dirname(CURRENT_DIR)
 if PACKAGE_DIR not in sys.path:
     sys.path.insert(0, PACKAGE_DIR)
 
-from modules.planner import Planner
+
+# Add the modules directory to the path
+import rospkg
+rospack = rospkg.RosPack()
+chris_planner_path = rospack.get_path('chris_planner')
+
+# Add modules to Python path
+# In development: modules are in source tree
+# After installation: modules are in lib/python3/dist-packages/chris_planner/
+modules_path = os.path.join(chris_planner_path, 'modules')
+if os.path.exists(modules_path):
+    # Development mode: add parent directory so we can import modules
+    sys.path.insert(0, os.path.dirname(modules_path))
+else:
+    # Installed mode: modules should be in the Python path already
+    # But we can also try to add the package path
+    pass
+
+# Import chris_planner modules
+try:
+    import modules.planner as planner_module
+    import modules.factory as factory_module
+    import modules.yaml_utils as yaml_utils
+except ImportError:
+    # Fallback: try importing from chris_planner package
+    import chris_planner.modules.planner as planner_module
+    import chris_planner.modules.factory as factory_module
+    import chris_planner.modules.yaml_utils as yaml_utils
 
 
 class MultiPlannerNode:
@@ -21,7 +48,17 @@ class MultiPlannerNode:
 
         rospy.init_node("multi_planner_node")
 
-        self.planner = Planner()
+        self.package_path = rospack.get_path('chris_planner')
+
+        graph_file = os.path.join(self.package_path, 'files', 'inputs', 'graph.yaml')
+        factory_components_file = os.path.join(self.package_path, 'files', 'inputs', 'factory_components.yaml')
+
+        graph_dict = yaml_utils.load_file(graph_file)
+        factory_components_dict = yaml_utils.load_file(factory_components_file)
+
+        planning_method = rospy.get_param('~planning_method', 'astar')
+
+        self.planner = planner_module.Planner(graph_dict, factory_components_dict, method=planning_method)
         self.factory = self.planner.factory
 
         self.boxes = None
