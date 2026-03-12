@@ -3,7 +3,7 @@
 import rospy
 from std_msgs.msg import String, Int32, Bool, Int32MultiArray
 
-from chris_planner.planner import Planner
+from modules.planner import Planner
 
 
 class MultiPlannerNode:
