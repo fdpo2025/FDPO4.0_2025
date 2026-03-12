@@ -24,6 +24,7 @@
 #include <plan_handler/NavPlan.h>
 #include <plan_handler/CompletionFeedback.h>
 #include <std_msgs/Int32.h>
+#include <std_msgs/UInt32.h>
 
 
 #include "fsm.h"
