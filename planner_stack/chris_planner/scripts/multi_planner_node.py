@@ -152,7 +152,7 @@ class MultiPlannerNode:
 
             path = self.factory.shortest_path(robot_node, node)
 
-            if any(n in reserved_by_other for n in path):
+            if any(n in reserved_by_other and n != 31 for n in path):
                 continue
 
             cost = len(path)
