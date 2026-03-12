@@ -17,6 +17,9 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   messageToReceive.w_angular = 0.0;
   messageToReceive.cp_rcv = 0;
   messageToReceive.path_rcv.clear();
+
+  last_published_path_.clear();
+  has_published_path_ = false;
  
 
   // ----------------------- ROS init -----------------------
@@ -295,9 +298,14 @@ void PiPicoDriver::pubExtraMsgs() {
   cp_msg.data = messageToReceive.cp_rcv;
   cpRcvPub.publish(cp_msg);
 
-  std_msgs::Int32MultiArray path_msg;
-  path_msg.data = messageToReceive.path_rcv;
-  pathRcvPub.publish(path_msg);
+  if (!has_published_path_ || messageToReceive.path_rcv != last_published_path_) {
+    std_msgs::Int32MultiArray path_msg;
+    path_msg.data = messageToReceive.path_rcv;
+    pathRcvPub.publish(path_msg);
+
+    last_published_path_ = messageToReceive.path_rcv;
+    has_published_path_ = true;
+  }
 }
 
 std::string PiPicoDriver::pathToString(const std::vector<int32_t>& path) {
