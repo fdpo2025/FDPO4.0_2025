@@ -31,7 +31,7 @@ in_pick_box_forward(false) {
     completion_feedback_sent = false;
     controlTimer = nh.createTimer(ros::Duration(1.0 / std::max(1, param.loop_rate_hz)), &NavigationController::navigationFsmRunner, this);
     controlSrv = nh.advertiseService("control", &NavigationController::controlSrvCb, this);
-    currentNodePub = nh.advertise<std_msgs::Int32>("/this_current_pose", 10, true);
+    currentNodePub = nh.advertise<std_msgs::UInt32>("/this_current_pose", 10, true);
     ROS_INFO("NavigationController publishing to: /this_current_pose");
 
     dynamic_reconfigure::Server<navigation_controller::NavigationConfig>::CallbackType cb;
