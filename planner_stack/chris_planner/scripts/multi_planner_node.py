@@ -125,15 +125,18 @@ class MultiPlannerNode:
     def plan_for_robot(self, robot_id):
 
         state = self.build_state(robot_id)
-
         robot_node = state[0]
 
+        rospy.loginfo(f"[{robot_id}] state = {state}")
+
         valid_nodes = self.factory.valid_destinations(state)
+        rospy.loginfo(f"[{robot_id}] valid_nodes before filter = {valid_nodes}")
 
         valid_nodes = [
             n for n in valid_nodes
             if n not in self.reserved_goals
         ]
+        rospy.loginfo(f"[{robot_id}] valid_nodes after filter = {valid_nodes}")
 
         if not valid_nodes:
             rospy.logwarn(f"No valid nodes for {robot_id}")
@@ -147,12 +150,18 @@ class MultiPlannerNode:
             n for n, r in self.reserved_nodes.items()
             if r != robot_id
         }
+        rospy.loginfo(f"[{robot_id}] reserved_by_other = {reserved_by_other}")
 
         for node in valid_nodes:
-
             path = self.factory.shortest_path(robot_node, node)
+            rospy.loginfo(f"[{robot_id}] candidate goal={node}, path={path}")
+
+            if not path:
+                rospy.logwarn(f"[{robot_id}] empty path for node {node}")
+                continue
 
             if any(n in reserved_by_other and n != 31 for n in path):
+                rospy.logwarn(f"[{robot_id}] blocked path {path}")
                 continue
 
             cost = len(path)
@@ -162,12 +171,13 @@ class MultiPlannerNode:
                 best_path = path
                 best_goal = node
 
+        rospy.loginfo(f"[{robot_id}] best_path={best_path}, best_goal={best_goal}")
+
         if best_path is None:
             rospy.logwarn(f"No collision free path for {robot_id}")
             return
 
         self.reserve_path(robot_id, best_path, best_goal)
-
         self.publish_path(robot_id, best_path)
 
         self.robots[robot_id]["path"] = best_path
