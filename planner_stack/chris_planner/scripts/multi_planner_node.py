@@ -181,6 +181,11 @@ class MultiPlannerNode:
     def reserve_path(self, robot_id, path, goal):
 
         for n in path:
+
+            # ignorar o nó inicial partilhado
+            if n == 31:
+                continue
+
             self.reserved_nodes[n] = robot_id
 
         self.reserved_goals[goal] = robot_id
