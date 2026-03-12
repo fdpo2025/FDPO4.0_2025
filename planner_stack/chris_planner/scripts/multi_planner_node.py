@@ -2,6 +2,7 @@
 
 import rospy
 from std_msgs.msg import String, Int32, Bool, Int32MultiArray
+import heapq
 
 import os
 import sys
@@ -150,21 +151,17 @@ class MultiPlannerNode:
             n for n, r in self.reserved_nodes.items()
             if r != robot_id
         }
-        rospy.loginfo(f"[{robot_id}] reserved_by_other = {reserved_by_other}")
 
         for node in valid_nodes:
-            path = self.factory.shortest_path(robot_node, node)
-            rospy.loginfo(f"[{robot_id}] candidate goal={node}, path={path}")
+
+            path = self.shortest_path_avoiding(robot_node, node, reserved_by_other)
+
+            rospy.loginfo(f"[{robot_id}] candidate goal={node}, avoided path={path}")
 
             if not path:
-                rospy.logwarn(f"[{robot_id}] empty path for node {node}")
                 continue
 
-            if any(n in reserved_by_other and n != 31 for n in path):
-                rospy.logwarn(f"[{robot_id}] blocked path {path}")
-                continue
-
-            cost = len(path)
+            cost = self.path_cost(path)
 
             if cost < best_cost:
                 best_cost = cost
@@ -297,6 +294,65 @@ class MultiPlannerNode:
                 rospy.logwarn(f"Cor inválida '{c}', ignorada")
 
         return boxtypes
+    
+    def shortest_path_avoiding(self, start, goal, blocked_nodes):
+        """
+        Dijkstra que evita nós em blocked_nodes.
+        Permite start e goal mesmo que estejam no conjunto bloqueado.
+        """
+        blocked = set(blocked_nodes)
+        blocked.discard(start)
+        blocked.discard(goal)
+
+        dist = {start: 0.0}
+        prev = {start: None}
+        pq = [(0.0, start)]
+
+        while pq:
+            curr_dist, u = heapq.heappop(pq)
+
+            if curr_dist > dist.get(u, float("inf")):
+                continue
+
+            if u == goal:
+                break
+
+            for v, w in self.factory.graph.adj.get(u, []):
+                if v in blocked:
+                    continue
+
+                new_dist = curr_dist + w
+                if new_dist < dist.get(v, float("inf")):
+                    dist[v] = new_dist
+                    prev[v] = u
+                    heapq.heappush(pq, (new_dist, v))
+
+        if goal not in dist:
+            return []
+
+        path = []
+        node = goal
+        while node is not None:
+            path.append(node)
+            node = prev[node]
+
+        return path[::-1]
+    
+    def path_cost(self, path):
+        if len(path) < 2:
+            return 0.0
+
+        total = 0.0
+        for i in range(len(path) - 1):
+            u = path[i]
+            v = path[i + 1]
+
+            for neigh, w in self.factory.graph.adj.get(u, []):
+                if neigh == v:
+                    total += w
+                    break
+
+        return total
 
 
 if __name__ == "__main__":
