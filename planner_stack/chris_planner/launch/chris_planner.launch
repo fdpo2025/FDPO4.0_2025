@@ -13,7 +13,7 @@
   </node>
 
   <!-- Communications -->
-  <node name="comunicacoes"
+  <node name="comunicacoes_planner"
         pkg="chris_planner"
         type="comunicacoes_node.py"
         output="screen">
