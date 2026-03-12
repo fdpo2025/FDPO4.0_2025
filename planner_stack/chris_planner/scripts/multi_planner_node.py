@@ -3,6 +3,15 @@
 import rospy
 from std_msgs.msg import String, Int32, Bool, Int32MultiArray
 
+import os
+import sys
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PACKAGE_DIR = os.path.dirname(CURRENT_DIR)
+
+if PACKAGE_DIR not in sys.path:
+    sys.path.insert(0, PACKAGE_DIR)
+
 from modules.planner import Planner
 
 
