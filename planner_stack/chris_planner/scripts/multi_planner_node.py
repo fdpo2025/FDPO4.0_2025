@@ -104,9 +104,10 @@ class MultiPlannerNode:
 
         rospy.loginfo(f"Received sequence {seq}")
 
-        boxtypes = self.factory.sequence_to_boxtypes(seq)
+        boxtypes = self.sequence_to_boxtypes(seq)
 
-        self.boxes = self.factory.initial_state(boxtypes)
+        initial_state = self.factory.initial_state(boxtypes)
+        _, _, self.boxes = initial_state
 
         self.plan_for_robot("r1")
         self.plan_for_robot("r2")
@@ -268,6 +269,19 @@ class MultiPlannerNode:
         r["path"] = []
 
         self.plan_for_robot(robot_id)
+
+    def sequence_to_boxtypes(self, seq):
+        color_map = {'R': 0, 'G': 1, 'B': 2}
+        boxtypes = []
+
+        for c in seq.strip():
+            c = c.upper()
+            if c in color_map:
+                boxtypes.append(color_map[c])
+            else:
+                rospy.logwarn(f"Cor inválida '{c}', ignorada")
+
+        return boxtypes
 
 
 if __name__ == "__main__":
