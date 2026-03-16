@@ -1186,8 +1186,8 @@ void NavigationController::publishCurrentNode(int node_id) {
 
     if (node_id == last_published_node_id) return;
 
-    std_msgs::Int32 msg;
-    msg.data = node_id;
+    std_msgs::UInt32 msg;
+    msg.data = static_cast<uint32_t>(node_id);
     currentNodePub.publish(msg);
 
     last_published_node_id = node_id;
