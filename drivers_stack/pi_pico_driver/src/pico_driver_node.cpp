@@ -186,6 +186,8 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
   if (!debug_comm_ && msg.find("dbg") != std::string::npos) return;
 
   bool found_any = false;
+  bool has_new_cp = false;
+  bool has_new_path = false;
 
   // ---------------- POS / V / W ----------------
   size_t pos_idx = msg.find("POS:");
@@ -214,6 +216,7 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
     unsigned int cp_val = 0;
     if (std::sscanf(msg.c_str() + cp_idx, "CP: %u", &cp_val) == 1) {
       messageToReceive.cp_rcv = cp_val;
+      has_new_cp = true;
       found_any = true;
     }
   }
@@ -232,12 +235,26 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
       path_part.pop_back();
     }
 
-    messageToReceive.path_rcv = parsePathList(path_part);
-    found_any = true;
+    // Só processa/publica se PATH não vier vazio
+    if (!path_part.empty()) {
+      messageToReceive.path_rcv = parsePathList(path_part);
+      has_new_path = true;
+      found_any = true;
+    }
   }
 
-  if (cp_idx != std::string::npos || path_idx != std::string::npos) {
-    pubExtraMsgs();
+  // Publica CP apenas se chegou novo CP
+  if (has_new_cp) {
+    std_msgs::UInt32 cp_msg;
+    cp_msg.data = messageToReceive.cp_rcv;
+    cpRcvPub.publish(cp_msg);
+  }
+
+  // Publica PATH apenas se chegou PATH não vazio
+  if (has_new_path) {
+    std_msgs::Int32MultiArray path_msg;
+    path_msg.data = messageToReceive.path_rcv;
+    pathRcvPub.publish(path_msg);
   }
 
   if (!found_any) {
@@ -249,12 +266,18 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
 
 void PiPicoDriver::commTick(const ros::TimerEvent&) {
   
+  // Guardar cópia local do path para enviar apenas uma vez
+  std::vector<int32_t> path_once = messageToSend.path_send;
+
   // 1) Build the command
   std::string cmd = "CMD:" + std::to_string(messageToSend.v_d) + "," +
                            std::to_string(messageToSend.w_d) + "," +
                            (messageToSend.pick_box ? "1" : "0") +
                   " CP:" + std::to_string(messageToSend.cp_send) +
-                  " PATH:" + pathToString(messageToSend.path_send);
+                  " PATH:" + pathToString(path_once);
+
+  // Limpar logo após preparar a mensagem para que o PATH só seja enviado uma vez
+  messageToSend.path_send.clear();
 
   // 2) Send and Wait for response
   if (debug_comm_) {
@@ -278,8 +301,9 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
     }
     return;
   }
-  con_state.missed = 0; con_state.link_ok = true;
 
+  con_state.missed = 0;
+  con_state.link_ok = true;
 }
 
 void PiPicoDriver::cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
