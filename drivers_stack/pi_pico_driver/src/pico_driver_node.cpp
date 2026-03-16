@@ -239,11 +239,11 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
       std::vector<int32_t> new_path = parsePathList(path_part);
       found_any = true;
 
-      if (!has_last_path_rcv_published_ || new_path != last_path_rcv_published_) {
+      if (!has_last_path_rcv_ || new_path != last_path_rcv_) {
         messageToReceive.path_rcv = new_path;
         has_new_path = true;
-        last_path_rcv_published_ = new_path;
-        has_last_path_rcv_published_ = true;
+        last_path_rcv_ = new_path;
+        has_last_path_rcv_ = true;
       }
     }
   }
