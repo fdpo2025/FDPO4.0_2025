@@ -112,4 +112,9 @@ class PiPicoDriver {
         std::vector<int32_t> parsePathList(const std::string& s);
         std::string pathToString(const std::vector<int32_t>& path);
 
+        std::vector<int32_t> path_to_send_;
+        int path_send_retries_ = 0;
+
+        std::vector<int32_t> last_path_rcv_published_;
+
 };

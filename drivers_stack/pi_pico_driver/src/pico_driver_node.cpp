@@ -237,9 +237,14 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
 
     // Só processa/publica se PATH não vier vazio
     if (!path_part.empty()) {
-      messageToReceive.path_rcv = parsePathList(path_part);
-      has_new_path = true;
+      std::vector<int32_t> new_path = parsePathList(path_part);
       found_any = true;
+
+      if (new_path != last_path_rcv_published_) {
+        messageToReceive.path_rcv = new_path;
+        has_new_path = true;
+        last_path_rcv_published_ = new_path;
+      }
     }
   }
 
@@ -265,32 +270,35 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
 }
 
 void PiPicoDriver::commTick(const ros::TimerEvent&) {
-  
-  // Guardar cópia local do path para enviar apenas uma vez
-  std::vector<int32_t> path_once = messageToSend.path_send;
+
+  // Decide que PATH enviar nesta iteração
+  std::vector<int32_t> path_once;
+  if (path_send_retries_ > 0) {
+    path_once = path_to_send_;
+    path_send_retries_--;
+  } else {
+    path_once.clear();  // envia PATH vazio
+  }
 
   // 1) Build the command
   std::string cmd = "CMD:" + std::to_string(messageToSend.v_d) + "," +
                            std::to_string(messageToSend.w_d) + "," +
                            (messageToSend.pick_box ? "1" : "0") +
-                  " CP:" + std::to_string(messageToSend.cp_send) +
-                  " PATH:" + pathToString(path_once);
+                    " CP:" + std::to_string(messageToSend.cp_send) +
+                    " PATH:" + pathToString(path_once);
 
-  // Limpar logo após preparar a mensagem para que o PATH só seja enviado uma vez
-  messageToSend.path_send.clear();
-
-  // 2) Send and Wait for response
   if (debug_comm_) {
     ROS_INFO("Pi4 Message: %s", cmd.c_str());
   }
-  
+
+  // 2) Send and wait for response
   std::string resp = syncCall(cmd, 50);
-  
+
   if (debug_comm_) {
     ROS_INFO("PiPico Message: %s", resp.c_str());
     ROS_INFO("-------------------");
   }
-  
+
   if (resp.empty()) {
     con_state.missed++;
     if (con_state.missed >= 2) {
@@ -311,7 +319,8 @@ void PiPicoDriver::cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
 }
 
 void PiPicoDriver::pathSendCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg) {
-  messageToSend.path_send = msg->data;
+  path_to_send_ = msg->data;
+  path_send_retries_ = 5;
 }
 
 void PiPicoDriver::pubExtraMsgs() {
