@@ -231,15 +231,20 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
     }
 
     while (!path_part.empty() &&
-           (path_part.back() == '\n' || path_part.back() == '\r' || path_part.back() == ' ')) {
+          (path_part.back() == '\n' || path_part.back() == '\r' || path_part.back() == ' ')) {
       path_part.pop_back();
     }
 
-    // Só processa/publica se PATH não vier vazio
     if (!path_part.empty()) {
-      messageToReceive.path_rcv = parsePathList(path_part);
-      has_new_path = true;
+      std::vector<int32_t> new_path = parsePathList(path_part);
       found_any = true;
+
+      if (!has_last_path_rcv_published_ || new_path != last_path_rcv_published_) {
+        messageToReceive.path_rcv = new_path;
+        has_new_path = true;
+        last_path_rcv_published_ = new_path;
+        has_last_path_rcv_published_ = true;
+      }
     }
   }
 

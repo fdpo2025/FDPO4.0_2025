@@ -116,5 +116,6 @@ class PiPicoDriver {
         int path_send_retries_ = 0;
 
         std::vector<int32_t> last_path_rcv_published_;
+        bool has_last_path_rcv_published_ = false;
 
 };
