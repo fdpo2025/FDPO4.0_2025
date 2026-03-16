@@ -865,7 +865,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         
         if (line_progress >= switch_ratio) {
             // Guardar waypoint anterior antes de remover
-            previousWaypoint = route.front();            
+            previousWaypoint = route.front();
+            publishCurrentNode(previousWaypoint.node_id);            
             
             // Verificar se é warehouse de pick antes de remover
             bool is_pick_warehouse = route.front().pick_box;
@@ -1186,8 +1187,9 @@ void NavigationController::publishCurrentNode(int node_id) {
 
     if (node_id == last_published_node_id) return;
 
-    std_msgs::Int32 msg;
+    std_msgs::UInt32 msg;
     msg.data = node_id;
+    msg.data = static_cast<uint32_t>(node_id);
     currentNodePub.publish(msg);
 
     last_published_node_id = node_id;
