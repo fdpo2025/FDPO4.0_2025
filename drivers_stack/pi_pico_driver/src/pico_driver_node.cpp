@@ -237,14 +237,9 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
 
     // Só processa/publica se PATH não vier vazio
     if (!path_part.empty()) {
-      std::vector<int32_t> new_path = parsePathList(path_part);
+      messageToReceive.path_rcv = parsePathList(path_part);
+      has_new_path = true;
       found_any = true;
-
-      if (new_path != last_path_rcv_published_) {
-        messageToReceive.path_rcv = new_path;
-        has_new_path = true;
-        last_path_rcv_published_ = new_path;
-      }
     }
   }
 
