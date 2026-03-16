@@ -841,7 +841,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         
         // Guardar waypoint anterior antes de remover
         previousWaypoint = route.front();
-        publishCurrentNode(previousWaypoint.node_id);
+        publishCurrentNode(previousWaypoint.node_id);        
         
         // Se é warehouse de pick, entrar no estado pickBoxForward
         if (route.front().pick_box) {
@@ -865,7 +865,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         
         if (line_progress >= switch_ratio) {
             // Guardar waypoint anterior antes de remover
-            previousWaypoint = route.front();            
+            previousWaypoint = route.front(); 
+            publishCurrentNode(previousWaypoint.node_id);           
             
             // Verificar se é warehouse de pick antes de remover
             bool is_pick_warehouse = route.front().pick_box;
