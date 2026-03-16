@@ -874,9 +874,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     }
 
     // Quando align=false: usar line_progress para mudar de linha; para pick warehouse só quando Approaching
-    // Usar line_switch_ratio do waypoint se definido (>0), senão usar parâmetro global
     else if(navigationFsm.state == navigation::states::driveToGoal && !route.front().align && enable) {
-        
+
         double switch_ratio = (route.front().line_switch_ratio > 0) ?
                                route.front().line_switch_ratio : param.line_switch_ratio;
 
@@ -898,23 +897,12 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
                 in_pick_box_forward = true;
                 ROS_INFO("NavigationController: No armazem (%.0f%% linha). Entrando em pickBoxForward (controlo dinamico).", line_progress * 100.0);
             } else {
-                // Não é warehouse de pick, remover normalmente
                 route.pop_front();
                 updateDesiredPose();
-                
-                // Reinicializar followLine FSM para nova linha
                 followLineFsm.new_state = navigation::followLineStates::Follow_Line;
                 followLineFsm.set_state();
-                
-                // Reset completion feedback flag para nova linha
                 completion_feedback_sent = false;
-                
-                // Se não há mais waypoints, ir direto para idle
-                if(route.empty()) {
-                    navigationFsm.new_state = navigation::states::idle;
-                } else {
-                    navigationFsm.new_state = navigation::states::done;
-                }
+                navigationFsm.new_state = route.empty() ? navigation::states::idle : navigation::states::done;
             }
         }
     }
