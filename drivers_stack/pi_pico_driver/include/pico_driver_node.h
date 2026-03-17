@@ -118,4 +118,7 @@ class PiPicoDriver {
         std::vector<int32_t> last_path_rcv_;
         bool has_last_path_rcv_ = false;
 
+        uint32_t last_cp_rcv_ = 0;
+        bool has_last_cp_rcv_ = false;
+
 };

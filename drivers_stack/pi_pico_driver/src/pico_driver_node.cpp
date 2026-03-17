@@ -216,8 +216,13 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
     unsigned int cp_val = 0;
     if (std::sscanf(msg.c_str() + cp_idx, "CP: %u", &cp_val) == 1) {
       messageToReceive.cp_rcv = cp_val;
-      has_new_cp = true;
       found_any = true;
+
+      if (!has_last_cp_rcv_ || cp_val != last_cp_rcv_) {
+        has_new_cp = true;
+        last_cp_rcv_ = cp_val;
+        has_last_cp_rcv_ = true;
+      }
     }
   }
 
