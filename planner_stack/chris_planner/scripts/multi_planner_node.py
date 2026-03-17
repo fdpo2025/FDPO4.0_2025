@@ -94,8 +94,8 @@ class MultiPlannerNode:
         # subscribers
         rospy.Subscriber("/color_sequence", String, self.sequence_cb)
 
-        rospy.Subscriber("/robot1/current_node", Int32, self.robot1_node_cb)
-        rospy.Subscriber("/robot2/current_node", Int32, self.robot2_node_cb)
+        rospy.Subscriber("/robot1/current_pose", Int32, self.robot1_node_cb)
+        rospy.Subscriber("/robot2/current_pose", Int32, self.robot2_node_cb)
        
     # -----------------------------------------------------
 
