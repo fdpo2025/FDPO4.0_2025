@@ -185,10 +185,12 @@ class MultiPlannerNode:
             r["waiting_replan"] = True
             return False
 
-        self.reserve_path(robot_id, best_path, best_goal)
-        self.publish_path(robot_id, best_path)
+        extended_path = self.extend_path_with_previous_node(best_path)
 
-        r["path"] = best_path
+        self.reserve_path(robot_id, extended_path, best_goal)
+        self.publish_path(robot_id, extended_path)
+
+        r["path"] = extended_path
         r["goal"] = best_goal
         r["busy"] = True
         r["waiting_replan"] = False
@@ -389,6 +391,13 @@ class MultiPlannerNode:
 
         rospy.loginfo(f"Trying replanning for waiting robot {other_robot}")
         self.plan_for_robot(other_robot)
+
+    def extend_path_with_previous_node(self, path):
+
+        if len(path) < 2:
+            return path
+
+        return path + [path[-2]]
 
 
 if __name__ == "__main__":
