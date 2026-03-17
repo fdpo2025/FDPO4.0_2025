@@ -62,12 +62,23 @@ class MultiPlannerNode:
         self.planner = planner_module.Planner(graph_dict, factory_components_dict, method=planning_method)
         self.factory = self.planner.factory
 
+        self.special_block_nodes = set()
+
+        for key, value in factory_components_dict.items():
+            if isinstance(value, list):
+                self.special_block_nodes.update(value)
+            elif isinstance(value, dict):
+                for subvalue in value.values():
+                    if isinstance(subvalue, list):
+                        self.special_block_nodes.update(subvalue)
+
         self.boxes = None
 
         self.robots = {
             "r1": {
                 "node": 31,          # nó lógico do planner
                 "current_node": 31,  # nó físico atual
+                "last_node": None,   # último nó físico
                 "box": -1,
                 "goal": None,
                 "path": [],
@@ -77,6 +88,7 @@ class MultiPlannerNode:
             "r2": {
                 "node": 31,
                 "current_node": 31,
+                "last_node": None,
                 "box": -1,
                 "goal": None,
                 "path": [],
@@ -163,8 +175,11 @@ class MultiPlannerNode:
             if owner != robot_id
         }
 
+        extra_blocked = self.get_extra_blocked_nodes(robot_id)
+        blocked_nodes = reserved_by_other | extra_blocked
+
         for node in valid_nodes:
-            path = self.shortest_path_avoiding(robot_node, node, reserved_by_other)
+            path = self.shortest_path_avoiding(robot_node, node, blocked_nodes)
 
             rospy.loginfo(f"[{robot_id}] candidate goal={node}, avoided path={path}")
 
@@ -251,9 +266,25 @@ class MultiPlannerNode:
     def update_robot_position(self, robot_id, node):
 
         r = self.robots[robot_id]
+        previous_physical_node = r["current_node"]
+
+        # só agir se o robô mudou mesmo de nó
+        if node == previous_physical_node:
+            return
+
+        r["last_node"] = previous_physical_node
         r["current_node"] = node
 
-        released = self.release_node(robot_id, node)
+        released = False
+        prev_node = r["last_node"]
+
+        # liberta o nó anterior, não o atual
+        if prev_node is not None:
+            released = self.release_node(robot_id, prev_node)
+
+            # se o nó anterior era o goal reservado deste robô, liberta agora esse goal
+            if prev_node in self.reserved_goals and self.reserved_goals[prev_node] == robot_id:
+                del self.reserved_goals[prev_node]
 
         if released:
             self.try_replan_waiting_robot(robot_id)
@@ -286,12 +317,8 @@ class MultiPlannerNode:
         new_state = self.factory.update_state(state, goal)
 
         r["node"] = new_state[0]
-        r["current_node"] = new_state[0]
         r["box"] = new_state[1]
         self.boxes = new_state[2]
-
-        if goal in self.reserved_goals:
-            del self.reserved_goals[goal]
 
         r["busy"] = False
         r["goal"] = None
@@ -398,6 +425,29 @@ class MultiPlannerNode:
             return path
 
         return path + [path[-2]]
+    
+    def get_extra_blocked_nodes(self, robot_id):
+        blocked = set()
+
+        # olhar apenas para reservas dos OUTROS robôs
+        reserved_by_other = {
+            n for n, owner in self.reserved_nodes.items()
+            if owner != robot_id
+        }
+
+        # se um nó especial estiver reservado por outro robô,
+        # os seus vizinhos também ficam bloqueados
+        for node in reserved_by_other:
+            if node in self.special_block_nodes:
+                for neigh, _ in self.factory.graph.adj.get(node, []):
+                    blocked.add(neigh)
+
+        # regra especial: se 12 ou 26 estiverem reservados por outro robô,
+        # o 19 também fica bloqueado
+        if 12 in reserved_by_other or 26 in reserved_by_other:
+            blocked.add(19)
+
+        return blocked
 
 
 if __name__ == "__main__":
