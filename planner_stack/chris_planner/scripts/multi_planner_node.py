@@ -66,7 +66,8 @@ class MultiPlannerNode:
 
         self.robots = {
             "r1": {
-                "node": 31,
+                "node": 31,          # nó lógico do planner
+                "current_node": 31,  # nó físico atual
                 "box": -1,
                 "goal": None,
                 "path": [],
@@ -74,6 +75,7 @@ class MultiPlannerNode:
             },
             "r2": {
                 "node": 31,
+                "current_node": 31,
                 "box": -1,
                 "goal": None,
                 "path": [],
@@ -234,14 +236,12 @@ class MultiPlannerNode:
     def update_robot_position(self, robot_id, node):
 
         r = self.robots[robot_id]
-        prev_node = r["node"]
+        r["current_node"] = node
 
         self.release_node(robot_id, node)
 
         if r["goal"] is not None and node == r["goal"]:
-            self.goal_reached(robot_id, prev_node, node)
-        else:
-            r["node"] = node
+            self.goal_reached(robot_id)
 
     # -----------------------------------------------------
 
@@ -257,18 +257,20 @@ class MultiPlannerNode:
 
     # -----------------------------------------------------
 
-    def goal_reached(self, robot_id, prev_node, goal):
+    def goal_reached(self, robot_id):
 
         r = self.robots[robot_id]
+        goal = r["goal"]
 
         rospy.loginfo(f"{robot_id} reached goal {goal}")
 
-        # construir estado ANTES da transição
-        state = (prev_node, r["box"], self.boxes)
+        # estado lógico antes da transição
+        state = (r["node"], r["box"], self.boxes)
 
         new_state = self.factory.update_state(state, goal)
 
         r["node"] = new_state[0]
+        r["current_node"] = new_state[0]
         r["box"] = new_state[1]
         self.boxes = new_state[2]
 
