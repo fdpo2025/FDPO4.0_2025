@@ -1005,6 +1005,18 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         w_d = 0.0;
     }
 
+    // Se a rota atual terminou e existe uma rota pendente, carregar agora
+    if (route.empty() && hasPendingNavPlan) {
+        loadPendingNavPlanIfAvailable();
+
+        // Se carregou nova rota, arrancar novamente
+        if (!route.empty() && mode != "stop" && mode != "pause") {
+            navigationFsm.new_state = navigation::states::driveToGoal;
+            navigationFsm.set_state();
+            ROS_INFO("NavigationController: Started pending route");
+        }
+    }
+
     // Affect outputs
     // Se route está vazia, publicar zeros explicitamente para parar o robô
     if (route.empty() && (v_d == 0.0 && w_d == 0.0)) {
@@ -1055,6 +1067,7 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
     else if(mode == "stop") {
 
         route.clear();
+        hasPendingNavPlan = false;
         previousWaypoint.id = -1;  // Reset previousWaypoint quando para
         previousWaypoint.node_id = -1;
         last_published_node_id = -1;
@@ -1093,6 +1106,16 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
 
 void NavigationController::navPlanCallback(const plan_handler::NavPlan::ConstPtr& msg) {
     ROS_INFO("NavigationController: Received NavPlan with %zu points", msg->points.size());
+
+    // Se já há uma rota em execução, guardar como pendente
+    if (!route.empty() || navigationFsm.state != navigation::states::idle) {
+        pendingNavPlan = *msg;
+        hasPendingNavPlan = true;
+        ROS_INFO("NavigationController: Current route still active, storing new NavPlan as pending");
+        return;
+    }
+
+    // Se não há rota ativa, carregar imediatamente
     loadRouteFromNavPlan(msg);
 }
 
@@ -1195,4 +1218,14 @@ void NavigationController::publishCurrentNode(int node_id) {
     last_published_node_id = node_id;
 
     ROS_INFO("NavigationController: Published current node_id=%d to /this_current_pose", node_id);
+}
+
+void NavigationController::loadPendingNavPlanIfAvailable() {
+    if (!hasPendingNavPlan) return;
+
+    ROS_INFO("NavigationController: Loading pending NavPlan with %zu points", pendingNavPlan.points.size());
+
+    plan_handler::NavPlan::Ptr msg(new plan_handler::NavPlan(pendingNavPlan));
+    hasPendingNavPlan = false;
+    loadRouteFromNavPlan(msg);
 }

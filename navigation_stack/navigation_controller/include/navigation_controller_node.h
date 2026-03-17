@@ -176,6 +176,10 @@ class NavigationController {
         ros::Publisher currentNodePub;
         void publishCurrentNode(int node_id);
         int last_published_node_id = -1;
+
+        plan_handler::NavPlan pendingNavPlan;
+        bool hasPendingNavPlan = false;
+        void loadPendingNavPlanIfAvailable()
 };
 
 namespace navigation {
