@@ -71,7 +71,8 @@ class MultiPlannerNode:
                 "box": -1,
                 "goal": None,
                 "path": [],
-                "busy": False
+                "busy": False,
+                "waiting_replan": False
             },
             "r2": {
                 "node": 31,
@@ -79,7 +80,8 @@ class MultiPlannerNode:
                 "box": -1,
                 "goal": None,
                 "path": [],
-                "busy": False
+                "busy": False,
+                "waiting_replan": False
             }
         }
 
@@ -127,6 +129,12 @@ class MultiPlannerNode:
 
     def plan_for_robot(self, robot_id):
 
+        r = self.robots[robot_id]
+
+        if r["busy"]:
+            rospy.loginfo(f"{robot_id} is already busy")
+            return False
+
         state = self.build_state(robot_id)
         robot_node = state[0]
 
@@ -143,19 +151,19 @@ class MultiPlannerNode:
 
         if not valid_nodes:
             rospy.logwarn(f"No valid nodes for {robot_id}")
-            return
+            r["waiting_replan"] = True
+            return False
 
         best_path = None
         best_goal = None
         best_cost = float("inf")
 
         reserved_by_other = {
-            n for n, r in self.reserved_nodes.items()
-            if r != robot_id
+            n for n, owner in self.reserved_nodes.items()
+            if owner != robot_id
         }
 
         for node in valid_nodes:
-
             path = self.shortest_path_avoiding(robot_node, node, reserved_by_other)
 
             rospy.loginfo(f"[{robot_id}] candidate goal={node}, avoided path={path}")
@@ -174,17 +182,19 @@ class MultiPlannerNode:
 
         if best_path is None:
             rospy.logwarn(f"No collision free path for {robot_id}")
-            return
+            r["waiting_replan"] = True
+            return False
 
         self.reserve_path(robot_id, best_path, best_goal)
         self.publish_path(robot_id, best_path)
 
-        self.robots[robot_id]["path"] = best_path
-        self.robots[robot_id]["goal"] = best_goal
-        self.robots[robot_id]["busy"] = True
+        r["path"] = best_path
+        r["goal"] = best_goal
+        r["busy"] = True
+        r["waiting_replan"] = False
 
         rospy.loginfo(f"{robot_id} planned path {best_path}")
-
+        return True
     # -----------------------------------------------------
 
     def reserve_path(self, robot_id, path, goal):
@@ -214,10 +224,13 @@ class MultiPlannerNode:
     # -----------------------------------------------------
 
     def release_node(self, robot_id, node):
+        released = False
 
-        if node in self.reserved_nodes:
-            if self.reserved_nodes[node] == robot_id:
-                del self.reserved_nodes[node]
+        if node in self.reserved_nodes and self.reserved_nodes[node] == robot_id:
+            del self.reserved_nodes[node]
+            released = True
+
+        return released
 
     # -----------------------------------------------------
 
@@ -238,7 +251,10 @@ class MultiPlannerNode:
         r = self.robots[robot_id]
         r["current_node"] = node
 
-        self.release_node(robot_id, node)
+        released = self.release_node(robot_id, node)
+
+        if released:
+            self.try_replan_waiting_robot(robot_id)
 
         if r["goal"] is not None and node == r["goal"]:
             self.goal_reached(robot_id)
@@ -264,9 +280,7 @@ class MultiPlannerNode:
 
         rospy.loginfo(f"{robot_id} reached goal {goal}")
 
-        # estado lógico antes da transição
         state = (r["node"], r["box"], self.boxes)
-
         new_state = self.factory.update_state(state, goal)
 
         r["node"] = new_state[0]
@@ -281,7 +295,11 @@ class MultiPlannerNode:
         r["goal"] = None
         r["path"] = []
 
+        # primeiro tenta continuar este robô
         self.plan_for_robot(robot_id)
+
+        # depois tenta acordar o outro se ele estava bloqueado
+        self.try_replan_waiting_robot(robot_id)
 
     def sequence_to_boxtypes(self, seq):
         color_map = {'R': 0, 'G': 1, 'B': 2}
@@ -354,6 +372,23 @@ class MultiPlannerNode:
                     break
 
         return total
+    
+    def try_replan_waiting_robot(self, freed_by_robot_id):
+        other_robot = "r2" if freed_by_robot_id == "r1" else "r1"
+
+        r = self.robots[other_robot]
+
+        if r["busy"]:
+            return
+
+        if r["goal"] is not None:
+            return
+
+        if not r["waiting_replan"]:
+            return
+
+        rospy.loginfo(f"Trying replanning for waiting robot {other_robot}")
+        self.plan_for_robot(other_robot)
 
 
 if __name__ == "__main__":
