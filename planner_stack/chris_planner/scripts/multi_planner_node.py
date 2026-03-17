@@ -281,16 +281,8 @@ class MultiPlannerNode:
         r["last_node"] = previous_physical_node
         r["current_node"] = node
 
-        released = False
-        prev_node = r["last_node"]
-
-        # liberta o nó anterior, não o atual
-        if prev_node is not None:
-            released = self.release_node(robot_id, prev_node)
-
-            # se o nó anterior era o goal reservado deste robô, liberta agora esse goal
-            if prev_node in self.reserved_goals and self.reserved_goals[prev_node] == robot_id:
-                del self.reserved_goals[prev_node]
+        # libertar todos os nós anteriores ao nó atual no path
+        released = self.release_nodes_before_current(robot_id, node)
 
         if released:
             self.try_replan_waiting_robot(robot_id)
@@ -316,6 +308,8 @@ class MultiPlannerNode:
 
         r = self.robots[robot_id]
         goal = r["goal"]
+
+        self.release_all_path_nodes_except_current(robot_id, goal)
 
         rospy.loginfo(f"{robot_id} reached goal {goal}")
 
@@ -454,6 +448,55 @@ class MultiPlannerNode:
             blocked.add(19)
 
         return blocked
+    
+    def release_all_path_nodes_except_current(self, robot_id, current_node):
+        r = self.robots[robot_id]
+        released_any = False
+
+        if not r["path"]:
+            return released_any
+
+        for n in r["path"]:
+            if n == current_node:
+                continue
+
+            if n in self.reserved_nodes and self.reserved_nodes[n] == robot_id:
+                del self.reserved_nodes[n]
+                released_any = True
+                rospy.loginfo(f"[{robot_id}] released path node {n} on goal arrival")
+
+            if n in self.reserved_goals and self.reserved_goals[n] == robot_id:
+                del self.reserved_goals[n]
+                rospy.loginfo(f"[{robot_id}] released reserved goal {n} on goal arrival")
+
+        return released_any
+    
+    def release_nodes_before_current(self, robot_id, current_node):
+        r = self.robots[robot_id]
+        released_any = False
+
+        if not r["path"]:
+            return released_any
+
+        path = list(r["path"])
+
+        if current_node not in path:
+            rospy.logwarn(f"[{robot_id}] current_node {current_node} not in reserved path {path}")
+            return released_any
+
+        current_idx = path.index(current_node)
+
+        for n in path[:current_idx]:
+            if n in self.reserved_nodes and self.reserved_nodes[n] == robot_id:
+                del self.reserved_nodes[n]
+                released_any = True
+                rospy.loginfo(f"[{robot_id}] released past node {n}")
+
+            if n in self.reserved_goals and self.reserved_goals[n] == robot_id:
+                del self.reserved_goals[n]
+                rospy.loginfo(f"[{robot_id}] released past reserved goal {n}")
+
+        return released_any
 
 
 if __name__ == "__main__":
