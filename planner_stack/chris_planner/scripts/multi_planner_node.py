@@ -197,6 +197,12 @@ class MultiPlannerNode:
 
         if best_path is None:
             rospy.logwarn(f"No collision free path for {robot_id}")
+            rospy.logwarn(f"[{robot_id}] reserved_nodes(all) = {dict(sorted(self.reserved_nodes.items()))}")
+            rospy.logwarn(f"[{robot_id}] reserved_goals = {dict(sorted(self.reserved_goals.items()))}")
+            rospy.logwarn(f"[{robot_id}] reserved_by_other = {sorted(reserved_by_other)}")
+            rospy.logwarn(f"[{robot_id}] extra_blocked = {sorted(extra_blocked)}")
+            rospy.logwarn(f"[{robot_id}] blocked_nodes = {sorted(blocked_nodes)}")
+            rospy.logwarn(f"[{robot_id}] current logical node = {r['node']}, current physical node = {r['current_node']}, goal candidates = {valid_nodes}")
             r["waiting_replan"] = True
             return False
 
