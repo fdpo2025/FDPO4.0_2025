@@ -179,7 +179,7 @@ class NavigationController {
 
         plan_handler::NavPlan pendingNavPlan;
         bool hasPendingNavPlan = false;
-        void loadPendingNavPlanIfAvailable()
+        void loadPendingNavPlanIfAvailable();
 };
 
 namespace navigation {
