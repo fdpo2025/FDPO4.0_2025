@@ -36,7 +36,7 @@ namespace Communication {
 
             double v_d, w_d;
             bool pick_box; 
-            bool cp_send;
+            uint32_t cp_send;
             std::vector<int32_t> path_send;
 
 
@@ -47,7 +47,7 @@ namespace Communication {
             Pose odom_pos;
             double v_linear;
             double w_angular;
-            bool cp_rcv;
+            uint32_t cp_rcv;
             std::vector<int32_t> path_rcv;
 
         };
