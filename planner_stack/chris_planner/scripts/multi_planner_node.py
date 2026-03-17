@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
-from std_msgs.msg import String, Int32, Bool, Int32MultiArray
+from std_msgs.msg import String, Int32, Bool, UInt32, Int32MultiArray
 import heapq
 
 import os
@@ -94,8 +94,8 @@ class MultiPlannerNode:
         # subscribers
         rospy.Subscriber("/color_sequence", String, self.sequence_cb)
 
-        rospy.Subscriber("/robot1/current_pose", Int32, self.robot1_node_cb)
-        rospy.Subscriber("/robot2/current_pose", Int32, self.robot2_node_cb)
+        rospy.Subscriber("/robot1/current_pose", UInt32, self.robot1_node_cb)
+        rospy.Subscriber("/robot2/current_pose", UInt32, self.robot2_node_cb)
        
     # -----------------------------------------------------
 
