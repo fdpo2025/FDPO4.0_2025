@@ -234,14 +234,14 @@ class MultiPlannerNode:
     def update_robot_position(self, robot_id, node):
 
         r = self.robots[robot_id]
-
-        r["node"] = node
+        prev_node = r["node"]
 
         self.release_node(robot_id, node)
 
-        # verificar se chegou ao destino
         if r["goal"] is not None and node == r["goal"]:
-            self.goal_reached(robot_id)
+            self.goal_reached(robot_id, prev_node, node)
+        else:
+            r["node"] = node
 
     # -----------------------------------------------------
 
@@ -257,15 +257,14 @@ class MultiPlannerNode:
 
     # -----------------------------------------------------
 
-    def goal_reached(self, robot_id):
+    def goal_reached(self, robot_id, prev_node, goal):
 
         r = self.robots[robot_id]
 
-        goal = r["goal"]
-
         rospy.loginfo(f"{robot_id} reached goal {goal}")
 
-        state = self.build_state(robot_id)
+        # construir estado ANTES da transição
+        state = (prev_node, r["box"], self.boxes)
 
         new_state = self.factory.update_state(state, goal)
 
