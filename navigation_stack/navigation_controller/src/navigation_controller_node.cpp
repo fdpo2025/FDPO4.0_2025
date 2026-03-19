@@ -156,7 +156,7 @@ void NavigationController::loadNavigationParams() {
     // FollowLine parameters (from Pascal code)
     nh.param("gain_fwd", param.gain_fwd, 1.0);      // GAIN_FWD
     nh.param("vel_lin_nom", param.vel_lin_nom, 0.3);  // VEL_LIN_NOM
-    nh.param("dist_da", param.dist_da, 0.3);       // DIST_DA
+    nh.param("dist_da", param.dist_da, 0.10);       // DIST_DA
     nh.param("tol_findist", param.tol_findist, 0.05); // TOL_FINDIST
     nh.param("max_etf", param.max_etf, 0.2);       // MAX_ETF (rad)
     nh.param("tol_init_line", param.tol_init_line, 0.1); // Tolerância de distância à linha para GoTo_Init -> Follow_Line (m)
@@ -742,7 +742,7 @@ void NavigationController::followLine() {
     // Vai para Approaching quando tiver percorrido approaching_line_progress da linha E
     // (o ponto final for uma warehouse OU se estiver saindo de uma warehouse (backwards=true))
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        if (error_dist < param.dist_da && (line.pf.is_warehouse || isBackwards())) {
+        if (error_dist < param.dist_da /*&& (line.pf.is_warehouse || isBackwards())*/) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
         }
     }
@@ -794,7 +794,7 @@ void NavigationController::followLine() {
         // 3. O "TRAVÃO" POR DESALINHAMENTO
         // Se o erro for maior que 5 graus, a velocidade cai para 30% (a descida brusca)
         double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
-        double alignment_penalty = (error_ang_deg > 5.0) ? 0.3 : 1.0;
+        double alignment_penalty = (error_ang_deg > 15.0) ? 0.3 : 1.0;
 
         // 4. VELOCIDADE FINAL COM PATAMAR MÍNIMO
         v_d = v_target * alignment_penalty;
@@ -809,23 +809,17 @@ void NavigationController::followLine() {
              error_dist, error_ang_deg, alignment_penalty, v_d);
     }
 
-    // Zerar velocidade linear se erro angular > 93°
-    if (error_ang_deg > 93.0) {
-        v_d = 0.0;
-        ROS_INFO_THROTTLE(1.0, "NavigationController: Angular error %.1f° > 93°, setting linear velocity to 0", error_ang_deg);
-    }
-    
     // Backwards support
     if (isBackwards() && v_d > 0.0) {
         v_d = -v_d;
     }
 
     // DEBUG
-    ROS_INFO("[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s", 
+    /*ROS_INFO("[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s", 
              line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y, 
              line_progress * 100, error_dist,
              (followLineFsm.state == navigation::followLineStates::Follow_Line) ? "Follow_Line" : "Approaching");
-
+*/
 }
 
 
