@@ -17,10 +17,10 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     // ========================================================================
     // FACTORY COORDINATES: hardcoded (dps mudar para extrair de parametrois)
     // ========================================================================
-    factory_coordinates[0] = {-0.687, 0.468};
-    factory_coordinates[1] = {-0.545, 0.468};
-    factory_coordinates[2] = {-0.386, 0.468};
-    factory_coordinates[3] = {-0.245, 0.468};
+    factory_coordinates[0] = {-0.7, 0.471};
+    factory_coordinates[1] = {-0.55, 0.476};
+    factory_coordinates[2] = {-0.397, 0.478};
+    factory_coordinates[3] = {-0.251, 0.478};
     factory_coordinates[4] = {0.0, 0.355};
     factory_coordinates[5] = {0.227, 0.355};
     factory_coordinates[6] = {0.468, 0.355};
@@ -30,19 +30,19 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     factory_coordinates[10] = {-0.395, 0.233};
     factory_coordinates[11] = {-0.245, 0.233};
     factory_coordinates[12] = {0.0, 0.15};
-    factory_coordinates[13] = {0.22, 0.15};  
-    factory_coordinates[14] = {0.468, 0.163};   
+    factory_coordinates[13] = {0.24, 0.155};  
+    factory_coordinates[14] = {0.46, 0.154};   
     factory_coordinates[15] = {0.695, 0.15};
     factory_coordinates[16] = {-0.695, 0.0};
-    factory_coordinates[17] = {-0.468, -0.023};  
-    factory_coordinates[18] = {-0.227, 0.0};  
+    factory_coordinates[17] = {-0.459, 0.0};  
+    factory_coordinates[18] = {-0.24, 0.0};  
     factory_coordinates[19] = {0.0, 0.0};
-    factory_coordinates[20] = {0.227, 0.0};    
-    factory_coordinates[21] = {0.468, 0.0};  
+    factory_coordinates[20] = {0.243, 0.0};    
+    factory_coordinates[21] = {0.463, 0.0};  
     factory_coordinates[22] = {0.695, 0.0};
     factory_coordinates[23] = {-0.695, -0.15};
-    factory_coordinates[24] = {-0.468, -0.158};
-    factory_coordinates[25] = {-0.227, -0.15};
+    factory_coordinates[24] = {-0.46, -0.15};
+    factory_coordinates[25] = {-0.24, -0.15};
     factory_coordinates[26] = {0.0, -0.15};
     factory_coordinates[27] = {0.245, -0.230};
     factory_coordinates[28] = {0.395, -0.230};
@@ -52,10 +52,10 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     factory_coordinates[32] = {-0.468, -0.355};
     factory_coordinates[33] = {-0.227, -0.355};
     factory_coordinates[34] = {0.0, -0.355};
-    factory_coordinates[35] = {0.245, -0.468};
-    factory_coordinates[36] = {0.3935, -0.468};
-    factory_coordinates[37] = {0.545, -0.468};
-    factory_coordinates[38] = {0.695, -0.468};
+    factory_coordinates[35] = {0.25, -0.476};
+    factory_coordinates[36] = {0.398, -0.476};
+    factory_coordinates[37] = {0.55, -0.475};
+    factory_coordinates[38] = {0.7, -0.468};
 
     // ========================================================================
     // WAREHOUSE COORDINATES: hardcoded (dps mudar para extrair de parametrois)
