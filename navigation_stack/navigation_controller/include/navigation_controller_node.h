@@ -103,6 +103,7 @@ class NavigationController {
             double line_switch_ratio;  // Ratio of line to switch to next (0.9 = 90%)
             double approaching_line_progress;  // Line progress threshold to enter Approaching state (0.60 = 60%)
             double approaching_vel;            // Constant velocity in Approaching state (m/s)
+            double k_approaching;              // Gain for angular control in Approaching state
 
         };
 

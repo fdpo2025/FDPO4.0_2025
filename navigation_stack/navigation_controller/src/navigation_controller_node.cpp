@@ -164,6 +164,7 @@ void NavigationController::loadNavigationParams() {
     nh.param("line_switch_ratio", param.line_switch_ratio, 0.9); // Ratio da linha para mudar para próxima (0.9 = 90%)
     nh.param("approaching_line_progress", param.approaching_line_progress, 0.60); // Progresso da linha para entrar em Approaching (0.60 = 60%)
     nh.param("approaching_vel", param.approaching_vel, 0.05); // Velocidade constante no estado Approaching (m/s)
+    nh.param("k_approaching", param.k_approaching, 10.0); // Ganho para controle angular no estado Approaching
     
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f", 
              param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
@@ -788,7 +789,7 @@ void NavigationController::followLine() {
         // -----------------------
         //   ANGULAR CONTROL
         // -----------------------
-        w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
+        w_d = param.k_approaching * k1_eff + param.gain_fwd * error_ang;
 
         double B = -param.approaching_vel/(param.w_nom*param.w_nom);
         v_d = std::max(B * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
