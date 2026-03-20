@@ -8,7 +8,7 @@ loop_rate_hz: 100  # Frequência do control loop (Hz)
 v_nom: 0.2          # Velocidade linear nominal (m/s)
 v_max: 0.4          # Velocidade linear máxima (m/s) - limite absoluto
 v_min: 0.01         # Velocidade linear mínima (m/s)
-w_nom: 1.0          # Velocidade angular nominal (rad/s)
+w_nom: 2.0          # Velocidade angular nominal (rad/s)
 w_min: 0.0          # Velocidade angular mínima (rad/s)
 
 # Limites de aceleração/desaceleração
@@ -38,7 +38,7 @@ max_etf: 0.2             # MAX_ETF - máximo erro de orientação para transiç�
 tol_init_line: 0.03      # Tolerância de distância à linha para transição GoTo_Init -> Follow_Line (m)
 line_switch_ratio: 0.8   # Ratio da linha para mudar para próxima (0.9 = 90%)
 
-k_approaching: 2.0       # Ganho para controle angular no estado Approaching
-gain_approaching_fwd: 2.0 # Ganho forward para controle no estado Approaching
+k_approaching: 8.0       # Ganho para controle angular no estado Approaching
+gain_approaching_fwd: 1.0 # Ganho forward para controle no estado Approaching
 approaching_line_progress: 0.8  # Progresso da linha para entrar em Approaching (0.60 = 60%)
 approaching_vel: 0.05   # Velocidade constante no estado Approaching (m/s)
