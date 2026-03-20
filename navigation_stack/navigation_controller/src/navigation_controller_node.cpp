@@ -744,14 +744,13 @@ void NavigationController::followLine() {
     // Vai para Approaching quando tiver percorrido approaching_line_progress da linha E
     // (o ponto final for uma warehouse OU se estiver saindo de uma warehouse (backwards=true))
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        if (error_dist < param.dist_da /*&& (line.pf.is_warehouse || isBackwards())*/) {
-            ROS_WARN("approaching state condition met - error_dist=%.3f < dist_da=%.3f", error_dist, param.dist_da);
+        if (route.front().line_switch_ratio > 0.8) {
+            ROS_WARN("approaching state condition met");
             followLineFsm.new_state = navigation::followLineStates::Approaching;
         }
     }
     
     // Apply transitions
-    ROS_WARN("approaching 1");
     followLineFsm.set_state();
     
     // Publicar feedback de conclusão quando >70% da linha for completada (apenas uma vez por linha)
