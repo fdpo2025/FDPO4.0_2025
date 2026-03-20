@@ -39,5 +39,5 @@ tol_init_line: 0.03      # Tolerância de distância à linha para transição G
 line_switch_ratio: 0.8   # Ratio da linha para mudar para próxima (0.9 = 90%)
 
 k_approaching: 10.0       # Ganho para controle angular no estado Approaching
-approaching_line_progress: 0.0  # Progresso da linha para entrar em Approaching (0.60 = 60%)
+approaching_line_progress: 0.8  # Progresso da linha para entrar em Approaching (0.60 = 60%)
 approaching_vel: 0.2   # Velocidade constante no estado Approaching (m/s)
