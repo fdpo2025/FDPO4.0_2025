@@ -156,7 +156,7 @@ void NavigationController::loadNavigationParams() {
     // FollowLine parameters (from Pascal code)
     nh.param("gain_fwd", param.gain_fwd, 1.0);      // GAIN_FWD
     nh.param("vel_lin_nom", param.vel_lin_nom, 0.3);  // VEL_LIN_NOM
-    nh.param("dist_da", param.dist_da, 0.10);       // DIST_DA
+    nh.param("dist_da", param.dist_da, 0.3);       // DIST_DA
     nh.param("tol_findist", param.tol_findist, 0.05); // TOL_FINDIST
     nh.param("max_etf", param.max_etf, 0.2);       // MAX_ETF (rad)
     nh.param("tol_init_line", param.tol_init_line, 0.1); // Tolerância de distância à linha para GoTo_Init -> Follow_Line (m)
@@ -742,7 +742,8 @@ void NavigationController::followLine() {
     // Vai para Approaching quando tiver percorrido approaching_line_progress da linha E
     // (o ponto final for uma warehouse OU se estiver saindo de uma warehouse (backwards=true))
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        if (error_dist < param.dist_da /*&& (line.pf.is_warehouse || isBackwards())*/) {
+        if (error_dist < param.dist_da && (line.pf.is_warehouse || isBackwards())) {
+            ROS_WARN("approaching state condition met")
             followLineFsm.new_state = navigation::followLineStates::Approaching;
         }
     }
@@ -781,51 +782,40 @@ void NavigationController::followLine() {
         
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-        v_d=0;
-        w_d= 1.0;
-        ROS_WARN("approaching");
-        /*
-        // 1. CONTROLO ANGULAR (Manter o robô no trilho da linha)
+        ROS_WARN("approaching actions")
+        // -----------------------
+        //   ANGULAR CONTROL
+        // -----------------------
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
+
+        // Limitar velocidade angular
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
-        // 2. LÓGICA DA RAMPA (O declive do teu desenho)
-        // Multiplicador menor (ex: 1.5) faz a descida começar mais cedo e ser mais suave
-        double v_ramp = 1.5 * error_dist; 
-        double v_target = std::min(v_ramp, vel_lin_nom_eff);
-
-        // 3. O "TRAVÃO" POR DESALINHAMENTO
-        // Se o erro for maior que 5 graus, a velocidade cai para 30% (a descida brusca)
-        double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
-        double alignment_penalty = (error_ang_deg > 15.0) ? 0.3 : 1.0;
-
-        // 4. VELOCIDADE FINAL COM PATAMAR MÍNIMO
-        v_d = v_target * alignment_penalty;
-        
-        // Se a velocidade calculada for muito baixa, mantemos v_min para o toque final
-        if (v_d < param.v_min) {
-            v_d = param.v_min;
-        }
-
-        // 5. LOG DE INFO PARA DIAGNÓSTICO (Aparece a cada 200ms)
-        ROS_INFO(">>> [APPROACHING] Dist: %.3f | AngErr: %.1f deg | Penalty: %.1f | V_FINAL: %.2f", 
-             error_dist, error_ang_deg, alignment_penalty, v_d);
-
-        */
+        // -----------------------
+        //   LINEAR CONTROL 
+        // -----------------------
+        // Velocidade constante no estado Approaching
+        v_d = param.approaching_vel;
     }
 
+    // Zerar velocidade linear se erro angular > 93°
+    if (error_ang_deg > 93.0) {
+        v_d = 0.0;
+        ROS_INFO_THROTTLE(1.0, "NavigationController: Angular error %.1f° > 93°, setting linear velocity to 0", error_ang_deg);
+    }
+    
     // Backwards support
     if (isBackwards() && v_d > 0.0) {
         v_d = -v_d;
     }
 
     // DEBUG
-    /*ROS_INFO("[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s", 
+    ROS_INFO("[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s", 
              line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y, 
              line_progress * 100, error_dist,
              (followLineFsm.state == navigation::followLineStates::Follow_Line) ? "Follow_Line" : "Approaching");
-*/
+
 }
 
 
@@ -834,20 +824,6 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     // Update's
     navigationFsm.update_tis();
     bool enable = !(mode == "stop" || mode == "pause") && !route.empty();
-
-    // 2. CÁLCULO DE ERROS GLOBAIS (Necessário para a lógica dinâmica que pediste)
-    // Precisamos disto aqui porque o pickBoxForward não chama a followLine()
-    double error_dist = 0.0;
-    double error_ang = 0.0;
-    if (!route.empty()) {
-        double dx = route.front().pose.x - poseCurr.x;
-        double dy = route.front().pose.y - poseCurr.y;
-        error_dist = std::sqrt(dx * dx + dy * dy);
-        
-        double tr = std::atan2(dy, dx);
-        if (route.front().backwards) tr = normalizeAngle(tr + M_PI);
-        error_ang = normalizeAngle(tr - poseCurr.theta);
-    }
 
     // Compute Transitions
     if(navigationFsm.state == navigation::states::idle && enable) {
@@ -981,8 +957,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     // Estado pickBoxForward: andar para frente 2s após chegar a warehouse de pick
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         double elapsed_time = (ros::Time::now() - pick_box_forward_start_time).toSec();
-        
-        if (error_dist < 0.05/*elapsed_time >= 0.7*/) {
+        ROS_WARN("pickboxforward state: elapsed time = %.2f seconds", elapsed_time);
+        if (elapsed_time >= 0.7) {
             // Passou 2 segundos, remover waypoint e continuar para próximo
             in_pick_box_forward = false;
             if (!route.empty()) {
@@ -1010,47 +986,12 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     if(navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
-        v_d=0;
-        w_d= 0.0;
-        ROS_WARN("pickboxforward");
-
-        /*
-        double v_ramp = 1.5 * error_dist; 
-        double v_max_approach = 0.25;
-        double v_target = std::min(v_ramp, v_max_approach);
-
-        // 2. TRAVÃO POR ORIENTAÇÃO
-        double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
-        
-        // Se o erro for muito grande (ex: > 45º), talvez o robô esteja a tentar ir de lado
-        // Vamos aumentar a tolerância para 10 graus e ver o penalty no log
-        double alignment_penalty = (error_ang_deg > 10.0) ? 0.3 : 1.0;
-
-        // 3. CÁLCULO FINAL
-        double v_before_penalty = v_target;
-        double v_final = v_target * alignment_penalty;
-        
-        // Guardamos o estado do "trinco" do mínimo para o log
-        bool hit_min = false;
-        if (v_final < 0.05) {
-            v_final = 0.05;
-            hit_min = true;
-        }
-
-        v_d = previousWaypoint.backwards ? -v_final : v_final;
-        w_d = param.gain_fwd * error_ang; 
-
-        // 4. LOGS DE DIAGNÓSTICO APROFUNDADO
-        // Removido o Throttle para veres o fluxo contínuo
-        ROS_INFO("--- [DEBUG PICK] ---");
-        ROS_INFO("Dist: %.3f | Ang: %.1f deg", error_dist, error_ang_deg);
-        ROS_INFO("V_Ramp: %.3f | Penalty: %.1f | V_Final: %.3f %s", 
-                 v_before_penalty, alignment_penalty, v_final, hit_min ? "(HIT MIN)" : "");
-        
-        if (error_ang_deg > 15.0) {
-            ROS_WARN("[ALERTA] Erro angular muito alto (15 graus) no encosto! O robô está atravessado.");
-        }
-            */
+        // Andar para frente com velocidade linear 0.1 m/s durante 2s
+        // Se estava indo backwards, andar para trás
+        v_d = previousWaypoint.backwards ? -0.1 : 0.1;
+        w_d = 0.0;
+        ROS_INFO_THROTTLE(0.5, "NavigationController: pickBoxForward state - moving at %.2f m/s (backwards=%d)", 
+                         v_d, previousWaypoint.backwards ? 1 : 0);
     }
     else {
         // Parar se não há waypoints ou estado inválido
