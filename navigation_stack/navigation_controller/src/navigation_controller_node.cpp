@@ -122,6 +122,7 @@ void NavigationController::loadRouteFromParameters(){
     // Agora previousWaypoint (posição inicial) + route.front() = 1 linha válida
     if (!route.empty()) {
         followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+        ROS_WARN("followline 1");
         followLineFsm.set_state();
         
         // Verificar se já estamos perto do primeiro waypoint (skip inicial)
@@ -525,6 +526,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
     
     // Reinicializar followLine FSM quando nova rota é adicionada
     followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+    ROS_WARN("followline 2");
     followLineFsm.set_state();
     
     // Publicar linhas de visualização
@@ -742,13 +744,14 @@ void NavigationController::followLine() {
     // Vai para Approaching quando tiver percorrido approaching_line_progress da linha E
     // (o ponto final for uma warehouse OU se estiver saindo de uma warehouse (backwards=true))
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        if (error_dist < param.dist_da && (line.pf.is_warehouse || isBackwards())) {
+        if (error_dist < param.dist_da /*&& (line.pf.is_warehouse || isBackwards())*/) {
             ROS_WARN("approaching state condition met - error_dist=%.3f < dist_da=%.3f", error_dist, param.dist_da);
             followLineFsm.new_state = navigation::followLineStates::Approaching;
         }
     }
     
     // Apply transitions
+    ROS_WARN("approaching 1");
     followLineFsm.set_state();
     
     // Publicar feedback de conclusão quando >70% da linha for completada (apenas uma vez por linha)
@@ -811,10 +814,10 @@ void NavigationController::followLine() {
     }
 
     // DEBUG
-    ROS_INFO("[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s", 
+    ROS_INFO("[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s | dist_da=%.3f", 
              line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y, 
              line_progress * 100, error_dist,
-             (followLineFsm.state == navigation::followLineStates::Follow_Line) ? "Follow_Line" : "Approaching");
+             (followLineFsm.state == navigation::followLineStates::Follow_Line) ? "Follow_Line" : "Approaching", param.dist_da);
 
 }
 
@@ -883,6 +886,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
                 
                 // Reinicializar followLine FSM para nova linha
                 followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+                ROS_WARN("followline 3");
                 followLineFsm.set_state();
                 
                 // Reset completion feedback flag para nova linha
@@ -930,6 +934,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             
             // Reinicializar followLine FSM para nova linha
             followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+            ROS_WARN("followline 4");
             followLineFsm.set_state();
             
             // Se não há mais waypoints, ir direto para idle
@@ -966,6 +971,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
                 updateDesiredPose();
                 // Reinicializar followLine FSM para nova linha
                 followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+                ROS_WARN("followline 5");
                 followLineFsm.set_state();
                 // Reset completion feedback flag para nova linha
                 completion_feedback_sent = false;
@@ -1157,6 +1163,7 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     // Reinicializar followLine FSM quando rota é carregada
     if (!route.empty()) {
         followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+        ROS_WARN("followline 6");
         followLineFsm.set_state();
         
         // Verificar se já estamos perto do primeiro waypoint (skip inicial)
