@@ -183,7 +183,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             // (para completar 100% da linha antes de chegar à warehouse de pick)
             if (point.pick_box) {
                 if (!control_points.empty()) {
-                    control_points.back().line_switch_ratio = 1.0;
+                    control_points.back().line_switch_ratio = 0.9;
                     ROS_INFO("PlanHandlerNode: Set line_switch_ratio=1.0 for previous point (before pick warehouse)");
                 }
                 // Também atualizar no plan_stack se não estiver vazio
