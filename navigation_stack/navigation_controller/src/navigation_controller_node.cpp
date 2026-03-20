@@ -781,6 +781,10 @@ void NavigationController::followLine() {
         
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
+        v_d=0;
+        w_d= 1.0;
+        ROS_WARN("approaching");
+        /*
         // 1. CONTROLO ANGULAR (Manter o robô no trilho da linha)
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
         if (w_d > param.w_nom)       w_d = param.w_nom;
@@ -807,6 +811,8 @@ void NavigationController::followLine() {
         // 5. LOG DE INFO PARA DIAGNÓSTICO (Aparece a cada 200ms)
         ROS_INFO(">>> [APPROACHING] Dist: %.3f | AngErr: %.1f deg | Penalty: %.1f | V_FINAL: %.2f", 
              error_dist, error_ang_deg, alignment_penalty, v_d);
+
+        */
     }
 
     // Backwards support
@@ -1004,6 +1010,11 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     if(navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
+        v_d=0;
+        w_d= 0.0;
+        ROS_WARN("pickboxforward");
+
+        /*
         double v_ramp = 1.5 * error_dist; 
         double v_max_approach = 0.25;
         double v_target = std::min(v_ramp, v_max_approach);
@@ -1039,6 +1050,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         if (error_ang_deg > 15.0) {
             ROS_WARN("[ALERTA] Erro angular muito alto (15 graus) no encosto! O robô está atravessado.");
         }
+            */
     }
     else {
         // Parar se não há waypoints ou estado inválido
