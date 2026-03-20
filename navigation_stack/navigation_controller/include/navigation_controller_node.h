@@ -104,6 +104,7 @@ class NavigationController {
             double approaching_line_progress;  // Line progress threshold to enter Approaching state (0.60 = 60%)
             double approaching_vel;            // Constant velocity in Approaching state (m/s)
             double k_approaching;              // Gain for angular control in Approaching state
+            double gain_approaching_fwd;         // Forward gain for control in Approaching state
 
         };
 
