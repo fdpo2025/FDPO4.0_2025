@@ -743,7 +743,7 @@ void NavigationController::followLine() {
     // (o ponto final for uma warehouse OU se estiver saindo de uma warehouse (backwards=true))
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
         if (error_dist < param.dist_da && (line.pf.is_warehouse || isBackwards())) {
-            ROS_WARN("approaching state condition met")
+            ROS_WARN("approaching state condition met");
             followLineFsm.new_state = navigation::followLineStates::Approaching;
         }
     }
@@ -782,7 +782,7 @@ void NavigationController::followLine() {
         
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-        ROS_WARN("approaching actions")
+        ROS_WARN("approaching actions");
         // -----------------------
         //   ANGULAR CONTROL
         // -----------------------
