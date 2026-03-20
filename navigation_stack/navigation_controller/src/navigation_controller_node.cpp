@@ -790,15 +790,13 @@ void NavigationController::followLine() {
         // -----------------------
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
 
+        double B = -param.approaching_vel/(param.w_nom*param.w_nom);
+        v_d = std::max(B * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
+
         // Limitar velocidade angular
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
-        // -----------------------
-        //   LINEAR CONTROL 
-        // -----------------------
-        // Velocidade constante no estado Approaching
-        v_d = param.approaching_vel;
     }
 
     // Zerar velocidade linear se erro angular > 93°
