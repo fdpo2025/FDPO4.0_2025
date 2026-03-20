@@ -1,5 +1,6 @@
 #include "plan_handler_node.h"
 #include <algorithm>
+#include <xmlrpcpp/XmlRpcValue.h>
 
 PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
 {
@@ -15,47 +16,20 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     is_output_warehouse.resize(39, false);
 
     // ========================================================================
-    // FACTORY COORDINATES: hardcoded (dps mudar para extrair de parametrois)
+    // EXTRAIR COORDENADAS DO YAML
     // ========================================================================
-    factory_coordinates[0] = {-0.687, 0.468};
-    factory_coordinates[1] = {-0.545, 0.468};
-    factory_coordinates[2] = {-0.386, 0.468};
-    factory_coordinates[3] = {-0.245, 0.468};
-    factory_coordinates[4] = {0.0, 0.355};
-    factory_coordinates[5] = {0.227, 0.355};
-    factory_coordinates[6] = {0.468, 0.355};
-    factory_coordinates[7] = {0.695, 0.355};
-    factory_coordinates[8] = {-0.695, 0.2};
-    factory_coordinates[9] = {-0.545, 0.2};
-    factory_coordinates[10] = {-0.395, 0.2};
-    factory_coordinates[11] = {-0.245, 0.2};
-    factory_coordinates[12] = {0.0, 0.15};
-    factory_coordinates[13] = {0.22, 0.15};  
-    factory_coordinates[14] = {0.468, 0.163};   
-    factory_coordinates[15] = {0.695, 0.15};
-    factory_coordinates[16] = {-0.695, 0.0};
-    factory_coordinates[17] = {-0.468, -0.023};  
-    factory_coordinates[18] = {-0.227, 0.0};  
-    factory_coordinates[19] = {0.0, 0.0};
-    factory_coordinates[20] = {0.227, 0.0};    
-    factory_coordinates[21] = {0.468, 0.0};  
-    factory_coordinates[22] = {0.695, 0.0};
-    factory_coordinates[23] = {-0.695, -0.15};
-    factory_coordinates[24] = {-0.468, -0.158};
-    factory_coordinates[25] = {-0.227, -0.15};
-    factory_coordinates[26] = {0.0, -0.15};
-    factory_coordinates[27] = {0.245, -0.2};
-    factory_coordinates[28] = {0.395, -0.2};
-    factory_coordinates[29] = {0.545, -0.2};
-    factory_coordinates[30] = {0.695, -0.2};
-    factory_coordinates[31] = {-0.695, -0.355};
-    factory_coordinates[32] = {-0.468, -0.355};
-    factory_coordinates[33] = {-0.227, -0.355};
-    factory_coordinates[34] = {0.0, -0.355};
-    factory_coordinates[35] = {0.245, -0.468};
-    factory_coordinates[36] = {0.3935, -0.468};
-    factory_coordinates[37] = {0.545, -0.468};
-    factory_coordinates[38] = {0.695, -0.468};
+    XmlRpc::XmlRpcValue coords_list;
+    if (nh.getParam("factory_coords", coords_list)) {
+        if (coords_list.getType() == XmlRpc::XmlRpcValue::TypeArray) {
+            for (int i = 0; i < coords_list.size() && i < 39; ++i) {
+                factory_coordinates[i].x = static_cast<double>(coords_list[i][0]);
+                factory_coordinates[i].y = static_cast<double>(coords_list[i][1]);
+            }
+            ROS_INFO("PlanHandlerNode: Successfully loaded %d coordinates from YAML", coords_list.size());
+        }
+    } else {
+        ROS_ERROR("PlanHandlerNode: Failed to get 'factory_coords' from parameter server!");
+    }
 
     // ========================================================================
     // WAREHOUSE COORDINATES: hardcoded (dps mudar para extrair de parametrois)
@@ -165,8 +139,8 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
         // DEBUG: Mostrar info de cada nó
         ROS_INFO("PlanHandlerNode: Processing node %d - is_first=%d, is_warehouse=%d, is_input=%d, is_output=%d, has_box=%d",
-                 value, is_first_node ? 1 : 0, is_current_warehouse ? 1 : 0, 
-                 is_input_warehouse[value] ? 1 : 0, is_output_warehouse[value] ? 1 : 0, has_box ? 1 : 0);
+                value, is_first_node ? 1 : 0, is_current_warehouse ? 1 : 0, 
+                is_input_warehouse[value] ? 1 : 0, is_output_warehouse[value] ? 1 : 0, has_box ? 1 : 0);
 
         if(is_current_warehouse) {
             was_last_warehouse_process = is_process_warehouse[value];
@@ -225,7 +199,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                 if (!control_points.empty()) {
                     control_points.back().line_switch_ratio = drop_switch_ratio;
                     ROS_INFO("PlanHandlerNode: Set line_switch_ratio=%.2f for previous point (before drop warehouse, process=%d)", 
-                             drop_switch_ratio, is_process_warehouse[value] ? 1 : 0);
+                            drop_switch_ratio, is_process_warehouse[value] ? 1 : 0);
                 }
                 // Também atualizar no plan_stack se não estiver vazio
                 if (!plan_stack.empty()) {
@@ -252,7 +226,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             }            
 
 
-	    point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
+        point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
             point.vel_lin_nom =  0.1 * fe_warehouse_coordinate + 0.3 * !fe_warehouse_coordinate; // if backwards deac.   
             point.should_pub = false;       
 
@@ -264,7 +238,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
         plan_stack.push_back(point);
         
         ROS_INFO("PlanHandlerNode: Added point - x=%.3f, y=%.3f, line_switch_ratio=%.2f, vel_lin_nom=%.2f, backwards=%d",
-                 point.x, point.y, point.line_switch_ratio, point.vel_lin_nom, point.backwards ? 1 : 0);
+                point.x, point.y, point.line_switch_ratio, point.vel_lin_nom, point.backwards ? 1 : 0);
         
         // Após processar o primeiro nó, marcar como false
         is_first_node = false;
@@ -324,10 +298,10 @@ void PlanHandlerNode::navCompletionFeedbackCallback(const plan_handler::Completi
                 last_pick_box_state = removed_point.pick_box;
                 
                 ROS_INFO("PlanHandlerNode: Removed point (%.3f, %.3f) from plan_stack. Published pick_box=%d (state changed). Remaining points: %zu", 
-                         removed_point.x, removed_point.y, pick_box_msg.data ? 1 : 0, plan_stack.size());
+                        removed_point.x, removed_point.y, pick_box_msg.data ? 1 : 0, plan_stack.size());
             } else {
                 ROS_INFO("PlanHandlerNode: Removed point (%.3f, %.3f) from plan_stack. pick_box=%d (no state change). Remaining points: %zu", 
-                         removed_point.x, removed_point.y, removed_point.pick_box ? 1 : 0, plan_stack.size());
+                        removed_point.x, removed_point.y, removed_point.pick_box ? 1 : 0, plan_stack.size());
             }
             
             found = true;
