@@ -856,16 +856,15 @@ void NavigationController::followLine() {
         w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
 
         // -----------------------
-        //   LINEAR VELOCITY: proporcional ao error_dist (desacelera ao aproximar do pf)
+        //   LINEAR VELOCITY: mínimo entre atual (error_dist) e antigo (quadrático em w_d)
         //   Nunca ultrapassar a última velocidade de Follow_Line
         // -----------------------
         double k_approach_dist = (param.dist_da > 0.0) ? (param.approaching_vel / param.dist_da) : 1.0;
-        double v_d_calc = k_approach_dist * error_dist;
-        v_d = std::min(std::max(v_d_calc, param.v_min), last_vel_before_approaching_);
+        double v_d_current = std::min(std::max(k_approach_dist * error_dist, param.v_min), last_vel_before_approaching_);
 
-        // Cálculo original (comentado):
-        // double B = -param.approaching_vel/(param.w_nom*param.w_nom*param.w_nom);
-        // v_d = std::max(B * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
+        double B_approach = -param.approaching_vel/(param.w_nom*param.w_nom*param.w_nom);  // cúbica
+        double v_d_old = std::max(B_approach * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
+        v_d = std::min(v_d_current, v_d_old);
 
         // Limitar velocidade angular
         if (w_d > param.w_nom)       w_d = param.w_nom;
