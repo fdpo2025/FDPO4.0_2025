@@ -120,7 +120,6 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 {
     std::vector<ControllerPoint> control_points;
     bool is_first_node = true;  // Flag para identificar o primeiro nó do caminho
-    bool was_last_warehouse_pick = false;  // Ao sair de warehouse: pick=backwards, drop=forward
 
     for (const auto& value : msg->data) {
     
@@ -154,7 +153,6 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             // (o robô já está nessa posição, é apenas o ponto de partida)
             // IMPORTANTE: Também não adicionar ao plan_stack para evitar conflitos com caminhos futuros
             if (is_first_node) {
-                was_last_warehouse_pick = is_input_warehouse[value];  // para primeiro segmento ao "sair"
                 ROS_INFO("PlanHandlerNode: First node is warehouse (ID %d), skipping entirely (not added to plan_stack)", value);
                 is_first_node = false;
                 continue;  // Salta este ponto completamente - não adiciona a control_points nem plan_stack
@@ -208,7 +206,6 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                     plan_stack.back().line_switch_ratio = drop_switch_ratio;
                 }
             }
-            was_last_warehouse_pick = point.pick_box;
 
         } else {
 
@@ -228,9 +225,8 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
             }            
 
-            // backwards apenas ao sair de pick; ao sair de drop sai de frente
-            point.backwards = fe_warehouse_coordinate && was_last_warehouse_pick;
-            point.vel_lin_nom = (fe_warehouse_coordinate && was_last_warehouse_pick) ? 0.1 : 0.3;
+            point.backwards = fe_warehouse_coordinate;  // backwards ao sair de qualquer warehouse (pick ou drop)
+            point.vel_lin_nom = 0.1 * fe_warehouse_coordinate + 0.3 * !fe_warehouse_coordinate;
             point.should_pub = false;       
 
         }

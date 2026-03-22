@@ -819,8 +819,9 @@ void NavigationController::followLine() {
     // Apply transitions
     followLineFsm.set_state();
     
-    // Publicar feedback de conclusão quando >70% da linha for completada (apenas uma vez por linha)
-    if (line_progress > 0.7 && !completion_feedback_sent) {
+    // Feedback de conclusão: drop 50% (desliga ímanes mais cedo), pick/normal 70%
+    const double completion_threshold = (line.pf.is_warehouse && !line.pf.pick_box) ? 0.5 : 0.7;
+    if (line_progress > completion_threshold && !completion_feedback_sent) {
         plan_handler::CompletionFeedback feedback;
         feedback.x = line.pf.pose.x;
         feedback.y = line.pf.pose.y;
@@ -829,9 +830,7 @@ void NavigationController::followLine() {
         ROS_INFO("NavigationController: Published completion feedback for waypoint (%.3f, %.3f) at %.1f%% progress", 
                  feedback.x, feedback.y, line_progress * 100.0);
     }
-    
-    // Reset flag quando mudar de linha (quando line_progress < 0.7 novamente ou quando avançar para próximo waypoint)
-    if (line_progress < 0.7) {
+    if (line_progress < completion_threshold) {
         completion_feedback_sent = false;
     }
 
