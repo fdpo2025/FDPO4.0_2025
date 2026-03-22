@@ -880,15 +880,14 @@ void NavigationController::followLine() {
     }
 
     // -----------------------
-    //   a_max / d_max: rampa de aceleração/desaceleração
+    //   a_max: rampa apenas em aceleração (desaceleração imediata)
     // -----------------------
     double dt = 1.0 / param.loop_rate_hz;
     if (v_target > v_d) {
         v_d += param.a_max * dt;
         if (v_d > v_target) v_d = v_target;
     } else {
-        v_d -= param.d_max * dt;
-        if (v_d < v_target) v_d = v_target;
+        v_d = v_target;
     }
     if (v_d > param.v_max) v_d = param.v_max;
     if (v_d < -param.v_max) v_d = -param.v_max;
