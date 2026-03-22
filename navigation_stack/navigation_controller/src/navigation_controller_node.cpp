@@ -804,13 +804,17 @@ void NavigationController::followLine() {
     followLineFsm.update_tis();
     
     // State machine - Transitions
-    // Apenas 2 estados: Follow_Line e Approaching
-    // Vai para Approaching quando tiver percorrido approaching_line_progress da linha E
-    // (o ponto final for uma warehouse OU se estiver saindo de uma warehouse (backwards=true))
+    // Follow_Line -> Approaching (normal) quando progress alto e pf NÃO é warehouse
+    // Follow_Line -> Approaching_PickDrop quando progress alto e pf É warehouse (pick/drop)
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
         if (line_progress > param.approaching_line_progress || (line.pf.line_switch_ratio > 0.8 && line.pi.line_switch_ratio > 0.8)) {
-            ROS_WARN("approaching state condition met");
-            followLineFsm.new_state = navigation::followLineStates::Approaching;
+            if (line.pf.is_warehouse) {
+                followLineFsm.new_state = navigation::followLineStates::Approaching_PickDrop;
+                ROS_WARN("approaching pick/drop state");
+            } else {
+                followLineFsm.new_state = navigation::followLineStates::Approaching;
+                ROS_WARN("approaching normal state");
+            }
         }
     }
     
@@ -851,22 +855,26 @@ void NavigationController::followLine() {
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
         // -----------------------
-        //   ANGULAR CONTROL
+        //   APPROACHING NORMAL: apenas v proporcional a error_dist
         // -----------------------
         w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
 
-        // -----------------------
-        //   LINEAR VELOCITY: mínimo entre atual (error_dist) e antigo (quadrático em w_d)
-        //   Nunca ultrapassar a última velocidade de Follow_Line
-        // -----------------------
-        double k_approach_dist = (param.dist_da > 0.0) ? (param.approaching_vel / param.dist_da) : 1.0;
-        double v_d_current = std::min(std::max(k_approach_dist * error_dist, param.v_min), last_vel_before_approaching_);
+        double k_approach = (param.dist_da > 0.0) ? (last_vel_before_approaching_ / param.dist_da) : 1.0;
+        v_d = std::min(std::max(k_approach * error_dist, param.v_min), last_vel_before_approaching_);
 
-        double B_approach = -param.approaching_vel/(param.w_nom*param.w_nom*param.w_nom);  // cúbica
-        double v_d_old = std::max(B_approach * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
-        v_d = std::min(v_d_current, v_d_old);
+        if (w_d > param.w_nom)       w_d = param.w_nom;
+        else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
-        // Limitar velocidade angular
+    }
+    else if (followLineFsm.state == navigation::followLineStates::Approaching_PickDrop) {
+        // -----------------------
+        //   APPROACHING PICK/DROP: apenas v cúbica em w_d
+        // -----------------------
+        w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
+
+        double B_approach = -param.approaching_vel/(param.w_nom*param.w_nom*param.w_nom);
+        v_d = std::max(B_approach * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
+
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
@@ -884,10 +892,11 @@ void NavigationController::followLine() {
     }
 
     // DEBUG
+    const char* state_str = (followLineFsm.state == navigation::followLineStates::Follow_Line) ? "Follow_Line" :
+                           (followLineFsm.state == navigation::followLineStates::Approaching) ? "Approaching" : "Approaching_PickDrop";
     ROS_INFO("[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s | dist_da=%.3f", 
              line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y, 
-             line_progress * 100, error_dist,
-             (followLineFsm.state == navigation::followLineStates::Follow_Line) ? "Follow_Line" : "Approaching", param.dist_da);
+             line_progress * 100, error_dist, state_str, param.dist_da);
 
 }
 

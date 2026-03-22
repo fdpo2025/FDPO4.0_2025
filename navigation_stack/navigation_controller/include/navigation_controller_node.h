@@ -200,10 +200,11 @@ namespace navigation {
     }
     
     namespace followLineStates {
-        
+
         enum {
             Follow_Line = 0,
-            Approaching
+            Approaching,        // Linhas normais: v proporcional a error_dist
+            Approaching_PickDrop  // Pick/drop (warehouse): v cúbica em w_d
         };
     }
 
