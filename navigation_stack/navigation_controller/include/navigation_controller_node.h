@@ -129,6 +129,8 @@ class NavigationController {
 
         // Follow line functions
         void dist2Line(double xi, double yi, double xf, double yf, double xr, double yr, double& distLine);
+        void dist2LineVirtual(double xi, double yi, double xf, double yf, double xr, double yr,
+                              double& k1_virtual, double& error_ang_virtual);
         double getLineAngle(double pi_x, double pi_y, double pf_x, double pf_y);
         double getLineError();
         double getAlignLineYawError();
@@ -149,10 +151,14 @@ class NavigationController {
         void publishVel();
         
         ros::Publisher lineMarkerPub;
+        ros::Publisher virtualLineMarkerPub;
         void publishLineMarkers();
+        void publishVirtualLineMarker(double pi_x, double pi_y, double pf_x, double pf_y);
         
         ros::Publisher navCompletionFeedbackPub;
         bool completion_feedback_sent;  // Para enviar feedback apenas uma vez por linha
+
+        double last_vel_before_approaching_;  // Última v_d em Follow_Line; limite máximo em Approaching
         
         // Estado para pick box forward
         ros::Time pick_box_forward_start_time;

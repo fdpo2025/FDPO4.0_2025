@@ -1,15 +1,16 @@
 #include "navigation_controller_node.h"
 #include <cmath>
 
-NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0), 
-navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line), 
+NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0),
+navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line),
 k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false}), tfBuffer(), tfListener(tfBuffer),
-in_pick_box_forward(false) {
-    
+in_pick_box_forward(false), last_vel_before_approaching_(0.0) {
+
     mode = "idle";
 
     // load navigation parameters
     loadNavigationParams();
+    last_vel_before_approaching_ = param.vel_lin_nom;
     
     //load RViz parameters
     nh.param("rviz_append", rvizGoalAppend, false);
@@ -27,6 +28,7 @@ in_pick_box_forward(false) {
     ROS_INFO("NavigationController subscribing to /nav_plan (load_from_route=%s)", load_from_route ? "true" : "false");
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
     lineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_lines", 1, true);  // latch=true para RViz ver imediatamente
+    virtualLineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_virtual_line", 1, true);
     navCompletionFeedbackPub = nh.advertise<plan_handler::CompletionFeedback>("/nav_completion_feedback", 10);
     completion_feedback_sent = false;
     controlTimer = nh.createTimer(ros::Duration(1.0 / std::max(1, param.loop_rate_hz)), &NavigationController::navigationFsmRunner, this);
@@ -276,6 +278,32 @@ void NavigationController::dist2Line(double xi, double yi, double xf, double yf,
     line_progress = t / line_length;  // 0 = em pi, 1 = em pf, >1 = passou pf
 }
 
+// Linha virtual: linha original com pi projetado para infinito - mesma direção pi->pf, prolongada
+// k1 e error_ang para o controlo angular. line_progress mantém-se da linha original.
+void NavigationController::dist2LineVirtual(double xi, double yi, double xf, double yf, double xr, double yr,
+                                            double& k1_virtual, double& error_ang_virtual) {
+    double dx = xf - xi;
+    double dy = yf - yi;
+    double line_length = std::sqrt(dx * dx + dy * dy);
+
+    if (line_length < 1e-6) {
+        k1_virtual = std::sqrt((xr - xi) * (xr - xi) + (yr - yi) * (yr - yi));
+        error_ang_virtual = 0.0;
+        return;
+    }
+
+    double ux = dx / line_length;
+    double uy = dy / line_length;
+    // k1 = distância perpendicular à linha infinita (mesma fórmula que a original)
+    k1_virtual = (xr * uy - yr * ux - xi * uy + yi * ux);
+    // Ângulo da linha = direção pi->pf
+    double line_angle = std::atan2(dy, dx);
+    if (isBackwards()) {
+        line_angle = normalizeAngle(line_angle + M_PI);
+    }
+    error_ang_virtual = normalizeAngle(line_angle - poseCurr.theta);
+}
+
 double NavigationController::getLineAngle(double pi_x, double pi_y, double pf_x, double pf_y) {
     // Calcula o ângulo da linha usando atan2(pf - pi)
     double dx = pf_x - pi_x;
@@ -416,6 +444,45 @@ void NavigationController::publishLineMarkers() {
     
     // Publicar marker
     lineMarkerPub.publish(line_marker);
+}
+
+// Linha virtual: original com pi projetado para infinito - segmento longo na direção pi->pf
+void NavigationController::publishVirtualLineMarker(double pi_x, double pi_y, double pf_x, double pf_y) {
+    double dx = pf_x - pi_x;
+    double dy = pf_y - pi_y;
+    double line_length = std::sqrt(dx * dx + dy * dy);
+
+    visualization_msgs::Marker m;
+    m.header.frame_id = "map";
+    m.header.stamp = ros::Time::now();
+    m.ns = "navigation_virtual_line";
+    m.id = 0;
+    m.type = visualization_msgs::Marker::LINE_LIST;
+    m.action = visualization_msgs::Marker::ADD;
+    m.pose.orientation.w = 1.0;
+    m.scale.x = 0.08;
+    m.color.r = 1.0;
+    m.color.g = 0.5;
+    m.color.b = 0.0;
+    m.color.a = 1.0;
+    m.lifetime = ros::Duration(0.2);
+
+    const double ext = 50.0;  // Extensão para "infinito" em cada direção (m)
+    geometry_msgs::Point p1, p2;
+    if (line_length < 1e-6) {
+        p1.x = pi_x; p1.y = pi_y; p1.z = 0.0;
+        p2.x = pf_x; p2.y = pf_y; p2.z = 0.0;
+    } else {
+        double ux = dx / line_length;
+        double uy = dy / line_length;
+        // pi projetado para inf: começar longe para trás, manter ângulo
+        p1.x = pi_x - ext * ux; p1.y = pi_y - ext * uy; p1.z = 0.0;
+        p2.x = pf_x + ext * ux; p2.y = pf_y + ext * uy; p2.z = 0.0;
+    }
+    m.points.push_back(p1);
+    m.points.push_back(p2);
+
+    virtualLineMarkerPub.publish(m);
 }
 
 void NavigationController::skipNearbyWaypoints() {
@@ -707,28 +774,23 @@ void NavigationController::followLine() {
     double vel_lin_nom_eff = (currentWaypoint.vel_lin_nom > 0) ? 
                               currentWaypoint.vel_lin_nom : param.vel_lin_nom;
     
-    // error calc.
-    double tr = std::atan2(line.pf.pose.y - line.pi.pose.y, line.pf.pose.x - line.pi.pose.x);  // Line Angle
-    // Se backwards, seguir a linha no sentido oposto
-    if (isBackwards()) {
-        tr = normalizeAngle(tr + M_PI);
-    }
-
-    double error_ang = normalizeAngle(tr - poseCurr.theta);
+    // error calc. - error_ang e k1_eff usam linha virtual (robot->pf); line_progress usa linha original
     double error_dist = std::sqrt((line.pf.pose.x - poseCurr.x) * (line.pf.pose.x - poseCurr.x) + 
                                   (line.pf.pose.y - poseCurr.y) * (line.pf.pose.y - poseCurr.y));
-    
-    // Converter erro angular para valor absoluto em graus para verificação
-    double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
 
-    // Line dist
+    // Line dist - linha original para line_progress
     double distLine;
     dist2Line(line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y, poseCurr.x, poseCurr.y, distLine);
-    
-    double k1_eff = k1;
-    if (isBackwards()) {
-        k1_eff = k1;
-    }
+
+    // Linha virtual (robot->pf) para k1_eff e error_ang no controlo angular
+    double k1_virtual, error_ang;
+    dist2LineVirtual(line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y,
+                     poseCurr.x, poseCurr.y, k1_virtual, error_ang);
+    double k1_eff = k1_virtual;
+    double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
+
+    // Publicar linha virtual no RViz (original com pi projetado para infinito)
+    publishVirtualLineMarker(line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y);
 
     // // Reduzir velocidade nominal para metade se erro de linha > 3cm
     // const double line_error_threshold = 0.03; // 3cm
@@ -773,27 +835,37 @@ void NavigationController::followLine() {
 
     // State machine - Outputs
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        
 
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
 
         double A = -vel_lin_nom_eff/(param.w_nom*param.w_nom);
         v_d = std::max(A * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
-        
+
+        // Guardar última velocidade antes de possivelmente entrar em Approaching
+        last_vel_before_approaching_ = std::abs(v_d);
+
         // Limitar velocidade angular
         if (w_d > param.w_nom) w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
-        
+
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-        ROS_WARN("approaching actions");
         // -----------------------
         //   ANGULAR CONTROL
         // -----------------------
         w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
 
-        double B = -param.approaching_vel/(param.w_nom*param.w_nom*param.w_nom);
-        v_d = std::max(B * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
+        // -----------------------
+        //   LINEAR VELOCITY: proporcional ao error_dist (desacelera ao aproximar do pf)
+        //   Nunca ultrapassar a última velocidade de Follow_Line
+        // -----------------------
+        double k_approach_dist = (param.dist_da > 0.0) ? (param.approaching_vel / param.dist_da) : 1.0;
+        double v_d_calc = k_approach_dist * error_dist;
+        v_d = std::min(std::max(v_d_calc, param.v_min), last_vel_before_approaching_);
+
+        // Cálculo original (comentado):
+        // double B = -param.approaching_vel/(param.w_nom*param.w_nom*param.w_nom);
+        // v_d = std::max(B * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
 
         // Limitar velocidade angular
         if (w_d > param.w_nom)       w_d = param.w_nom;
