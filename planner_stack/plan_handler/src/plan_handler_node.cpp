@@ -226,8 +226,8 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             }            
 
 
-        point.backwards = fe_warehouse_coordinate; // go backwards if its returning from a warehouse
-            point.vel_lin_nom =  0.1 * fe_warehouse_coordinate + 0.3 * !fe_warehouse_coordinate; // if backwards deac.   
+        point.backwards = false;  // nunca backwards: ao sair de warehouse sai de frente
+            point.vel_lin_nom = 0.3;  // velocidade normal (antes 0.1 ao sair, 0.3 forward)   
             point.should_pub = false;       
 
         }
