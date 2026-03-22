@@ -804,17 +804,15 @@ void NavigationController::followLine() {
     followLineFsm.update_tis();
     
     // State machine - Transitions
-    // Follow_Line -> Approaching (normal) quando progress alto e pf NÃO é warehouse
-    // Follow_Line -> Approaching_PickDrop quando progress alto e pf É warehouse (pick/drop)
+    // Approaching_PickDrop: sempre que pf é warehouse (cúbica desde o início, independente da distância)
+    // Approaching (normal): quando progress alto e pf NÃO é warehouse
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        if (line_progress > param.approaching_line_progress || (line.pf.line_switch_ratio > 0.8 && line.pi.line_switch_ratio > 0.8)) {
-            if (line.pf.is_warehouse) {
-                followLineFsm.new_state = navigation::followLineStates::Approaching_PickDrop;
-                ROS_WARN("approaching pick/drop state");
-            } else {
-                followLineFsm.new_state = navigation::followLineStates::Approaching;
-                ROS_WARN("approaching normal state");
-            }
+        if (line.pf.is_warehouse) {
+            followLineFsm.new_state = navigation::followLineStates::Approaching_PickDrop;
+            ROS_WARN("approaching pick/drop state");
+        } else if (line_progress > param.approaching_line_progress) {
+            followLineFsm.new_state = navigation::followLineStates::Approaching;
+            ROS_WARN("approaching normal state");
         }
     }
     
