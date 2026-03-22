@@ -834,16 +834,15 @@ void NavigationController::followLine() {
     }
 
     // State machine - Outputs
-    double v_target = 0.0;
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
 
         w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
 
         double A = -vel_lin_nom_eff/(param.w_nom*param.w_nom);
-        v_target = std::max(A * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
+        v_d = std::max(A * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
 
         // Guardar última velocidade antes de possivelmente entrar em Approaching
-        last_vel_before_approaching_ = std::abs(v_target);
+        last_vel_before_approaching_ = std::abs(v_d);
 
         // Limitar velocidade angular
         if (w_d > param.w_nom) w_d = param.w_nom;
@@ -857,7 +856,7 @@ void NavigationController::followLine() {
         w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
 
         // -----------------------
-        //   LINEAR VELOCITY: mínimo entre atual (error_dist) e antigo (cúbica em w_d)
+        //   LINEAR VELOCITY: mínimo entre atual (error_dist) e antigo (quadrático em w_d)
         //   Nunca ultrapassar a última velocidade de Follow_Line
         // -----------------------
         double k_approach_dist = (param.dist_da > 0.0) ? (param.approaching_vel / param.dist_da) : 1.0;
@@ -865,7 +864,7 @@ void NavigationController::followLine() {
 
         double B_approach = -param.approaching_vel/(param.w_nom*param.w_nom*param.w_nom);  // cúbica
         double v_d_old = std::max(B_approach * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
-        v_target = std::min(v_d_current, v_d_old);
+        v_d = std::min(v_d_current, v_d_old);
 
         // Limitar velocidade angular
         if (w_d > param.w_nom)       w_d = param.w_nom;
@@ -875,23 +874,10 @@ void NavigationController::followLine() {
 
     // Zerar velocidade linear se erro angular > 93°
     if (error_ang_deg > 93.0) {
-        v_target = 0.0;
+        v_d = 0.0;
         ROS_INFO_THROTTLE(1.0, "NavigationController: Angular error %.1f° > 93°, setting linear velocity to 0", error_ang_deg);
     }
-
-    // -----------------------
-    //   a_max: rampa apenas em aceleração (desaceleração imediata)
-    // -----------------------
-    double dt = 1.0 / param.loop_rate_hz;
-    if (v_target > v_d) {
-        v_d += param.a_max * dt;
-        if (v_d > v_target) v_d = v_target;
-    } else {
-        v_d = v_target;
-    }
-    if (v_d > param.v_max) v_d = param.v_max;
-    if (v_d < -param.v_max) v_d = -param.v_max;
-
+    
     // Backwards support
     if (isBackwards() && v_d > 0.0) {
         v_d = -v_d;
