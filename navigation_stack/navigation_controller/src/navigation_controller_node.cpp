@@ -804,10 +804,12 @@ void NavigationController::followLine() {
     followLineFsm.update_tis();
     
     // State machine - Transitions
-    // Approaching_PickDrop: sempre que pf é warehouse (cúbica desde o início, independente da distância)
-    // Approaching (normal): quando progress alto e pf NÃO é warehouse
-    if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
-        if (line.pf.is_warehouse) {
+    // Approaching: APENAS quando pf é o ponto imediatamente anterior a um warehouse (route[1].is_warehouse)
+    // Approaching_PickDrop: quando o próximo ponto (warehouse) é pick (cúbica)
+    // Approaching (normal): quando o próximo ponto (warehouse) é drop (rampa)
+    bool pf_is_before_warehouse = (route.size() > 1 && route[1].is_warehouse);
+    if (followLineFsm.state == navigation::followLineStates::Follow_Line && pf_is_before_warehouse) {
+        if (route[1].pick_box) {
             followLineFsm.new_state = navigation::followLineStates::Approaching_PickDrop;
             ROS_WARN("approaching pick/drop state");
         } else if (line_progress > param.approaching_line_progress) {
