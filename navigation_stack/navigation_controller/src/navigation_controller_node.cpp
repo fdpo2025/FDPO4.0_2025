@@ -822,8 +822,8 @@ void NavigationController::followLine() {
     // Apply transitions
     followLineFsm.set_state();
     
-    // Feedback de conclusão: drop 50% (desliga ímanes mais cedo), pick/normal 70%
-    const double completion_threshold = (line.pf.is_warehouse && !line.pf.pick_box) ? 0.5 : 0.7;
+    // Feedback de conclusão: 70% (desliga ímanes)
+    const double completion_threshold = 0.7;
     if (line_progress > completion_threshold && !completion_feedback_sent) {
         plan_handler::CompletionFeedback feedback;
         feedback.x = line.pf.pose.x;
