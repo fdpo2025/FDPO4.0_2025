@@ -4,7 +4,7 @@
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0),
 navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line),
 k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false}), tfBuffer(), tfListener(tfBuffer),
-in_pick_box_forward(false), last_vel_before_approaching_(0.0) {
+in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_start_progress_(0.0) {
 
     mode = "idle";
 
@@ -812,6 +812,7 @@ void NavigationController::followLine() {
             ROS_WARN("approaching pick/drop state");
         } else if (line_progress > param.approaching_line_progress) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
+            approaching_start_progress_ = line_progress;
             ROS_WARN("approaching normal state");
         }
     }
@@ -852,12 +853,15 @@ void NavigationController::followLine() {
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
         // -----------------------
-        //   APPROACHING NORMAL: apenas v proporcional a error_dist
+        //   APPROACHING NORMAL: rampa \ relativa ao ponto de entrada
+        //   v = last_vel * (1 - progress_ramp), progress_ramp 0->1 do início ao fim
         // -----------------------
         w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
 
-        double k_approach = (param.dist_da > 0.0) ? (last_vel_before_approaching_ / param.dist_da) : 1.0;
-        v_d = std::min(std::max(k_approach * error_dist, param.v_min), last_vel_before_approaching_);
+        double denom = 1.0 - approaching_start_progress_;
+        double progress_ramp = (denom > 0.01) ? (line_progress - approaching_start_progress_) / denom : 1.0;
+        progress_ramp = std::max(0.0, std::min(1.0, progress_ramp));
+        v_d = std::max(last_vel_before_approaching_ * (1.0 - progress_ramp), param.v_min);
 
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;

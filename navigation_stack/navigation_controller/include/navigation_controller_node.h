@@ -159,7 +159,8 @@ class NavigationController {
         bool completion_feedback_sent;  // Para enviar feedback apenas uma vez por linha
 
         double last_vel_before_approaching_;  // Última v_d em Follow_Line; limite máximo em Approaching
-        
+        double approaching_start_progress_;   // line_progress ao entrar em Approaching (para rampa \)
+
         // Estado para pick box forward
         ros::Time pick_box_forward_start_time;
         bool in_pick_box_forward;  // Se está no estado de andar para frente após pick
