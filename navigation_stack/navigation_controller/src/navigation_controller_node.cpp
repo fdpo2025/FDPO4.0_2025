@@ -164,6 +164,7 @@ void NavigationController::loadNavigationParams() {
     nh.param("max_etf", param.max_etf, 0.2);       // MAX_ETF (rad)
     nh.param("tol_init_line", param.tol_init_line, 0.1); // Tolerância de distância à linha para GoTo_Init -> Follow_Line (m)
     nh.param("line_switch_ratio", param.line_switch_ratio, 0.9); // Ratio da linha para mudar para próxima (0.9 = 90%)
+    nh.param("line_switch_ratio_drop", param.line_switch_ratio_drop, 0.95); // Ratio para linha antes de warehouse drop (0.95 = 95%)
     nh.param("approaching_line_progress", param.approaching_line_progress, 0.50); // Progresso da linha para entrar em Approaching (0.50 = 50%)
     nh.param("approaching_vel", param.approaching_vel, 0.05); // Velocidade constante no estado Approaching (m/s)
     nh.param("k_approaching", param.k_approaching, 10.0); // Ganho para controle angular no estado Approaching
@@ -938,11 +939,15 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     }
 
     // Quando align=false: usar line_progress para mudar de linha mais cedo (suaviza transições)
-    // Usar line_switch_ratio do waypoint se definido (>0), senão usar parâmetro global
+    // Usar line_switch_ratio do waypoint se definido (>0), senão parâmetro global. Drop warehouse: 95%
     else if(navigationFsm.state == navigation::states::driveToGoal && !route.front().align && enable) {
         
-        double switch_ratio = (route.front().line_switch_ratio > 0) ? 
+        double switch_ratio = (route.front().line_switch_ratio > 0) ?
                                route.front().line_switch_ratio : param.line_switch_ratio;
+        // Próxima linha termina em warehouse de drop → sair da linha anterior a 95%
+        if (route.size() > 1 && route[1].is_warehouse && !route[1].pick_box) {
+            switch_ratio = param.line_switch_ratio_drop;
+        }
         
         if (line_progress >= switch_ratio) {
             // Guardar waypoint anterior antes de remover

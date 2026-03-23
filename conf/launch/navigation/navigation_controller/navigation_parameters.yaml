@@ -36,7 +36,8 @@ dist_da: 0.20             # DIST_DA - distância para começar a desacelerar (m)
 tol_findist: 0.05        # TOL_FINDIST - tolerância de distância final (m)
 max_etf: 0.2             # MAX_ETF - máximo erro de orientação para transição GoTo_Init -> Follow_Line (rad)
 tol_init_line: 0.03      # Tolerância de distância à linha para transição GoTo_Init -> Follow_Line (m)
-line_switch_ratio: 0.8   # Ratio da linha para mudar para próxima (0.9 = 90%)
+line_switch_ratio: 0.8   # Ratio da linha para mudar para próxima (0.8 = 80%)
+line_switch_ratio_drop: 0.95  # Ratio para linha antes de warehouse drop (0.95 = 95%)
 
 k_approaching: 8.0       # Ganho para controle angular no estado Approaching
 gain_approaching_fwd: 1.0 # Ganho forward para controle no estado Approaching
