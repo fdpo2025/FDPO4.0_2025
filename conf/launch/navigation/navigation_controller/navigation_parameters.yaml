@@ -5,7 +5,7 @@
 loop_rate_hz: 100  # Frequência do control loop (Hz)
 
 # Limites de velocidade
-v_nom: 0.3          # Velocidade linear nominal (m/s)
+v_nom: 0.2          # Velocidade linear nominal (m/s)
 v_max: 0.4          # Velocidade linear máxima (m/s) - limite absoluto
 v_min: 0.03         # Velocidade linear mínima (m/s)
 w_nom: 2.0          # Velocidade angular nominal (rad/s)
@@ -41,5 +41,5 @@ line_switch_ratio_drop: 0.95  # Ratio para linha antes de warehouse drop (0.95 =
 
 k_approaching: 8.0       # Ganho para controle angular no estado Approaching
 gain_approaching_fwd: 1.0 # Ganho forward para controle no estado Approaching
-approaching_line_progress: 0.30  # Progresso da linha para entrar em Approaching (0.50 = 50%)
-approaching_vel: 0.08   # Velocidade máx no Approaching_PickDrop v(w³); antes 0.05 (muito lento)
+approaching_line_progress: 0.40  # Progresso da linha para entrar em Approaching (0.50 = 50%)
+approaching_vel: 0.09   # Velocidade máx no Approaching_PickDrop v(w³); antes 0.05 (muito lento)
