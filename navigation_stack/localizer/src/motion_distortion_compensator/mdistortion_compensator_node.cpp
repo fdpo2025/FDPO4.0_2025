@@ -64,7 +64,7 @@ void Distortion_Compensator_Node::getLaserScan(
         const double ti = dt_point * static_cast<double>(i);
 
         // assuming w and v static during one scan
-        double theta_i;O
+        double theta_i;
         double x_i;
         double y_i;
 
