@@ -8,7 +8,7 @@ loop_rate_hz: 100  # Frequência do control loop (Hz)
 v_nom: 0.2          # Velocidade linear nominal (m/s)
 v_max: 0.4          # Velocidade linear máxima (m/s) - limite absoluto
 v_min: 0.03         # Velocidade linear mínima (m/s)
-w_nom: 2.0          # Velocidade angular nominal (rad/s)
+w_nom: 3.0          # Velocidade angular nominal (rad/s)
 w_min: 0.0          # Velocidade angular mínima (rad/s)
 
 # Limites de aceleração/desaceleração
@@ -29,7 +29,7 @@ kp_angular: 1.0     # Ganho proporcional para controlo angular
 # ============================================================================
 # PARÂMETROS followLine (seguir linha entre waypoints)
 # ============================================================================
-k_line: 7.5              # Ganho para correção de linha (followLine)
+k_line: 7.0              # Ganho para correção de linha (followLine)
 gain_fwd: 1.0            # GAIN_FWD - ganho forward para controlo de linha
 vel_lin_nom: 0.2         # VEL_LIN_NOM - velocidade linear nominal para seguir linha (m/s)
 dist_da: 0.20             # DIST_DA - distância para começar a desacelerar (m)
@@ -41,4 +41,4 @@ line_switch_ratio: 0.8   # Ratio da linha para mudar para próxima (0.9 = 90%)
 k_approaching: 8.0       # Ganho para controle angular no estado Approaching
 gain_approaching_fwd: 1.0 # Ganho forward para controle no estado Approaching
 approaching_line_progress: 0.50  # Progresso da linha para entrar em Approaching (0.50 = 50%)
-approaching_vel: 0.08   # Velocidade máx no Approaching_PickDrop v(w³); antes 0.05 (muito lento)
+approaching_vel: 0.1   # Velocidade máx no Approaching_PickDrop v(w³); antes 0.05 (muito lento)

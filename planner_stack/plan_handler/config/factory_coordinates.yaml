@@ -1,7 +1,7 @@
 # Lista de coordenadas da fábrica [x, y]
 # Os índices correspondem ao vetor factory_coordinates do C++
 factory_coords:
-  - [-0.7, 0.461]    # ID 0
+  - [-0.690, 0.461]    # ID 0
   - [-0.55, 0.466]   # ID 1
   - [-0.397, 0.468]  # ID 2
   - [-0.24, 0.468]  # ID 3
