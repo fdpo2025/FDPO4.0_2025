@@ -143,6 +143,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                 is_input_warehouse[value] ? 1 : 0, is_output_warehouse[value] ? 1 : 0, has_box ? 1 : 0);
 
         if(is_current_warehouse) {
+            point.is_warehouse = true;
             was_last_warehouse_process = is_process_warehouse[value];
             point.line_switch_ratio = 1.0;
             point.backwards = false;
@@ -208,6 +209,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             }
 
         } else {
+            point.is_warehouse = false;
 
             //point.line_switch_ratio = 0.8 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
             
@@ -263,6 +265,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             nav_plan.points[i].vel_lin_nom = cp.vel_lin_nom;
             nav_plan.points[i].backwards = cp.backwards;
             nav_plan.points[i].pick_box = cp.pick_box;
+            nav_plan.points[i].is_warehouse = cp.is_warehouse;
         }
         
         navPlanPub.publish(nav_plan);
