@@ -38,8 +38,6 @@ points_map:
   '36': {x: 0.395, y: -0.468}
   '37': {x: 0.545, y: -0.468}
   '38': {x: 0.695, y: -0.468}
-  '39': {x: 0.1225, y: -0.233}
-  '40': {x: -0.1225, y: 0.233}
 adj:
   '0':
   - {node_to: '8', dist: 0.235}
@@ -80,7 +78,7 @@ adj:
   - {node_to: '4', dist: 0.274}
   - {node_to: '10', dist: 0.141}
   - {node_to: '12', dist: 0.259}
-  - {node_to: '40', dist: 0.123}
+  - {node_to: '27', dist: 0.8}
   '12':
   - {node_to: '4', dist: 0.205}
   - {node_to: '11', dist: 0.259}
@@ -135,7 +133,7 @@ adj:
   - {node_to: '28', dist: 0.15}
   - {node_to: '34', dist: 0.274}
   - {node_to: '35', dist: 0.235}
-  - {node_to: '39', dist: 0.123}
+  - {node_to: '11', dist: 0.8}
   '28':
   - {node_to: '27', dist: 0.15}
   - {node_to: '29', dist: 0.15}
@@ -170,9 +168,3 @@ adj:
   - {node_to: '29', dist: 0.235}
   '38':
   - {node_to: '30', dist: 0.235}
-  '39':
-  - {node_to: '27', dist: 0.123}
-  - {node_to: '40', dist: 0.526}
-  '40':
-  - {node_to: '39', dist: 0.526}
-  - {node_to: '11', dist: 0.123}
