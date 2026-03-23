@@ -101,7 +101,6 @@ class NavigationController {
             double max_etf;       // MAX_ETF
             double tol_init_line; // (m) tolerance to GoTo_Init -> Follow_Line
             double line_switch_ratio;  // Ratio of line to switch to next (0.9 = 90%)
-            double line_switch_ratio_drop;  // Ratio para linha antes de warehouse drop (0.95 = 95%)
             double approaching_line_progress;  // Line progress threshold to enter Approaching state (0.60 = 60%)
             double approaching_vel;            // Constant velocity in Approaching state (m/s)
             double k_approaching;              // Gain for angular control in Approaching state
