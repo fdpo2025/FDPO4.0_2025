@@ -7,8 +7,8 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     nh.param("planned_paths_topic", planned_paths_topic, std::string("/planned_paths"));
     nh.param("queue_size", queue_size, 100); 
 
-    // Inicializar vetores (42 = nós 0-41, incluindo 40 e 41)
-    const size_t max_nodes = 42;
+    // Inicializar vetores (41 = nós 0-40, incluindo 39 e 40)
+    const size_t max_nodes = 41;
     factory_coordinates.resize(max_nodes);
     warehouse_coordinates.resize(16);
     is_warehouse_coordinate.resize(max_nodes, false);

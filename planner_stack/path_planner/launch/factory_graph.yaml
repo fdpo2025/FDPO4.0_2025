@@ -12,7 +12,7 @@ points_map:
   '8': {x: -0.695, y: 0.233, links: [0, 9, 16]}
   '9': {x: -0.545, y: 0.233, links: [1, 8, 10, 16]}
   '10': {x: -0.395, y: 0.233, links: [2, 9, 11]}
-  '11': {x: -0.245, y: 0.233, links: [3, 4, 10, 12, 41]}
+  '11': {x: -0.245, y: 0.233, links: [3, 4, 10, 12, 40]}
   '12': {x: 0.0, y: 0.15, links: [4, 11, 13, 19]}
   '13': {x: 0.227, y: 0.15, links: [12], type: 'proc_in', spawns: 14}
   '14': {x: 0.468, y: 0.15, links: [15], type: 'proc_out'}
@@ -28,7 +28,7 @@ points_map:
   '24': {x: -0.468, y: -0.15, links: [23], type: 'proc_in', spawns: 25}
   '25': {x: -0.227, y: -0.15, links: [26], type: 'proc_out'}
   '26': {x: 0.0, y: -0.15, links: [19, 25, 27, 34]}
-  '27': {x: 0.245, y: -0.233, links: [26, 28, 34, 35, 40]}
+  '27': {x: 0.245, y: -0.233, links: [26, 28, 34, 35, 39]}
   '28': {x: 0.395, y: -0.233, links: [27, 29, 36]}
   '29': {x: 0.545, y: -0.233, links: [22, 28, 30, 37]}
   '30': {x: 0.695, y: -0.233, links: [22, 29, 38]}
@@ -41,8 +41,8 @@ points_map:
   '36': {x: 0.395, y: -0.46, links: [28], type: 'output'}
   '37': {x: 0.545, y: -0.46, links: [29], type: 'output'}
   '38': {x: 0.695, y: -0.46, links: [30], type: 'output'}
-  '40': {x: 0.1225, y: -0.233, links: [27, 41]}
-  '41': {x: -0.1225, y: 0.233, links: [11, 40]}
+  '39': {x: 0.1225, y: -0.233, links: [27, 40]}
+  '40': {x: -0.1225, y: 0.233, links: [11, 39]}
 
 #forced_keep_nodes: [4, 11, 12, 16, 19, 26, 22] # Nós de cruzamento para manter na simplificação
 forced_keep_nodes: [8, 19, 30] # Nós de cruzamento para manter na simplificação
