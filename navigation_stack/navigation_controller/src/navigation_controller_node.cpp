@@ -164,7 +164,7 @@ void NavigationController::loadNavigationParams() {
     nh.param("max_etf", param.max_etf, 0.2);       // MAX_ETF (rad)
     nh.param("tol_init_line", param.tol_init_line, 0.1); // Tolerância de distância à linha para GoTo_Init -> Follow_Line (m)
     nh.param("line_switch_ratio", param.line_switch_ratio, 0.9); // Ratio da linha para mudar para próxima (0.9 = 90%)
-    nh.param("approaching_line_progress", param.approaching_line_progress, 0.60); // Progresso da linha para entrar em Approaching (0.60 = 60%)
+    nh.param("approaching_line_progress", param.approaching_line_progress, 0.50); // Progresso da linha para entrar em Approaching (0.50 = 50%)
     nh.param("approaching_vel", param.approaching_vel, 0.05); // Velocidade constante no estado Approaching (m/s)
     nh.param("k_approaching", param.k_approaching, 10.0); // Ganho para controle angular no estado Approaching
     nh.param("gain_approaching_fwd", param.gain_approaching_fwd, 2.0); // Ganho forward para controle no estado Approaching
@@ -804,15 +804,15 @@ void NavigationController::followLine() {
     followLineFsm.update_tis();
     
     // State machine - Transitions
-    // Approaching: APENAS quando pf é o ponto imediatamente anterior a um warehouse (route[1].is_warehouse)
-    // Approaching_PickDrop: quando o próximo ponto (warehouse) é pick (cúbica)
-    // Approaching (normal): quando o próximo ponto (warehouse) é drop (rampa)
-    bool pf_is_before_warehouse = (route.size() > 1 && route[1].is_warehouse);
-    if (followLineFsm.state == navigation::followLineStates::Follow_Line && pf_is_before_warehouse) {
-        if (route[1].pick_box) {
+    // Approaching_PickDrop: quando pf É uma warehouse (linha que termina no warehouse) - cúbica, entra logo
+    // Approaching (normal): quando pf é o pf da linha ANTERIOR à linha com warehouse (route[1].is_warehouse)
+    //                      E progress > threshold (rampa baseada na distância)
+    bool pf_is_line_before_warehouse = (route.size() > 1 && route[1].is_warehouse);
+    if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
+        if (line.pf.is_warehouse) {
             followLineFsm.new_state = navigation::followLineStates::Approaching_PickDrop;
             ROS_WARN("approaching pick/drop state");
-        } else if (line_progress > param.approaching_line_progress) {
+        } else if (pf_is_line_before_warehouse && line_progress > param.approaching_line_progress) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
             approaching_start_progress_ = line_progress;
             ROS_WARN("approaching normal state");
