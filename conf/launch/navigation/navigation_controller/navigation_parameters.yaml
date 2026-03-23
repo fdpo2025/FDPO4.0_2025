@@ -41,4 +41,4 @@ line_switch_ratio: 0.8   # Ratio da linha para mudar para próxima (0.9 = 90%)
 k_approaching: 8.0       # Ganho para controle angular no estado Approaching
 gain_approaching_fwd: 1.0 # Ganho forward para controle no estado Approaching
 approaching_line_progress: 0.76  # Progresso da linha para entrar em Approaching (0.60 = 60%)
-approaching_vel: 0.05   # Velocidade constante no estado Approaching (m/s)
+approaching_vel: 0.20   # Velocidade máx no Approaching_PickDrop v(w³); antes 0.05 (muito lento)
