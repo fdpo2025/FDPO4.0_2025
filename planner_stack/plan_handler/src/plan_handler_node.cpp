@@ -7,13 +7,14 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     nh.param("planned_paths_topic", planned_paths_topic, std::string("/planned_paths"));
     nh.param("queue_size", queue_size, 100); 
 
-    // Inicializar vetores
-    factory_coordinates.resize(39);
+    // Inicializar vetores (42 = nós 0-41, incluindo 40 e 41)
+    const size_t max_nodes = 42;
+    factory_coordinates.resize(max_nodes);
     warehouse_coordinates.resize(16);
-    is_warehouse_coordinate.resize(39, false);
-    is_process_warehouse.resize(39, false);
-    is_input_warehouse.resize(39, false);
-    is_output_warehouse.resize(39, false);
+    is_warehouse_coordinate.resize(max_nodes, false);
+    is_process_warehouse.resize(max_nodes, false);
+    is_input_warehouse.resize(max_nodes, false);
+    is_output_warehouse.resize(max_nodes, false);
 
     // ========================================================================
     // EXTRAIR COORDENADAS DO YAML
@@ -21,11 +22,12 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     XmlRpc::XmlRpcValue coords_list;
     if (nh.getParam("factory_coords", coords_list)) {
         if (coords_list.getType() == XmlRpc::XmlRpcValue::TypeArray) {
-            for (int i = 0; i < coords_list.size() && i < 39; ++i) {
+            size_t n = std::min((size_t)coords_list.size(), max_nodes);
+            for (size_t i = 0; i < n; ++i) {
                 factory_coordinates[i].x = static_cast<double>(coords_list[i][0]);
                 factory_coordinates[i].y = static_cast<double>(coords_list[i][1]);
             }
-            ROS_INFO("PlanHandlerNode: Successfully loaded %d coordinates from YAML", coords_list.size());
+            ROS_INFO("PlanHandlerNode: Successfully loaded %zu coordinates from YAML (max_nodes=%zu)", n, max_nodes);
         }
     } else {
         ROS_ERROR("PlanHandlerNode: Failed to get 'factory_coords' from parameter server!");
