@@ -865,12 +865,13 @@ void NavigationController::followLine() {
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching_PickDrop) {
         // -----------------------
-        //   APPROACHING PICK/DROP: apenas v cúbica em w_d
+        //   APPROACHING PICK/DROP: v alta quando w_d baixa (robô alinhado), v=0 quando w_d=w_nom
+        //   v = approaching_vel * (1 - (w_d/w_nom)²)
         // -----------------------
         w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
 
-        double B_approach = -param.approaching_vel/(param.w_nom*param.w_nom*param.w_nom);
-        v_d = std::max(B_approach * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
+        double w_ratio_sq = (param.w_nom > 1e-6) ? (w_d / param.w_nom) * (w_d / param.w_nom) : 1.0;
+        v_d = std::max(param.approaching_vel * (1.0 - w_ratio_sq), 0.0);
 
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
