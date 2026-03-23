@@ -3,7 +3,7 @@
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0),
 navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line),
-k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false}), tfBuffer(), tfListener(tfBuffer),
+k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false, false, -1}), tfBuffer(), tfListener(tfBuffer),
 in_pick_box_forward(false), last_vel_before_approaching_(0.0) {
 
     mode = "idle";
@@ -33,6 +33,7 @@ in_pick_box_forward(false), last_vel_before_approaching_(0.0) {
     completion_feedback_sent = false;
     controlTimer = nh.createTimer(ros::Duration(1.0 / std::max(1, param.loop_rate_hz)), &NavigationController::navigationFsmRunner, this);
     controlSrv = nh.advertiseService("control", &NavigationController::controlSrvCb, this);
+    currentNodePub = nh.advertise<std_msgs::UInt32>("/this_current_pose", 10, true);
 
     dynamic_reconfigure::Server<navigation_controller::NavigationConfig>::CallbackType cb;
     cb = boost::bind(&NavigationController::reconfigCb, this, _1, _2);
@@ -79,6 +80,7 @@ void NavigationController::loadRouteFromParameters(){
     previousWaypoint.vel_lin_nom = -1.0;
     previousWaypoint.pick_box = false;  // route.yaml não tem pick_box, usar false
     previousWaypoint.is_warehouse = false;
+    previousWaypoint.node_id = -1;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
     for(int i = 0; i < static_cast<int>(waypoints.size()); ++i){
@@ -92,7 +94,8 @@ void NavigationController::loadRouteFromParameters(){
         waypoint_temp.backwards = static_cast<bool>(waypoints[i]["backwards"]);
         waypoint_temp.pick_box = false;  // route.yaml não tem pick_box, usar false
         waypoint_temp.is_warehouse = false;  // route.yaml não tem is_warehouse, usar false
-        
+        previousWaypoint.node_id = -1;
+
         // line_switch_ratio: se não definido, usar -1 (significa usar parâmetro global)
         if (waypoints[i].hasMember("line_switch_ratio")) {
             waypoint_temp.line_switch_ratio = static_cast<double>(waypoints[i]["line_switch_ratio"]);
@@ -916,6 +919,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         
         // Guardar waypoint anterior antes de remover
         previousWaypoint = route.front();
+        publishCurrentNode(previousWaypoint.node_id);
         
         // Se é warehouse de pick, entrar no estado pickBoxForward
         if (route.front().pick_box) {
@@ -940,6 +944,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         if (line_progress >= switch_ratio) {
             // Guardar waypoint anterior antes de remover
             previousWaypoint = route.front();
+            publishCurrentNode(previousWaypoint.node_id);
             
             // Verificar se é warehouse de pick antes de remover
             bool is_pick_warehouse = route.front().pick_box;
@@ -1081,6 +1086,18 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         w_d = 0.0;
     }
 
+    // Se a rota atual terminou e existe uma rota pendente, carregar agora
+    if (route.empty() && hasPendingNavPlan) {
+        loadPendingNavPlanIfAvailable();
+
+        // Se carregou nova rota, arrancar novamente
+        if (!route.empty() && mode != "stop" && mode != "pause") {
+            navigationFsm.new_state = navigation::states::driveToGoal;
+            navigationFsm.set_state();
+            ROS_INFO("NavigationController: Started pending route");
+        }
+    }
+
     // Affect outputs
     // Se route está vazia, publicar zeros explicitamente para parar o robô
     if (route.empty() && (v_d == 0.0 && w_d == 0.0)) {
@@ -1132,6 +1149,8 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
 
         route.clear();
         previousWaypoint.id = -1;  // Reset previousWaypoint quando para
+        previousWaypoint.node_id = -1;
+        last_published_node_id = -1;
         navigationFsm.new_state = navigation::states::idle;
         poseDesired = poseCurr;
         navigationFsm.set_state();
@@ -1167,6 +1186,16 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
 
 void NavigationController::navPlanCallback(const plan_handler::NavPlan::ConstPtr& msg) {
     ROS_INFO("NavigationController: Received NavPlan with %zu points", msg->points.size());
+
+    // Se já há uma rota em execução, guardar como pendente
+    if (!route.empty() || navigationFsm.state != navigation::states::idle) {
+        pendingNavPlan = *msg;
+        hasPendingNavPlan = true;
+        ROS_INFO("NavigationController: Current route still active, storing new NavPlan as pending");
+        return;
+    }
+
+    // Se não há rota ativa, carregar imediatamente
     loadRouteFromNavPlan(msg);
 }
 
@@ -1189,6 +1218,7 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     previousWaypoint.vel_lin_nom = -1.0;
     previousWaypoint.pick_box = false;
     previousWaypoint.is_warehouse = false;
+    previousWaypoint.node_id = -1;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
     // Converter NavPlan points para WayPoints
@@ -1196,6 +1226,7 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
         const plan_handler::ControllerPoint& cp = msg->points[i];
         WayPoint waypoint_temp;
         waypoint_temp.id = static_cast<int>(i);
+        waypoint_temp.node_id = cp.node_id;  
         
         waypoint_temp.pose.x = cp.x;
         waypoint_temp.pose.y = cp.y;
@@ -1253,4 +1284,29 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     completion_feedback_sent = false;
     
     ROS_INFO("NavigationController: Route loaded from NavPlan with %zu waypoints", route.size());
+}
+
+void NavigationController::publishCurrentNode(int node_id) {
+    if (node_id < 0) return;
+
+    if (node_id == last_published_node_id) return;
+
+    std_msgs::UInt32 msg;
+    msg.data = node_id;
+    msg.data = static_cast<uint32_t>(node_id);
+    currentNodePub.publish(msg);
+
+    last_published_node_id = node_id;
+
+    ROS_INFO("NavigationController: Published current node_id=%d to /this_current_pose", node_id);
+}
+
+void NavigationController::loadPendingNavPlanIfAvailable() {
+    if (!hasPendingNavPlan) return;
+
+    ROS_INFO("NavigationController: Loading pending NavPlan with %zu points", pendingNavPlan.points.size());
+
+    plan_handler::NavPlan::Ptr msg(new plan_handler::NavPlan(pendingNavPlan));
+    hasPendingNavPlan = false;
+    loadRouteFromNavPlan(msg);
 }

@@ -18,6 +18,9 @@
 #include <string>
 #include <sstream>
 #include <cstdio>
+#include <std_msgs/Int32MultiArray.h>
+#include <vector>
+#include <std_msgs/UInt32.h>
 
 struct Pose {
 
@@ -33,6 +36,9 @@ namespace Communication {
 
             double v_d, w_d;
             bool pick_box; 
+            uint32_t cp_send;
+            std::vector<int32_t> path_send;
+
 
         };
 
@@ -41,6 +47,8 @@ namespace Communication {
             Pose odom_pos;
             double v_linear;
             double w_angular;
+            uint32_t cp_rcv;
+            std::vector<int32_t> path_rcv;
 
         };
 
@@ -90,5 +98,27 @@ class PiPicoDriver {
         void pubOdom();
 
         tf::TransformBroadcaster tf_broadcaster;
+
+        ros::Subscriber cpSendSub;
+        ros::Subscriber pathSendSub;
+
+        ros::Publisher cpRcvPub;
+        ros::Publisher pathRcvPub;
+
+        void cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
+        void pathSendCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg);
+
+        void pubExtraMsgs();
+        std::vector<int32_t> parsePathList(const std::string& s);
+        std::string pathToString(const std::vector<int32_t>& path);
+
+        std::vector<int32_t> path_to_send_;
+        int path_send_retries_ = 0;
+
+        std::vector<int32_t> last_path_rcv_;
+        bool has_last_path_rcv_ = false;
+
+        uint32_t last_cp_rcv_ = 0;
+        bool has_last_cp_rcv_ = false;
 
 };

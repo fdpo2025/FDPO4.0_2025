@@ -1,24 +1,34 @@
 #include "pico_driver_node.h"
 
+
 PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
 
   // ---------------------- Init structs --------------------
   messageToSend.v_d = 0.0;
   messageToSend.w_d = 0.0;
   messageToSend.pick_box = false;
+  messageToSend.cp_send = 0; 
+  messageToSend.path_send.clear();
   
   messageToReceive.odom_pos.x = 0.0;
   messageToReceive.odom_pos.y = 0.0;
   messageToReceive.odom_pos.theta = 0.0;
   messageToReceive.v_linear = 0.0;
   messageToReceive.w_angular = 0.0;
+  messageToReceive.cp_rcv = 0;
+  messageToReceive.path_rcv.clear();
+ 
 
   // ----------------------- ROS init -----------------------
   // -> Subs
   velSub = nh.subscribe("/cmd_vel", 10, &PiPicoDriver::velCallBack, this);
   pickBoxSub = nh.subscribe("/pick_box", 10, &PiPicoDriver::pickBoxCallBack, this);
+  cpSendSub = nh.subscribe("/cp_send", 10, &PiPicoDriver::cpSendCallBack, this);
+  pathSendSub = nh.subscribe("/path_send", 10, &PiPicoDriver::pathSendCallBack, this);
   // -> Pubs
   posePub = nh.advertise<nav_msgs::Odometry>("/odom", 10);
+  cpRcvPub = nh.advertise<std_msgs::UInt32>("/cp_rcv", 10);
+  pathRcvPub = nh.advertise<std_msgs::Int32MultiArray>("/path_rcv", 10);
   // -> Timer (100 Hz para evitar watchdog timeout no Pico)
   commTimer = nh.createTimer(ros::Duration(0.01), &PiPicoDriver::commTick, this);
 
@@ -171,17 +181,22 @@ std::string PiPicoDriver::syncCall(const std::string& cmd, int timeout_ms) {
 }
 
 void PiPicoDriver::decodeMsg(const std::string& msg) {
-  // Procurar por "POS:" em qualquer posição da mensagem (não só no início)
+  if (msg.rfind("ACK:", 0) == 0) return;
+  if (msg.empty() || msg.length() < 3) return;
+  if (!debug_comm_ && msg.find("dbg") != std::string::npos) return;
+
+  bool found_any = false;
+  bool has_new_cp = false;
+  bool has_new_path = false;
+
+  // ---------------- POS / V / W ----------------
   size_t pos_idx = msg.find("POS:");
   if (pos_idx != std::string::npos) {
-    // Extrair a substring a partir de "POS:"
-    std::string pos_part = msg.substr(pos_idx);
-    
-    double x=0, y=0, theta=0;
-    double v=0.0, w=0.0;
+    double x = 0.0, y = 0.0, theta = 0.0;
+    double v = 0.0, w = 0.0;
 
     int n = std::sscanf(
-      pos_part.c_str(),
+      msg.c_str(),
       "POS: %lf, %lf, %lf, V: %lf, W: %lf",
       &x, &y, &theta, &v, &w
     );
@@ -191,42 +206,104 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
       messageToReceive.v_linear = v;
       messageToReceive.w_angular = w;
       pubOdom();
-      return;
+      found_any = true;
     }
-
-    ROS_WARN_THROTTLE(5.0, "Mensagem POS mal formatada (esperado x,y,theta,V,W): %s", pos_part.c_str());
-    return;
   }
 
-  // Ignora ACK e mensagens vazias/curtas
-  if (msg.rfind("ACK:", 0) == 0) return;
-  if (msg.empty() || msg.length() < 3) return;
-  
-  // Mensagens de debug do Pico (longas) - ignorar silenciosamente se não em modo debug
-  if (!debug_comm_ && msg.find("dbg") != std::string::npos) return;
+  // ---------------- CP ----------------
+  size_t cp_idx = msg.find("CP:");
+  if (cp_idx != std::string::npos) {
+    unsigned int cp_val = 0;
+    if (std::sscanf(msg.c_str() + cp_idx, "CP: %u", &cp_val) == 1) {
+      messageToReceive.cp_rcv = cp_val;
+      found_any = true;
 
-  ROS_WARN_THROTTLE(10.0, "Mensagem desconhecida (mostrando 1 a cada 10s): %s", msg.substr(0, 80).c_str());
+      if (!has_last_cp_rcv_ || cp_val != last_cp_rcv_) {
+        has_new_cp = true;
+        last_cp_rcv_ = cp_val;
+        has_last_cp_rcv_ = true;
+      }
+    }
+  }
+
+  // ---------------- PATH ----------------
+  size_t path_idx = msg.find("PATH:");
+  if (path_idx != std::string::npos) {
+    std::string path_part = msg.substr(path_idx + 5);
+
+    while (!path_part.empty() && path_part.front() == ' ') {
+      path_part.erase(path_part.begin());
+    }
+
+    while (!path_part.empty() &&
+          (path_part.back() == '\n' || path_part.back() == '\r' || path_part.back() == ' ')) {
+      path_part.pop_back();
+    }
+
+    if (!path_part.empty()) {
+      std::vector<int32_t> new_path = parsePathList(path_part);
+      found_any = true;
+
+      if (!has_last_path_rcv_ || new_path != last_path_rcv_) {
+        messageToReceive.path_rcv = new_path;
+        has_new_path = true;
+        last_path_rcv_ = new_path;
+        has_last_path_rcv_ = true;
+      }
+    }
+  }
+
+  // Publica CP apenas se chegou novo CP
+  if (has_new_cp) {
+    std_msgs::UInt32 cp_msg;
+    cp_msg.data = messageToReceive.cp_rcv;
+    cpRcvPub.publish(cp_msg);
+  }
+
+  // Publica PATH apenas se chegou PATH não vazio
+  if (has_new_path) {
+    std_msgs::Int32MultiArray path_msg;
+    path_msg.data = messageToReceive.path_rcv;
+    pathRcvPub.publish(path_msg);
+  }
+
+  if (!found_any) {
+    ROS_WARN_THROTTLE(10.0,
+                      "Mensagem desconhecida (mostrando 1 a cada 10s): %s",
+                      msg.substr(0, 80).c_str());
+  }
 }
 
 void PiPicoDriver::commTick(const ros::TimerEvent&) {
-  
+
+  // Decide que PATH enviar nesta iteração
+  std::vector<int32_t> path_once;
+  if (path_send_retries_ > 0) {
+    path_once = path_to_send_;
+    path_send_retries_--;
+  } else {
+    path_once.clear();  // envia PATH vazio
+  }
+
   // 1) Build the command
   std::string cmd = "CMD:" + std::to_string(messageToSend.v_d) + "," +
-                             std::to_string(messageToSend.w_d) + "," +
-                                           (messageToSend.pick_box ? "1" : "0"); 
+                           std::to_string(messageToSend.w_d) + "," +
+                           (messageToSend.pick_box ? "1" : "0") +
+                    " CP:" + std::to_string(messageToSend.cp_send) +
+                    " PATH:" + pathToString(path_once);
 
-  // 2) Send and Wait for response
   if (debug_comm_) {
     ROS_INFO("Pi4 Message: %s", cmd.c_str());
   }
-  
+
+  // 2) Send and wait for response
   std::string resp = syncCall(cmd, 50);
-  
+
   if (debug_comm_) {
     ROS_INFO("PiPico Message: %s", resp.c_str());
     ROS_INFO("-------------------");
   }
-  
+
   if (resp.empty()) {
     con_state.missed++;
     if (con_state.missed >= 2) {
@@ -237,6 +314,62 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
     }
     return;
   }
-  con_state.missed = 0; con_state.link_ok = true;
 
+  con_state.missed = 0;
+  con_state.link_ok = true;
+}
+
+void PiPicoDriver::cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
+  messageToSend.cp_send = msg->data;
+}
+
+void PiPicoDriver::pathSendCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg) {
+  path_to_send_ = msg->data;
+  path_send_retries_ = 15;
+}
+
+void PiPicoDriver::pubExtraMsgs() {
+  std_msgs::UInt32 cp_msg;
+  cp_msg.data = messageToReceive.cp_rcv;
+  cpRcvPub.publish(cp_msg);
+
+  std_msgs::Int32MultiArray path_msg;
+  path_msg.data = messageToReceive.path_rcv;
+  pathRcvPub.publish(path_msg);
+}
+
+std::string PiPicoDriver::pathToString(const std::vector<int32_t>& path) {
+  std::string result;
+  for (size_t i = 0; i < path.size(); ++i) {
+    result += std::to_string(path[i]);
+    if (i + 1 < path.size()) {
+      result += ",";
+    }
+  }
+  return result;
+}
+
+std::vector<int32_t> PiPicoDriver::parsePathList(const std::string& s) {
+  std::vector<int32_t> result;
+  std::stringstream ss(s);
+  std::string item;
+
+  while (std::getline(ss, item, ',')) {
+    while (!item.empty() && item.front() == ' ') {
+      item.erase(item.begin());
+    }
+    while (!item.empty() && item.back() == ' ') {
+      item.pop_back();
+    }
+
+    if (!item.empty()) {
+      try {
+        result.push_back(std::stoi(item));
+      } catch (...) {
+        ROS_WARN("Valor inválido em PATH: %s", item.c_str());
+      }
+    }
+  }
+
+  return result;
 }

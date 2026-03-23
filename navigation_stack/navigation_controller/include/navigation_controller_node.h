@@ -23,6 +23,8 @@
 #include <visualization_msgs/Marker.h>                            
 #include <plan_handler/NavPlan.h>
 #include <plan_handler/CompletionFeedback.h>
+#include <std_msgs/Int32.h>
+#include <std_msgs/UInt32.h>
 
 
 #include "fsm.h"
@@ -181,7 +183,14 @@ class NavigationController {
         // Services        
         ros::ServiceServer controlSrv; 
         bool controlSrvCb(navigation_controller::NavigationControl::Request& req, navigation_controller::NavigationControl::Response& res);
+        
+        ros::Publisher currentNodePub;
+        void publishCurrentNode(int node_id);
+        int last_published_node_id = -1;
 
+        plan_handler::NavPlan pendingNavPlan;
+        bool hasPendingNavPlan = false;
+        void loadPendingNavPlanIfAvailable();
 };
 
 namespace navigation {
