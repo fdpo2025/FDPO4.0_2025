@@ -105,6 +105,7 @@ class NavigationController {
             double approaching_vel;            // Constant velocity in Approaching state (m/s)
             double k_approaching;              // Gain for angular control in Approaching state
             double gain_approaching_fwd;         // Forward gain for control in Approaching state
+            double approaching_colinear_angle_rad;  // Se |Δθ| entre linha atual e pf→warehouse < isto, não entra em Approaching
 
         };
 

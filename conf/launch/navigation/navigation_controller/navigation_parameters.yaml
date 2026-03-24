@@ -42,3 +42,5 @@ k_approaching: 8.0       # Ganho para controle angular no estado Approaching
 gain_approaching_fwd: 1.0 # Ganho forward para controle no estado Approaching
 approaching_line_progress: 0.40  # Progresso da linha para entrar em Approaching (0.50 = 50%)
 approaching_vel: 0.085   # Velocidade máx no Approaching_PickDrop v(w³); antes 0.05 (muito lento)
+# Se o ângulo da linha atual (pi→pf) e da seguinte (pf→warehouse) difere menos que isto (rad), não entra em Approaching (reta)
+approaching_colinear_angle_rad: 0.087  # ~5°

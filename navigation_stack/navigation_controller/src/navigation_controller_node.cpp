@@ -168,7 +168,8 @@ void NavigationController::loadNavigationParams() {
     nh.param("approaching_vel", param.approaching_vel, 0.05); // Velocidade constante no estado Approaching (m/s)
     nh.param("k_approaching", param.k_approaching, 10.0); // Ganho para controle angular no estado Approaching
     nh.param("gain_approaching_fwd", param.gain_approaching_fwd, 2.0); // Ganho forward para controle no estado Approaching
-    
+    nh.param("approaching_colinear_angle_rad", param.approaching_colinear_angle_rad, 0.087); // ~5°: linha reta até warehouse → sem Approaching
+
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f", 
              param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
 
@@ -806,13 +807,32 @@ void NavigationController::followLine() {
     // State machine - Transitions
     // Approaching_PickDrop: quando pf É uma warehouse (linha que termina no warehouse) - cúbica, entra logo
     // Approaching (normal): quando pf é o pf da linha ANTERIOR à linha com warehouse (route[1].is_warehouse)
-    //                      E progress > threshold (rampa baseada na distância)
+    //                      E progress > threshold — exceto se pi→pf e pf→warehouse forem colineares (reta)
     bool pf_is_line_before_warehouse = (route.size() > 1 && route[1].is_warehouse);
+    bool skip_approaching_straight = false;
+    if (pf_is_line_before_warehouse) {
+        const WayPoint& wh = route[1];
+        double dx1 = line.pf.pose.x - line.pi.pose.x;
+        double dy1 = line.pf.pose.y - line.pi.pose.y;
+        double dx2 = wh.pose.x - line.pf.pose.x;
+        double dy2 = wh.pose.y - line.pf.pose.y;
+        const double len_eps = 1e-4;
+        double len1_sq = dx1 * dx1 + dy1 * dy1;
+        double len2_sq = dx2 * dx2 + dy2 * dy2;
+        if (len1_sq > len_eps * len_eps && len2_sq > len_eps * len_eps) {
+            double a1 = std::atan2(dy1, dx1);
+            double a2 = std::atan2(dy2, dx2);
+            double dtheta = std::abs(normalizeAngle(a2 - a1));
+            if (dtheta < param.approaching_colinear_angle_rad) {
+                skip_approaching_straight = true;
+            }
+        }
+    }
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
         if (line.pf.is_warehouse) {
             followLineFsm.new_state = navigation::followLineStates::Approaching_PickDrop;
             ROS_WARN("approaching pick/drop state");
-        } else if (pf_is_line_before_warehouse && line_progress > param.approaching_line_progress) {
+        } else if (pf_is_line_before_warehouse && line_progress > param.approaching_line_progress && !skip_approaching_straight) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
             approaching_start_progress_ = line_progress;
             ROS_WARN("approaching normal state");
