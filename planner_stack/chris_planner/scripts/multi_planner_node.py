@@ -214,22 +214,18 @@ class MultiPlannerNode:
                 r["waiting_replan"] = True
                 return False
 
-        full_extended_path = self.extend_path_with_previous_node(best_path)
+        extended_path = self.extend_path_with_previous_node(best_path)
 
-        compact_best_path = self.compact_path(best_path)
-        compact_extended_path = self.extend_path_with_previous_node(compact_best_path)
+        self.reserve_path(robot_id, extended_path, best_goal)
+        self.publish_path(robot_id, extended_path)
 
-        self.reserve_path(robot_id, full_extended_path, best_goal)
-        self.publish_path(robot_id, compact_extended_path)
-
-        r["path"] = full_extended_path
+        r["path"] = extended_path
         r["goal"] = best_goal
         r["busy"] = True
         r["waiting_replan"] = False
         r["task_type"] = task_type
 
-        rospy.loginfo(f"{robot_id} planned full path {best_path} with task_type={task_type}")
-        rospy.loginfo(f"{robot_id} published compact path {compact_extended_path}")
+        rospy.loginfo(f"{robot_id} planned path {best_path} with task_type={task_type}")
         rospy.logwarn(f"[{robot_id}] boxes after planning = {self.boxes}")
         return True
 
@@ -554,54 +550,6 @@ class MultiPlannerNode:
                 rospy.loginfo(f"[{robot_id}] released past reserved goal {n}")
 
         return released_any
-    
-    def compact_path(self, path):
-        if not path or len(path) <= 2:
-            return path
-
-        def colinear(p1, p2, p3, eps=0.001):
-            a = (p3[0] - p1[0], p3[1] - p1[1])
-            b = (p2[0] - p1[0], p2[1] - p1[1])
-
-            denom = (a[0] ** 2 + a[1] ** 2) ** 0.5
-            if denom == 0:
-                return False
-
-            dist_to_line = abs(a[0] * b[1] - a[1] * b[0]) / denom
-            return dist_to_line < eps
-
-        points_map = self.factory.points_map
-
-        compact = [path[0]]
-        i = 1
-
-        # manter o primeiro passo se o nó inicial for especial
-        if path[0] in self.factory.special_nodes and len(path) > 1:
-            compact.append(path[1])
-            i += 1
-
-        while i < len(path) - 1:
-            if i == len(path) - 1:
-                break
-
-            last_idx = compact[-1]
-            curr_idx = path[i]
-            next_idx = path[i + 1]
-
-            p1 = points_map[last_idx]
-            p2 = points_map[curr_idx]
-            p3 = points_map[next_idx]
-
-            if colinear(p1, p2, p3):
-                i += 1
-            else:
-                compact.append(curr_idx)
-                i += 1
-
-        if compact[-1] != path[-1]:
-            compact.append(path[-1])
-
-        return compact
 
 
 if __name__ == "__main__":
