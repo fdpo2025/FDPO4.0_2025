@@ -69,7 +69,8 @@ class MultiPlannerNode:
                 "last_node": None,
                 "box": factory_module.EMPTY,
                 "goal": None,
-                "path": [],
+                "path": [],                # path completo para reservas
+                "compact_path": [],        # path reduzido para publicação
                 "busy": False,
                 "waiting_replan": False,
                 "task_type": None,         # "pickup" ou "dropoff"
@@ -82,6 +83,7 @@ class MultiPlannerNode:
                 "box": factory_module.EMPTY,
                 "goal": None,
                 "path": [],
+                "compact_path": [],
                 "busy": False,
                 "waiting_replan": False,
                 "task_type": None,
@@ -122,6 +124,7 @@ class MultiPlannerNode:
             self.robots[robot_id]["box"] = factory_module.EMPTY
             self.robots[robot_id]["goal"] = None
             self.robots[robot_id]["path"] = []
+            self.robots[robot_id]["compact_path"] = []
             self.robots[robot_id]["busy"] = False
             self.robots[robot_id]["waiting_replan"] = False
             self.robots[robot_id]["task_type"] = None
@@ -217,18 +220,24 @@ class MultiPlannerNode:
                 r["waiting_replan"] = True
                 return False
 
-        extended_path = self.extend_path_with_previous_node(best_path)
+        full_path = self.extend_path_with_previous_node(best_path)
+        compact_path = self.extend_path_with_previous_node(
+            self.compact_existing_path(best_path)
+        )
 
-        self.reserve_path(robot_id, extended_path, best_goal)
-        self.publish_path(robot_id, extended_path)
+        self.reserve_path(robot_id, full_path, best_goal)
+        self.publish_path(robot_id, compact_path)
 
-        r["path"] = extended_path
+        r["path"] = full_path
+        r["compact_path"] = compact_path
         r["goal"] = best_goal
         r["busy"] = True
         r["waiting_replan"] = False
         r["task_type"] = task_type
 
-        rospy.loginfo(f"{robot_id} planned path {best_path} with task_type={task_type}")
+        rospy.loginfo(f"{robot_id} planned full_path {full_path}")
+        rospy.loginfo(f"{robot_id} planned compact_path {compact_path}")
+        rospy.loginfo(f"{robot_id} task_type={task_type}")
         rospy.logwarn(f"[{robot_id}] boxes after planning = {self.boxes}")
         return True
 
@@ -363,6 +372,7 @@ class MultiPlannerNode:
         r["busy"] = False
         r["goal"] = None
         r["path"] = []
+        r["compact_path"] = []
         r["task_type"] = None
 
         self.plan_for_robot(robot_id)
@@ -423,6 +433,46 @@ class MultiPlannerNode:
             node = prev[node]
 
         return path[::-1]
+
+    # -----------------------------------------------------
+
+    def compact_existing_path(self, path):
+        if not path:
+            return []
+
+        if len(path) <= 2:
+            return list(path)
+
+        def colinear(p1, p2, p3, eps=0.001):
+            a = (p3[0] - p1[0], p3[1] - p1[1])
+            b = (p2[0] - p1[0], p2[1] - p1[1])
+            denom = (a[0] ** 2 + a[1] ** 2) ** 0.5
+            if denom == 0:
+                return True
+            dist_to_line = abs(a[0] * b[1] - a[1] * b[0]) / denom
+            return dist_to_line < eps
+
+        path_compact = [path[0]]
+        i = 1
+
+        if path[0] in self.factory.special_nodes and len(path) > 1:
+            path_compact.append(path[1])
+            i += 1
+
+        while i < len(path) - 2:
+            last_idx = path_compact[-1]
+            p1 = self.factory.points_map[last_idx]
+            p2 = self.factory.points_map[path[i]]
+            p3 = self.factory.points_map[path[i + 1]]
+
+            if colinear(p1, p2, p3):
+                i += 1
+            else:
+                path_compact.append(path[i])
+                i += 1
+
+        path_compact.extend(path[i:])
+        return path_compact
 
     # -----------------------------------------------------
 
