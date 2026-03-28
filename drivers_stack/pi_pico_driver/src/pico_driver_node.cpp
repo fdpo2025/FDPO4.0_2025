@@ -325,7 +325,7 @@ void PiPicoDriver::cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
 
 void PiPicoDriver::pathSendCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg) {
   path_to_send_ = msg->data;
-  path_send_retries_ = 15;
+  path_send_retries_ = 100;
 }
 
 void PiPicoDriver::pubExtraMsgs() {
