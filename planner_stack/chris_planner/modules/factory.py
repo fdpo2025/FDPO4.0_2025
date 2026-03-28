@@ -49,12 +49,14 @@ class FactoryModel:
                 box_count += 1
         if box_count > len(self.output_warehouse):
             raise ValueError(f"box_count {box_count} must not exceed len(self.output_warehouse) {len(self.output_warehouse)}")
+        '''
         # check if robot is carrying something that does not exist
         if robot_node_id in self.special_nodes:
             r_id = self.index_of[robot_node_id]
             box = boxes[r_id]
             if (robot_box_type != EMPTY) and (robot_box_type != box):
                 raise ValueError(f"robot carrying box {BT[robot_box_type]}, but actual box is {BT[box]}.") 
+        '''
         # don't allow boxes in machine inputs
         for i in range(len(boxes)):
             b = boxes[i]
@@ -133,43 +135,41 @@ class FactoryModel:
         robot_node_id, robot_box_type, boxes = state
         boxes_list = list(boxes)
 
-        # check if valid state
         self.validate_state(state)
-        # check if valid action
+
         valid_nodes = self.valid_destinations(state)
         if node_to not in valid_nodes:
             raise ValueError(f"{node_to} not a valid action from {valid_nodes}")
-        
+
         i_to = self.index_of[node_to]
 
-        # if robot empty
+        # neste modelo, update_state é só para quando o robô já transporta uma caixa
         if robot_box_type == EMPTY:
-            robot_node_id = node_to
-            robot_box_type = boxes_list[i_to]
-        
-        # if robot has box
-        else:
+            raise ValueError("update_state should not be used for pickup when using reservation-at-planning")
+
+        # se robô tem caixa
+        if robot_node_id in self.index_of:
             prev_idx = self.index_of[robot_node_id]
             boxes_list[prev_idx] = EMPTY
-            # place directly at the machine outputs (instantly)
-            if node_to in self.machineA_inputs:
-                i = self.machineA_inputs.index(node_to)
-                node_output = self.machineA_outputs[i]
-                i_output = self.index_of[node_output]
-                boxes_list[i_output] = robot_box_type+1
-            elif node_to in self.machineB_inputs:
-                i = self.machineB_inputs.index(node_to)
-                node_output = self.machineB_outputs[i]
-                i_output = self.index_of[node_output]
-                boxes_list[i_output] = robot_box_type+1
-            # place in the output warehouse
-            else:
-                boxes_list[i_to] = robot_box_type
 
-            # update robot state
-            robot_node_id = node_to
-            robot_box_type = EMPTY # robot has no box anymore
-        
+        if node_to in self.machineA_inputs:
+            i = self.machineA_inputs.index(node_to)
+            node_output = self.machineA_outputs[i]
+            i_output = self.index_of[node_output]
+            boxes_list[i_output] = robot_box_type + 1
+
+        elif node_to in self.machineB_inputs:
+            i = self.machineB_inputs.index(node_to)
+            node_output = self.machineB_outputs[i]
+            i_output = self.index_of[node_output]
+            boxes_list[i_output] = robot_box_type + 1
+
+        else:
+            boxes_list[i_to] = robot_box_type
+
+        robot_node_id = node_to
+        robot_box_type = EMPTY
+
         return robot_node_id, robot_box_type, tuple(boxes_list)
 
     def cost(self, state, node_to):
