@@ -4,15 +4,18 @@ project(chris_planner)
 find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
+  geometry_msgs
 )
 
 catkin_package(
-  CATKIN_DEPENDS rospy std_msgs
+  CATKIN_DEPENDS rospy std_msgs geometry_msgs
 )
 
 # Install Python scripts
 catkin_install_python(PROGRAMS
   scripts/chris_planner_node.py
+  scripts/multi_planner_node.py
+  scripts/comunicacoes_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

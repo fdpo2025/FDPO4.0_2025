@@ -44,7 +44,7 @@ struct WayPoint {
     double vel_lin_nom;        // Velocidade linear nominal para esta linha, -1 = usar global
     bool pick_box;             // Se é warehouse de pick (true) ou drop (false)
     bool is_warehouse;          // Se o ponto final é uma warehouse
-
+    int node_id;
 };
 
 struct Line{
@@ -183,6 +183,14 @@ class NavigationController {
         // Services        
         ros::ServiceServer controlSrv; 
         bool controlSrvCb(navigation_controller::NavigationControl::Request& req, navigation_controller::NavigationControl::Response& res);
+
+        ros::Publisher currentNodePub;
+        void publishCurrentNode(int node_id);
+        int last_published_node_id = -1;
+
+        plan_handler::NavPlan pendingNavPlan;
+        bool hasPendingNavPlan = false;
+        void loadPendingNavPlanIfAvailable();
 
 };
 
