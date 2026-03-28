@@ -555,13 +555,43 @@ class MultiPlannerNode:
             if owner != robot_id
         }
 
+        # Bloqueio dos vizinhos de nós especiais já existente
         for node in reserved_by_other:
             if node in self.special_block_nodes:
                 for neigh, _ in self.factory.graph.adj.get(node, []):
                     blocked.add(neigh)
 
+        # Regra antiga já existente
         if 12 in reserved_by_other or 26 in reserved_by_other:
             blocked.add(19)
+
+        # Nova regra:
+        # se o outro robô tiver no path os nós 11 e 27 consecutivos
+        # (em qualquer ordem), bloquear o 19 enquanto ambos ainda estiverem reservados
+        other_robot = "r2" if robot_id == "r1" else "r1"
+        other_path = self.robots[other_robot]["path"]
+
+        has_11_27_transition = False
+        for i in range(len(other_path) - 1):
+            a = other_path[i]
+            b = other_path[i + 1]
+
+            if (a == 11 and b == 27) or (a == 27 and b == 11):
+                has_11_27_transition = True
+                break
+
+        if has_11_27_transition:
+            both_still_reserved = (
+                self.reserved_nodes.get(11) == other_robot and
+                self.reserved_nodes.get(27) == other_robot
+            )
+
+            if both_still_reserved:
+                blocked.add(19)
+                rospy.loginfo(
+                    f"[{robot_id}] blocking node 19 because {other_robot} "
+                    f"has active transition 11<->27 and both nodes are still reserved"
+                )
 
         return blocked
 
