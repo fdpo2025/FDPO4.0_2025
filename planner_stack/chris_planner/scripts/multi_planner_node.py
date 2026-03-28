@@ -239,27 +239,14 @@ class MultiPlannerNode:
             return False
 
         i_pickup = self.factory.index_of[pickup_node]
-        boxes_list = list(self.boxes)
-        box_type = boxes_list[i_pickup]
+        box_type = self.boxes[i_pickup]
 
         if box_type == factory_module.EMPTY:
             rospy.logerr(f"[{robot_id}] no box to reserve at node {pickup_node}")
             return False
 
-        rospy.logwarn(f"[{robot_id}] Reserving box at planning from node {pickup_node}")
-        rospy.logwarn(f"[{robot_id}] BEFORE reserve: box_type={box_type}, boxes={self.boxes}")
-
-        boxes_list[i_pickup] = factory_module.EMPTY
-        self.boxes = tuple(boxes_list)
-
-        r["box"] = box_type
+        rospy.logwarn(f"[{robot_id}] reserving pickup node {pickup_node} (no state change yet)")
         r["reserved_pickup_node"] = pickup_node
-
-        rospy.logwarn(
-            f"[{robot_id}] AFTER reserve: logical_node={r['node']} current_node={r['current_node']} "
-            f"box={r['box']} reserved_pickup_node={r['reserved_pickup_node']} boxes={self.boxes}"
-        )
-
         return True
 
     # -----------------------------------------------------
@@ -339,12 +326,18 @@ class MultiPlannerNode:
         rospy.loginfo(f"{robot_id} reached goal {goal} with task_type={task_type}")
 
         if task_type == "pickup":
-            # no pickup a caixa já foi retirada do estado no planeamento
-            r["node"] = goal
+            state = (r["node"], r["box"], self.boxes)
+            rospy.logwarn(f"[{robot_id}] BEFORE pickup update: state={state}, goal={goal}")
+
+            new_state = self.factory.update_state(state, goal)
+
+            r["node"] = new_state[0]
+            r["box"] = new_state[1]
+            self.boxes = new_state[2]
             r["reserved_pickup_node"] = None
 
             rospy.logwarn(
-                f"[{robot_id}] pickup completed: logical_node={r['node']} "
+                f"[{robot_id}] AFTER pickup update: node={r['node']} "
                 f"box={r['box']} boxes={self.boxes}"
             )
 
