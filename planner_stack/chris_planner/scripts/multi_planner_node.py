@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
-from std_msgs.msg import String, Int32, Bool, UInt32, Int32MultiArray
+from std_msgs.msg import String, UInt32, Int32MultiArray
 import heapq
 
 import os
@@ -13,31 +13,19 @@ PACKAGE_DIR = os.path.dirname(CURRENT_DIR)
 if PACKAGE_DIR not in sys.path:
     sys.path.insert(0, PACKAGE_DIR)
 
-
-# Add the modules directory to the path
 import rospkg
 rospack = rospkg.RosPack()
 chris_planner_path = rospack.get_path('chris_planner')
 
-# Add modules to Python path
-# In development: modules are in source tree
-# After installation: modules are in lib/python3/dist-packages/chris_planner/
 modules_path = os.path.join(chris_planner_path, 'modules')
 if os.path.exists(modules_path):
-    # Development mode: add parent directory so we can import modules
     sys.path.insert(0, os.path.dirname(modules_path))
-else:
-    # Installed mode: modules should be in the Python path already
-    # But we can also try to add the package path
-    pass
 
-# Import chris_planner modules
 try:
     import modules.planner as planner_module
     import modules.factory as factory_module
     import modules.yaml_utils as yaml_utils
 except ImportError:
-    # Fallback: try importing from chris_planner package
     import chris_planner.modules.planner as planner_module
     import chris_planner.modules.factory as factory_module
     import chris_planner.modules.yaml_utils as yaml_utils
@@ -76,43 +64,41 @@ class MultiPlannerNode:
 
         self.robots = {
             "r1": {
-                "node": 31,          # nó lógico do planner
-                "current_node": 31,  # nó físico atual
-                "last_node": None,   # último nó físico
-                "box": -1,
+                "node": 31,                # nó lógico
+                "current_node": 31,        # nó físico atual
+                "last_node": None,
+                "box": factory_module.EMPTY,
                 "goal": None,
                 "path": [],
                 "busy": False,
-                "waiting_replan": False
+                "waiting_replan": False,
+                "task_type": None,         # "pickup" ou "dropoff"
+                "reserved_pickup_node": None
             },
             "r2": {
                 "node": 31,
                 "current_node": 31,
                 "last_node": None,
-                "box": -1,
+                "box": factory_module.EMPTY,
                 "goal": None,
                 "path": [],
                 "busy": False,
-                "waiting_replan": False
+                "waiting_replan": False,
+                "task_type": None,
+                "reserved_pickup_node": None
             }
         }
 
         self.reserved_nodes = {}
         self.reserved_goals = {}
 
-        # publishers
-        self.pub_r1 = rospy.Publisher(
-            "/robot1_planned_paths", Int32MultiArray, queue_size=10)
+        self.pub_r1 = rospy.Publisher("/robot1_planned_paths", Int32MultiArray, queue_size=10)
+        self.pub_r2 = rospy.Publisher("/robot2_planned_paths", Int32MultiArray, queue_size=10)
 
-        self.pub_r2 = rospy.Publisher(
-            "/robot2_planned_paths", Int32MultiArray, queue_size=10)
-
-        # subscribers
         rospy.Subscriber("/color_sequence", String, self.sequence_cb)
-
         rospy.Subscriber("/robot1/current_pose", UInt32, self.robot1_node_cb)
         rospy.Subscriber("/robot2/current_pose", UInt32, self.robot2_node_cb)
-       
+
     # -----------------------------------------------------
 
     def sequence_cb(self, msg):
@@ -126,6 +112,23 @@ class MultiPlannerNode:
         initial_state = self.factory.initial_state(boxtypes)
         _, _, self.boxes = initial_state
 
+        self.reserved_nodes = {}
+        self.reserved_goals = {}
+
+        for robot_id in self.robots:
+            self.robots[robot_id]["node"] = 31
+            self.robots[robot_id]["current_node"] = 31
+            self.robots[robot_id]["last_node"] = None
+            self.robots[robot_id]["box"] = factory_module.EMPTY
+            self.robots[robot_id]["goal"] = None
+            self.robots[robot_id]["path"] = []
+            self.robots[robot_id]["busy"] = False
+            self.robots[robot_id]["waiting_replan"] = False
+            self.robots[robot_id]["task_type"] = None
+            self.robots[robot_id]["reserved_pickup_node"] = None
+
+        rospy.logwarn(f"Initial boxes = {self.boxes}")
+
         self.plan_for_robot("r1")
         self.plan_for_robot("r2")
 
@@ -134,7 +137,6 @@ class MultiPlannerNode:
     def build_state(self, robot_id):
 
         r = self.robots[robot_id]
-
         return (r["node"], r["box"], self.boxes)
 
     # -----------------------------------------------------
@@ -148,9 +150,9 @@ class MultiPlannerNode:
             return False
 
         state = self.build_state(robot_id)
-        robot_node = state[0]
+        robot_node = r["current_node"]
 
-        rospy.loginfo(f"[{robot_id}] state = {state}")
+        rospy.loginfo(f"[{robot_id}] planning from physical node={robot_node}, logical state={state}")
 
         valid_nodes = self.factory.valid_destinations(state)
         rospy.loginfo(f"[{robot_id}] valid_nodes before filter = {valid_nodes}")
@@ -199,35 +201,78 @@ class MultiPlannerNode:
             rospy.logwarn(f"No collision free path for {robot_id}")
             rospy.logwarn(f"[{robot_id}] reserved_nodes(all) = {dict(sorted(self.reserved_nodes.items()))}")
             rospy.logwarn(f"[{robot_id}] reserved_goals = {dict(sorted(self.reserved_goals.items()))}")
-            rospy.logwarn(f"[{robot_id}] reserved_by_other = {sorted(reserved_by_other)}")
-            rospy.logwarn(f"[{robot_id}] extra_blocked = {sorted(extra_blocked)}")
             rospy.logwarn(f"[{robot_id}] blocked_nodes = {sorted(blocked_nodes)}")
-            rospy.logwarn(f"[{robot_id}] current logical node = {r['node']}, current physical node = {r['current_node']}, goal candidates = {valid_nodes}")
             r["waiting_replan"] = True
             return False
 
-        extended_path = self.extend_path_with_previous_node(best_path)
+        task_type = "pickup" if r["box"] == factory_module.EMPTY else "dropoff"
 
-        self.reserve_path(robot_id, extended_path, best_goal)
-        self.publish_path(robot_id, extended_path)
+        if task_type == "pickup":
+            ok = self.reserve_box_at_planning(robot_id, best_goal)
+            if not ok:
+                rospy.logwarn(f"[{robot_id}] Failed to reserve box at node {best_goal}")
+                r["waiting_replan"] = True
+                return False
 
-        r["path"] = extended_path
+        full_extended_path = self.extend_path_with_previous_node(best_path)
+
+        compact_best_path = self.compact_path(best_path)
+        compact_extended_path = self.extend_path_with_previous_node(compact_best_path)
+
+        self.reserve_path(robot_id, full_extended_path, best_goal)
+        self.publish_path(robot_id, compact_extended_path)
+
+        r["path"] = full_extended_path
         r["goal"] = best_goal
         r["busy"] = True
         r["waiting_replan"] = False
+        r["task_type"] = task_type
 
-        rospy.loginfo(f"{robot_id} planned path {best_path}")
+        rospy.loginfo(f"{robot_id} planned full path {best_path} with task_type={task_type}")
+        rospy.loginfo(f"{robot_id} published compact path {compact_extended_path}")
+        rospy.logwarn(f"[{robot_id}] boxes after planning = {self.boxes}")
         return True
+
+    # -----------------------------------------------------
+
+    def reserve_box_at_planning(self, robot_id, pickup_node):
+        r = self.robots[robot_id]
+
+        if pickup_node not in self.factory.index_of:
+            rospy.logerr(f"[{robot_id}] pickup node {pickup_node} is not a special node")
+            return False
+
+        i_pickup = self.factory.index_of[pickup_node]
+        boxes_list = list(self.boxes)
+        box_type = boxes_list[i_pickup]
+
+        if box_type == factory_module.EMPTY:
+            rospy.logerr(f"[{robot_id}] no box to reserve at node {pickup_node}")
+            return False
+
+        rospy.logwarn(f"[{robot_id}] Reserving box at planning from node {pickup_node}")
+        rospy.logwarn(f"[{robot_id}] BEFORE reserve: box_type={box_type}, boxes={self.boxes}")
+
+        boxes_list[i_pickup] = factory_module.EMPTY
+        self.boxes = tuple(boxes_list)
+
+        r["box"] = box_type
+        r["reserved_pickup_node"] = pickup_node
+
+        rospy.logwarn(
+            f"[{robot_id}] AFTER reserve: logical_node={r['node']} current_node={r['current_node']} "
+            f"box={r['box']} reserved_pickup_node={r['reserved_pickup_node']} boxes={self.boxes}"
+        )
+
+        return True
+
     # -----------------------------------------------------
 
     def reserve_path(self, robot_id, path, goal):
 
         for n in path:
-
-            # ignorar o nó inicial partilhado
             if n == 31:
                 continue
-
             self.reserved_nodes[n] = robot_id
 
         self.reserved_goals[goal] = robot_id
@@ -258,14 +303,10 @@ class MultiPlannerNode:
     # -----------------------------------------------------
 
     def robot1_node_cb(self, msg):
-
-        node = msg.data
-        self.update_robot_position("r1", node)
+        self.update_robot_position("r1", msg.data)
 
     def robot2_node_cb(self, msg):
-
-        node = msg.data
-        self.update_robot_position("r2", node)
+        self.update_robot_position("r2", msg.data)
 
     # -----------------------------------------------------
 
@@ -274,33 +315,20 @@ class MultiPlannerNode:
         r = self.robots[robot_id]
         previous_physical_node = r["current_node"]
 
-        # só agir se o robô mudou mesmo de nó
         if node == previous_physical_node:
             return
 
         r["last_node"] = previous_physical_node
         r["current_node"] = node
 
-        # libertar todos os nós anteriores ao nó atual no path
         released = self.release_nodes_before_current(robot_id, node)
 
         if released:
             self.try_replan_waiting_robot(robot_id)
 
         if r["goal"] is not None and node == r["goal"]:
+            rospy.logwarn(f"[{robot_id}] GOAL DETECTED at node {node}")
             self.goal_reached(robot_id)
-
-    # -----------------------------------------------------
-
-    def robot1_goal_cb(self, msg):
-
-        if msg.data:
-            self.goal_reached("r1")
-
-    def robot2_goal_cb(self, msg):
-
-        if msg.data:
-            self.goal_reached("r2")
 
     # -----------------------------------------------------
 
@@ -308,27 +336,47 @@ class MultiPlannerNode:
 
         r = self.robots[robot_id]
         goal = r["goal"]
+        task_type = r["task_type"]
 
         self.release_all_path_nodes_except_current(robot_id, goal)
 
-        rospy.loginfo(f"{robot_id} reached goal {goal}")
+        rospy.loginfo(f"{robot_id} reached goal {goal} with task_type={task_type}")
 
-        state = (r["node"], r["box"], self.boxes)
-        new_state = self.factory.update_state(state, goal)
+        if task_type == "pickup":
+            # no pickup a caixa já foi retirada do estado no planeamento
+            r["node"] = goal
+            r["reserved_pickup_node"] = None
 
-        r["node"] = new_state[0]
-        r["box"] = new_state[1]
-        self.boxes = new_state[2]
+            rospy.logwarn(
+                f"[{robot_id}] pickup completed: logical_node={r['node']} "
+                f"box={r['box']} boxes={self.boxes}"
+            )
+
+        elif task_type == "dropoff":
+            state = (r["node"], r["box"], self.boxes)
+            rospy.logwarn(f"[{robot_id}] BEFORE dropoff update: state={state}, goal={goal}")
+
+            new_state = self.factory.update_state(state, goal)
+
+            r["node"] = new_state[0]
+            r["box"] = new_state[1]
+            self.boxes = new_state[2]
+            r["reserved_pickup_node"] = None
+
+            rospy.logwarn(
+                f"[{robot_id}] AFTER dropoff update: node={r['node']} "
+                f"box={r['box']} boxes={self.boxes}"
+            )
 
         r["busy"] = False
         r["goal"] = None
         r["path"] = []
+        r["task_type"] = None
 
-        # primeiro tenta continuar este robô
         self.plan_for_robot(robot_id)
-
-        # depois tenta acordar o outro se ele estava bloqueado
         self.try_replan_waiting_robot(robot_id)
+
+    # -----------------------------------------------------
 
     def sequence_to_boxtypes(self, seq):
         color_map = {'R': 0, 'G': 1, 'B': 2}
@@ -342,12 +390,10 @@ class MultiPlannerNode:
                 rospy.logwarn(f"Cor inválida '{c}', ignorada")
 
         return boxtypes
-    
+
+    # -----------------------------------------------------
+
     def shortest_path_avoiding(self, start, goal, blocked_nodes):
-        """
-        Dijkstra que evita nós em blocked_nodes.
-        Permite start e goal mesmo que estejam no conjunto bloqueado.
-        """
         blocked = set(blocked_nodes)
         blocked.discard(start)
         blocked.discard(goal)
@@ -385,7 +431,9 @@ class MultiPlannerNode:
             node = prev[node]
 
         return path[::-1]
-    
+
+    # -----------------------------------------------------
+
     def path_cost(self, path):
         if len(path) < 2:
             return 0.0
@@ -401,7 +449,9 @@ class MultiPlannerNode:
                     break
 
         return total
-    
+
+    # -----------------------------------------------------
+
     def try_replan_waiting_robot(self, freed_by_robot_id):
         other_robot = "r2" if freed_by_robot_id == "r1" else "r1"
 
@@ -419,42 +469,47 @@ class MultiPlannerNode:
         rospy.loginfo(f"Trying replanning for waiting robot {other_robot}")
         self.plan_for_robot(other_robot)
 
+    # -----------------------------------------------------
+
     def extend_path_with_previous_node(self, path):
 
         if len(path) < 2:
             return path
 
         return path + [path[-2]]
-    
+
+    # -----------------------------------------------------
+
     def get_extra_blocked_nodes(self, robot_id):
         blocked = set()
 
-        # olhar apenas para reservas dos OUTROS robôs
         reserved_by_other = {
             n for n, owner in self.reserved_nodes.items()
             if owner != robot_id
         }
 
-        # se um nó especial estiver reservado por outro robô,
-        # os seus vizinhos também ficam bloqueados
         for node in reserved_by_other:
             if node in self.special_block_nodes:
                 for neigh, _ in self.factory.graph.adj.get(node, []):
                     blocked.add(neigh)
 
-        # regra especial: se 12 ou 26 estiverem reservados por outro robô,
-        # o 19 também fica bloqueado
         if 12 in reserved_by_other or 26 in reserved_by_other:
             blocked.add(19)
 
         return blocked
-    
+
+    # -----------------------------------------------------
+
     def release_all_path_nodes_except_current(self, robot_id, current_node):
         r = self.robots[robot_id]
         released_any = False
 
         if not r["path"]:
             return released_any
+
+        if current_node in self.reserved_goals and self.reserved_goals[current_node] == robot_id:
+            del self.reserved_goals[current_node]
+            rospy.loginfo(f"[{robot_id}] released current reserved goal {current_node} on goal arrival")
 
         for n in r["path"]:
             if n == current_node:
@@ -470,7 +525,9 @@ class MultiPlannerNode:
                 rospy.loginfo(f"[{robot_id}] released reserved goal {n} on goal arrival")
 
         return released_any
-    
+
+    # -----------------------------------------------------
+
     def release_nodes_before_current(self, robot_id, current_node):
         r = self.robots[robot_id]
         released_any = False
@@ -497,10 +554,57 @@ class MultiPlannerNode:
                 rospy.loginfo(f"[{robot_id}] released past reserved goal {n}")
 
         return released_any
+    
+    def compact_path(self, path):
+        if not path or len(path) <= 2:
+            return path
+
+        def colinear(p1, p2, p3, eps=0.001):
+            a = (p3[0] - p1[0], p3[1] - p1[1])
+            b = (p2[0] - p1[0], p2[1] - p1[1])
+
+            denom = (a[0] ** 2 + a[1] ** 2) ** 0.5
+            if denom == 0:
+                return False
+
+            dist_to_line = abs(a[0] * b[1] - a[1] * b[0]) / denom
+            return dist_to_line < eps
+
+        points_map = self.factory.points_map
+
+        compact = [path[0]]
+        i = 1
+
+        # manter o primeiro passo se o nó inicial for especial
+        if path[0] in self.factory.special_nodes and len(path) > 1:
+            compact.append(path[1])
+            i += 1
+
+        while i < len(path) - 1:
+            if i == len(path) - 1:
+                break
+
+            last_idx = compact[-1]
+            curr_idx = path[i]
+            next_idx = path[i + 1]
+
+            p1 = points_map[last_idx]
+            p2 = points_map[curr_idx]
+            p3 = points_map[next_idx]
+
+            if colinear(p1, p2, p3):
+                i += 1
+            else:
+                compact.append(curr_idx)
+                i += 1
+
+        if compact[-1] != path[-1]:
+            compact.append(path[-1])
+
+        return compact
 
 
 if __name__ == "__main__":
 
     node = MultiPlannerNode()
-
     rospy.spin()
