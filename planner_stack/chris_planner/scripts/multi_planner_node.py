@@ -187,6 +187,31 @@ class MultiPlannerNode:
         blocked_nodes = reserved_by_other | extra_blocked
 
         for node in valid_nodes:
+            if r["box"] == factory_module.EMPTY:
+                # Restrição extra para vermelhas (TYPE_A -> máquina A)
+                if not self.can_pickup_box_for_machine(
+                    robot_id=robot_id,
+                    pickup_node=node,
+                    source_box_type=factory_module.TYPE_A,
+                    machine_inputs=self.factory.machineA_inputs,
+                    machine_outputs=self.factory.machineA_outputs,
+                    label="red"
+                ):
+                    rospy.loginfo(f"[{robot_id}] pickup at node {node} blocked by red machine capacity")
+                    continue
+
+                # Restrição extra para verdes (TYPE_B -> máquina B)
+                if not self.can_pickup_box_for_machine(
+                    robot_id=robot_id,
+                    pickup_node=node,
+                    source_box_type=factory_module.TYPE_B,
+                    machine_inputs=self.factory.machineB_inputs,
+                    machine_outputs=self.factory.machineB_outputs,
+                    label="green"
+                ):
+                    rospy.loginfo(f"[{robot_id}] pickup at node {node} blocked by green machine capacity")
+                    continue
+
             path = self.shortest_path_avoiding(robot_node, node, blocked_nodes)
 
             rospy.loginfo(f"[{robot_id}] candidate goal={node}, avoided path={path}")
@@ -617,6 +642,57 @@ class MultiPlannerNode:
                 blocked.add(other["reserved_pickup_node"])
 
         return blocked
+        
+    
+    def can_pickup_box_for_machine(self, robot_id, pickup_node, source_box_type, machine_inputs, machine_outputs, label):
+        if pickup_node not in self.factory.index_of:
+            return False
+
+        i_pickup = self.factory.index_of[pickup_node]
+        box_type = self.boxes[i_pickup]
+
+        # Esta restrição só se aplica ao tipo certo
+        if box_type != source_box_type:
+            return True
+
+        # Contar quantas linhas da máquina estão realmente disponíveis
+        # Uma linha está disponível se input e output estiverem ambos livres
+        available_lines = 0
+
+        for node_input, node_output in zip(machine_inputs, machine_outputs):
+            i_input = self.factory.index_of[node_input]
+            i_output = self.factory.index_of[node_output]
+
+            if self.boxes[i_input] == factory_module.EMPTY and self.boxes[i_output] == factory_module.EMPTY:
+                available_lines += 1
+
+        # Contar quantas caixas deste tipo já estão em trânsito
+        same_type_in_transit = 0
+
+        for other_id, other in self.robots.items():
+            if other_id == robot_id:
+                continue
+
+            # outro robô já transporta uma caixa deste tipo
+            if other["box"] == source_box_type:
+                same_type_in_transit += 1
+                continue
+
+            # outro robô já reservou pickup de uma caixa deste tipo
+            if other["reserved_pickup_node"] is not None:
+                reserved_node = other["reserved_pickup_node"]
+
+                if reserved_node in self.factory.index_of:
+                    idx = self.factory.index_of[reserved_node]
+                    if self.boxes[idx] == source_box_type:
+                        same_type_in_transit += 1
+
+        rospy.loginfo(
+            f"[{robot_id}] {label} pickup check at node {pickup_node}: "
+            f"available_lines={available_lines}, same_type_in_transit={same_type_in_transit}"
+        )
+
+        return available_lines > same_type_in_transit
 
 
 if __name__ == "__main__":
