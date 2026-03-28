@@ -153,13 +153,16 @@ class MultiPlannerNode:
         robot_node = r["current_node"]
 
         rospy.loginfo(f"[{robot_id}] planning from physical node={robot_node}, logical state={state}")
-
+        
         valid_nodes = self.factory.valid_destinations(state)
         rospy.loginfo(f"[{robot_id}] valid_nodes before filter = {valid_nodes}")
+
+        unavailable_pickups = self.get_unavailable_pickup_nodes(robot_id)
 
         valid_nodes = [
             n for n in valid_nodes
             if n not in self.reserved_goals
+            and n not in unavailable_pickups
         ]
         rospy.loginfo(f"[{robot_id}] valid_nodes after filter = {valid_nodes}")
 
@@ -543,6 +546,27 @@ class MultiPlannerNode:
                 rospy.loginfo(f"[{robot_id}] released past reserved goal {n}")
 
         return released_any
+    
+    def get_unavailable_pickup_nodes(self, robot_id):
+        blocked = set()
+
+        for other_id, other in self.robots.items():
+            if other_id == robot_id:
+                continue
+
+            # se o outro robô está a carregar caixa, o nó lógico dele
+            # não pode ser considerado pickup disponível
+            if other["box"] != factory_module.EMPTY:
+                blocked.add(other["node"])
+
+            # se quiseres ser ainda mais conservador
+            if other["goal"] is not None and other["task_type"] == "pickup":
+                blocked.add(other["goal"])
+
+            if other["reserved_pickup_node"] is not None:
+                blocked.add(other["reserved_pickup_node"])
+
+        return blocked
 
 
 if __name__ == "__main__":
