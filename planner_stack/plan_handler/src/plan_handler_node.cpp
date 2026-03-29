@@ -130,6 +130,11 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
         ControllerPoint point;
 
+        // =========================
+        // NODE_ID
+        // =========================
+        point.node_id = value;
+
         point.x = factory_coordinates[value].x;
         point.y = factory_coordinates[value].y;
 
@@ -214,23 +219,14 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             //point.line_switch_ratio = 0.8 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
             
             if (fe_warehouse_coordinate) {
-
-
                 point.line_switch_ratio = was_last_warehouse_process ? 1.0 : 0.7;
-
-
             } else {
-
-
                 point.line_switch_ratio = 0.75;
-
-
             }            
 
             point.backwards = fe_warehouse_coordinate;  // backwards ao sair de qualquer warehouse (pick ou drop)
             point.vel_lin_nom = 0.1 * fe_warehouse_coordinate + 0.3 * !fe_warehouse_coordinate;
             point.should_pub = false;       
-
         }
 
         // add current new path
@@ -238,8 +234,8 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
         // add to total path
         plan_stack.push_back(point);
         
-        ROS_INFO("PlanHandlerNode: Added point - x=%.3f, y=%.3f, line_switch_ratio=%.2f, vel_lin_nom=%.2f, backwards=%d",
-                point.x, point.y, point.line_switch_ratio, point.vel_lin_nom, point.backwards ? 1 : 0);
+        ROS_INFO("PlanHandlerNode: Added point - node_id=%d, x=%.3f, y=%.3f, line_switch_ratio=%.2f, vel_lin_nom=%.2f, backwards=%d",
+                point.node_id, point.x, point.y, point.line_switch_ratio, point.vel_lin_nom, point.backwards ? 1 : 0);
         
         // Após processar o primeiro nó, marcar como false
         is_first_node = false;
@@ -266,6 +262,11 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             nav_plan.points[i].backwards = cp.backwards;
             nav_plan.points[i].pick_box = cp.pick_box;
             nav_plan.points[i].is_warehouse = cp.is_warehouse;
+
+            // =========================
+            // NODE_ID
+            // =========================
+            nav_plan.points[i].node_id = cp.node_id;
         }
         
         navPlanPub.publish(nav_plan);
@@ -299,11 +300,11 @@ void PlanHandlerNode::navCompletionFeedbackCallback(const plan_handler::Completi
                 pickBoxPub.publish(pick_box_msg);
                 last_pick_box_state = removed_point.pick_box;
                 
-                ROS_INFO("PlanHandlerNode: Removed point (%.3f, %.3f) from plan_stack. Published pick_box=%d (state changed). Remaining points: %zu", 
-                        removed_point.x, removed_point.y, pick_box_msg.data ? 1 : 0, plan_stack.size());
+                ROS_INFO("PlanHandlerNode: Removed point node_id=%d (%.3f, %.3f) from plan_stack. Published pick_box=%d (state changed). Remaining points: %zu", 
+                        removed_point.node_id, removed_point.x, removed_point.y, pick_box_msg.data ? 1 : 0, plan_stack.size());
             } else {
-                ROS_INFO("PlanHandlerNode: Removed point (%.3f, %.3f) from plan_stack. pick_box=%d (no state change). Remaining points: %zu", 
-                        removed_point.x, removed_point.y, removed_point.pick_box ? 1 : 0, plan_stack.size());
+                ROS_INFO("PlanHandlerNode: Removed point node_id=%d (%.3f, %.3f) from plan_stack. pick_box=%d (no state change). Remaining points: %zu", 
+                        removed_point.node_id, removed_point.x, removed_point.y, removed_point.pick_box ? 1 : 0, plan_stack.size());
             }
             
             found = true;
