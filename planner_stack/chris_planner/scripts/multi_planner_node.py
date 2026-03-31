@@ -498,37 +498,86 @@ class MultiPlannerNode:
         blocked.discard(start)
         blocked.discard(goal)
 
-        dist = {start: 0.0}
-        prev = {start: None}
-        pq = [(0.0, start)]
+        # Estado = (nó_atual, nó_anterior)
+        start_state = (start, None)
+
+        dist = {start_state: 0.0}
+        prev_state = {start_state: None}
+        pq = [(0.0, start_state)]
+
+        best_goal_state = None
 
         while pq:
-            curr_dist, u = heapq.heappop(pq)
+            curr_dist, state = heapq.heappop(pq)
+            u, prev_node = state
 
-            if curr_dist > dist.get(u, float("inf")):
+            if curr_dist > dist.get(state, float("inf")):
                 continue
 
             if u == goal:
+                best_goal_state = state
                 break
 
             for v, w in self.factory.graph.adj.get(u, []):
                 if v in blocked:
                     continue
 
-                new_dist = curr_dist + w
-                if new_dist < dist.get(v, float("inf")):
-                    dist[v] = new_dist
-                    prev[v] = u
-                    heapq.heappush(pq, (new_dist, v))
+                # -------------------------------------------------
+                # Regra especial:
+                # Os troços 11-19 e 19-27 só podem ser usados juntos
+                # Permitido apenas:
+                #   11 -> 19 -> 27
+                #   27 -> 19 -> 11
+                # -------------------------------------------------
 
-        if goal not in dist:
+                # Entrar no 19 vindo do 11 ou do 27 é permitido,
+                # mas a saída seguinte fica implicitamente condicionada
+                # pelas regras abaixo.
+
+                # Se estamos no 19 e queremos sair para 11,
+                # só é permitido se tivermos vindo do 27
+                if u == 19 and v == 11 and prev_node != 27:
+                    continue
+
+                # Se estamos no 19 e queremos sair para 27,
+                # só é permitido se tivermos vindo do 11
+                if u == 19 and v == 27 and prev_node != 11:
+                    continue
+
+                # Se estamos no 19 e viemos do 11,
+                # não podemos sair para mais lado nenhum que não 27
+                if u == 19 and prev_node == 11 and v != 27:
+                    continue
+
+                # Se estamos no 19 e viemos do 27,
+                # não podemos sair para mais lado nenhum que não 11
+                if u == 19 and prev_node == 27 and v != 11:
+                    continue
+
+                # Não permitir terminar no 19 se viemos de 11 ou 27,
+                # porque isso corresponderia a usar só metade da travessia.
+                if v == goal == 19 and u in (11, 27):
+                    continue
+
+                new_state = (v, u)
+                new_dist = curr_dist + w
+
+                if new_dist < dist.get(new_state, float("inf")):
+                    dist[new_state] = new_dist
+                    prev_state[new_state] = state
+                    heapq.heappush(pq, (new_dist, new_state))
+
+        if best_goal_state is None:
             return []
 
+        # Reconstruir caminho a partir dos estados
         path = []
-        node = goal
-        while node is not None:
+        state = best_goal_state
+
+        while state is not None:
+            node, _ = state
             path.append(node)
-            node = prev[node]
+            state = prev_state[state]
 
         return path[::-1]
 

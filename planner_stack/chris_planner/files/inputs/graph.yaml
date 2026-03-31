@@ -78,7 +78,7 @@ adj:
   - {node_to: '4', dist: 0.274}
   - {node_to: '10', dist: 0.141}
   - {node_to: '12', dist: 0.259}
-  - {node_to: '27', dist: 0.8} 
+  - {node_to: '19', dist: 0.4} 
   '12':
   - {node_to: '4', dist: 0.205}
   - {node_to: '11', dist: 0.259}
@@ -106,6 +106,8 @@ adj:
   - {node_to: '18', dist: 0.227}
   - {node_to: '20', dist: 0.227}
   - {node_to: '26', dist: 0.15}
+  - {node_to: '11', dist: 0.4}
+  - {node_to: '27', dist: 0.4}
   '20':
   - {node_to: '19', dist: 0.227}
   '21':
@@ -133,7 +135,7 @@ adj:
   - {node_to: '28', dist: 0.15}
   - {node_to: '34', dist: 0.274}
   - {node_to: '35', dist: 0.235}
-  - {node_to: '11', dist: 0.8} 
+  - {node_to: '19', dist: 0.4} 
   '28':
   - {node_to: '27', dist: 0.15}
   - {node_to: '29', dist: 0.15}
