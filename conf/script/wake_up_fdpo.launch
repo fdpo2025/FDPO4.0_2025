@@ -40,18 +40,13 @@
 	</include>
 
 	<include if="$(arg use_planner)" file="$(find conf)/system/planner.xml">
-		<arg name="node_name" value="$(arg planner_node_name)" />
+		<arg name="node_name" value="$(eval 'chris_planner_node' if arg('planner_type') == 'chris' else 'multi_planner_node')" />
 		<arg name="planning_method" value="$(arg planning_method)" />
+		<arg name="planner_script" value="$(eval 'chris_planner_node.py' if arg('planner_type') == 'chris' else 'multi_planner_node.py')" />
 	</include>
 		
 	<include file="$(find conf)/system/wifi.xml">
 		<arg name="enable" value="$(arg use_wifi)" />
 	</include>
-
-	<include if="$(arg use_planner)" file="$(find conf)/system/planner.xml">
-		<arg name="node_name" value="$(eval 'chris_planner_node' if arg('planner_type') == 'chris' else 'multi_planner_node')" />
-		<arg name="planning_method" value="$(arg planning_method)" />
-		<arg name="planner_script" value="$(eval 'chris_planner_node.py' if arg('planner_type') == 'chris' else 'multi_planner_node.py')" />
-	</include>
-
+	
 </launch>
