@@ -110,10 +110,24 @@ class MultiPlannerNode:
 
         self.pub_r1 = rospy.Publisher("/robot1_planned_paths", Int32MultiArray, queue_size=10)
         self.pub_r2 = rospy.Publisher("/robot2_planned_paths", Int32MultiArray, queue_size=10)
+        self.pub_state = rospy.Publisher("/planner/logical_state", String, queue_size=10)
 
         rospy.Subscriber("/color_sequence", String, self.sequence_cb)
         rospy.Subscriber("/robot1/current_pose", UInt32, self.robot1_node_cb)
         rospy.Subscriber("/robot2/current_pose", UInt32, self.robot2_node_cb)
+
+    # -----------------------------------------------------
+
+    def publish_state_snapshot(self, robot_id, label, state):
+        msg = String()
+        msg.data = f"{robot_id} | {label} | logical state={state}"
+        self.pub_state.publish(msg)
+
+    # -----------------------------------------------------
+
+    def publish_logical_state(self, robot_id):
+        state = self.build_state(robot_id)
+        self.publish_state_snapshot(robot_id, "current", state)
 
     # -----------------------------------------------------
 
@@ -150,6 +164,9 @@ class MultiPlannerNode:
 
         rospy.logwarn(f"Initial boxes = {self.boxes}")
 
+        self.publish_logical_state("r1")
+        self.publish_logical_state("r2")
+
         self.plan_for_robot("r1")
         self.plan_for_robot("r2")
 
@@ -171,6 +188,8 @@ class MultiPlannerNode:
             return False
 
         state = self.build_state(robot_id)
+        self.publish_state_snapshot(robot_id, "before planning", state)
+
         robot_node = r["current_node"]
 
         rospy.loginfo(f"[{robot_id}] planning from physical node={robot_node}, logical state={state}")
@@ -195,6 +214,7 @@ class MultiPlannerNode:
         if not valid_nodes:
             rospy.logwarn(f"No valid nodes for {robot_id}")
             r["waiting_replan"] = True
+            self.publish_state_snapshot(robot_id, "planning failed - no valid nodes", state)
             return False
 
         best_path = None
@@ -276,6 +296,7 @@ class MultiPlannerNode:
             rospy.logwarn(f"[{robot_id}] reserved_goals = {dict(sorted(self.reserved_goals.items()))}")
             rospy.logwarn(f"[{robot_id}] blocked_nodes = {sorted(blocked_nodes)}")
             r["waiting_replan"] = True
+            self.publish_state_snapshot(robot_id, "planning failed - no path", state)
             return False
 
         task_type = "pickup" if r["box"] == factory_module.EMPTY else "dropoff"
@@ -285,6 +306,7 @@ class MultiPlannerNode:
             if not ok:
                 rospy.logwarn(f"[{robot_id}] Failed to reserve box at node {best_goal}")
                 r["waiting_replan"] = True
+                self.publish_state_snapshot(robot_id, "planning failed - reserve pickup", state)
                 return False
 
             self.pickup_plan_count += 1
@@ -308,6 +330,7 @@ class MultiPlannerNode:
                         f"{self.required_second_output_node}, mas foi escolhida {best_goal}"
                     )
                     r["waiting_replan"] = True
+                    self.publish_state_snapshot(robot_id, "planning failed - output rule", state)
                     return False
 
                 rospy.logwarn(
@@ -337,6 +360,8 @@ class MultiPlannerNode:
         rospy.loginfo(f"{robot_id} planned compact_path {compact_path}")
         rospy.loginfo(f"{robot_id} task_type={task_type}")
         rospy.logwarn(f"[{robot_id}] boxes after planning = {self.boxes}")
+
+        self.publish_logical_state(robot_id)
         return True
 
     # -----------------------------------------------------
@@ -419,6 +444,8 @@ class MultiPlannerNode:
         if released:
             self.try_replan_waiting_robot(robot_id)
 
+        self.publish_logical_state(robot_id)
+
         if r["goal"] is not None and node == r["goal"]:
             rospy.logwarn(f"[{robot_id}] GOAL DETECTED at node {node}")
             self.goal_reached(robot_id)
@@ -437,9 +464,12 @@ class MultiPlannerNode:
 
         if task_type == "pickup":
             state = (r["node"], r["box"], self.boxes)
+            self.publish_state_snapshot(robot_id, "before pickup update", state)
             rospy.logwarn(f"[{robot_id}] BEFORE pickup update: state={state}, goal={goal}")
 
             new_state = self.factory.update_state(state, goal)
+
+            self.publish_state_snapshot(robot_id, "after pickup update", new_state)
 
             r["node"] = new_state[0]
             r["box"] = new_state[1]
@@ -453,9 +483,12 @@ class MultiPlannerNode:
 
         elif task_type == "dropoff":
             state = (r["node"], r["box"], self.boxes)
+            self.publish_state_snapshot(robot_id, "before dropoff update", state)
             rospy.logwarn(f"[{robot_id}] BEFORE dropoff update: state={state}, goal={goal}")
 
             new_state = self.factory.update_state(state, goal)
+
+            self.publish_state_snapshot(robot_id, "after dropoff update", new_state)
 
             r["node"] = new_state[0]
             r["box"] = new_state[1]
@@ -472,6 +505,8 @@ class MultiPlannerNode:
         r["path"] = []
         r["compact_path"] = []
         r["task_type"] = None
+
+        self.publish_logical_state(robot_id)
 
         self.plan_for_robot(robot_id)
         self.try_replan_waiting_robot(robot_id)
@@ -498,86 +533,37 @@ class MultiPlannerNode:
         blocked.discard(start)
         blocked.discard(goal)
 
-        # Estado = (nó_atual, nó_anterior)
-        start_state = (start, None)
-
-        dist = {start_state: 0.0}
-        prev_state = {start_state: None}
-        pq = [(0.0, start_state)]
-
-        best_goal_state = None
+        dist = {start: 0.0}
+        prev = {start: None}
+        pq = [(0.0, start)]
 
         while pq:
-            curr_dist, state = heapq.heappop(pq)
-            u, prev_node = state
+            curr_dist, u = heapq.heappop(pq)
 
-            if curr_dist > dist.get(state, float("inf")):
+            if curr_dist > dist.get(u, float("inf")):
                 continue
 
             if u == goal:
-                best_goal_state = state
                 break
 
             for v, w in self.factory.graph.adj.get(u, []):
                 if v in blocked:
                     continue
 
-                # -------------------------------------------------
-                # Regra especial:
-                # Os troços 11-19 e 19-27 só podem ser usados juntos
-                # Permitido apenas:
-                #   11 -> 19 -> 27
-                #   27 -> 19 -> 11
-                # -------------------------------------------------
-
-                # Entrar no 19 vindo do 11 ou do 27 é permitido,
-                # mas a saída seguinte fica implicitamente condicionada
-                # pelas regras abaixo.
-
-                # Se estamos no 19 e queremos sair para 11,
-                # só é permitido se tivermos vindo do 27
-                if u == 19 and v == 11 and prev_node != 27:
-                    continue
-
-                # Se estamos no 19 e queremos sair para 27,
-                # só é permitido se tivermos vindo do 11
-                if u == 19 and v == 27 and prev_node != 11:
-                    continue
-
-                # Se estamos no 19 e viemos do 11,
-                # não podemos sair para mais lado nenhum que não 27
-                if u == 19 and prev_node == 11 and v != 27:
-                    continue
-
-                # Se estamos no 19 e viemos do 27,
-                # não podemos sair para mais lado nenhum que não 11
-                if u == 19 and prev_node == 27 and v != 11:
-                    continue
-
-                # Não permitir terminar no 19 se viemos de 11 ou 27,
-                # porque isso corresponderia a usar só metade da travessia.
-                if v == goal == 19 and u in (11, 27):
-                    continue
-
-                new_state = (v, u)
                 new_dist = curr_dist + w
+                if new_dist < dist.get(v, float("inf")):
+                    dist[v] = new_dist
+                    prev[v] = u
+                    heapq.heappush(pq, (new_dist, v))
 
-                if new_dist < dist.get(new_state, float("inf")):
-                    dist[new_state] = new_dist
-                    prev_state[new_state] = state
-                    heapq.heappush(pq, (new_dist, new_state))
-
-        if best_goal_state is None:
+        if goal not in dist:
             return []
 
-        # Reconstruir caminho a partir dos estados
         path = []
-        state = best_goal_state
-
-        while state is not None:
-            node, _ = state
+        node = goal
+        while node is not None:
             path.append(node)
-            state = prev_state[state]
+            node = prev[node]
 
         return path[::-1]
 
