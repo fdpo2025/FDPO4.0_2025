@@ -843,36 +843,39 @@ class MultiPlannerNode:
     def get_pickup_priority_mode(self, robot_id):
         """
         Devolve:
-          - "prefer_green"
-          - "prefer_non_green"
+          - ("prefer_exact", box_type)
+          - ("avoid_exact", box_type)
           - None
         """
 
         other_robot = "r2" if robot_id == "r1" else "r1"
         other_color = self.get_robot_active_task_box_type(other_robot)
 
-        # Regra especial da 2ª tarefa de pickup da partida
+        # Regra especial da 2ª tarefa da partida:
+        # se a 1ª cor foi verde, tentar uma não-verde
+        # se a 1ª cor foi não-verde, tentar verde
         if self.pickup_plan_count == 1 and other_color is not None:
             if other_color == factory_module.TYPE_B:
                 rospy.loginfo(
                     f"[{robot_id}] second pickup priority: first task is GREEN, "
                     f"so prioritizing NON-GREEN"
                 )
-                return "prefer_non_green"
+                return ("avoid_exact", factory_module.TYPE_B)
             else:
                 rospy.loginfo(
                     f"[{robot_id}] second pickup priority: first task is NON-GREEN, "
                     f"so prioritizing GREEN"
                 )
-                return "prefer_green"
+                return ("prefer_exact", factory_module.TYPE_B)
 
-        # Regra geral: evitar dois verdes ao mesmo tempo
-        if other_color == factory_module.TYPE_B:
+        # Regra geral:
+        # evitar escolher a mesma cor do outro robô, se houver alternativa
+        if other_color is not None:
             rospy.loginfo(
-                f"[{robot_id}] other robot already has GREEN task active, "
-                f"so prioritizing NON-GREEN"
+                f"[{robot_id}] other robot active color is {other_color}, "
+                f"so prioritizing a different color"
             )
-            return "prefer_non_green"
+            return ("avoid_exact", other_color)
 
         return None
 
@@ -880,35 +883,40 @@ class MultiPlannerNode:
 
     def split_pickup_candidates_by_priority(self, robot_id, valid_nodes):
         """
-        Devolve uma lista de grupos de candidatos por ordem de prioridade.
+        Devolve grupos de candidatos por ordem de prioridade.
         Exemplo:
           [preferred_nodes, fallback_nodes]
-        ou apenas:
+        ou:
           [valid_nodes]
         """
 
         mode = self.get_pickup_priority_mode(robot_id)
 
-        green_nodes = []
-        non_green_nodes = []
+        if mode is None:
+            return [valid_nodes]
+
+        mode_type, target_box_type = mode
+
+        exact_nodes = []
+        other_nodes = []
         unknown_nodes = []
 
         for node in valid_nodes:
             box_type = self.get_box_type_at_node(node)
 
-            if box_type == factory_module.TYPE_B:
-                green_nodes.append(node)
-            elif box_type in (factory_module.TYPE_A, factory_module.TYPE_C):
-                non_green_nodes.append(node)
-            else:
+            if box_type is None:
                 unknown_nodes.append(node)
+            elif box_type == target_box_type:
+                exact_nodes.append(node)
+            else:
+                other_nodes.append(node)
 
-        if mode == "prefer_green":
-            preferred = green_nodes
-            fallback = non_green_nodes + unknown_nodes
+        if mode_type == "prefer_exact":
+            preferred = exact_nodes
+            fallback = other_nodes + unknown_nodes
 
             rospy.loginfo(
-                f"[{robot_id}] pickup priority prefer_green: "
+                f"[{robot_id}] pickup priority prefer_exact({target_box_type}): "
                 f"preferred={preferred}, fallback={fallback}"
             )
 
@@ -916,12 +924,12 @@ class MultiPlannerNode:
                 return [preferred, fallback] if fallback else [preferred]
             return [valid_nodes]
 
-        if mode == "prefer_non_green":
-            preferred = non_green_nodes + unknown_nodes
-            fallback = green_nodes
+        if mode_type == "avoid_exact":
+            preferred = other_nodes + unknown_nodes
+            fallback = exact_nodes
 
             rospy.loginfo(
-                f"[{robot_id}] pickup priority prefer_non_green: "
+                f"[{robot_id}] pickup priority avoid_exact({target_box_type}): "
                 f"preferred={preferred}, fallback={fallback}"
             )
 
