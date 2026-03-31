@@ -1,11 +1,11 @@
 <launch>
-  <!-- Argumentos repassáveis (opcional) -->
   <arg name="node_name" default="chris_planner_node" />
   <arg name="planning_method" default="astar" />
+  <arg name="planner_script" default="chris_planner_node.py" />
 
-  <!-- Sobe o planner -->
   <include file="$(find chris_planner)/launch/chris_planner.launch">
     <arg name="node_name" value="$(arg node_name)" />
     <arg name="planning_method" value="$(arg planning_method)" />
+    <arg name="planner_script" value="$(arg planner_script)" />
   </include>
 </launch>
