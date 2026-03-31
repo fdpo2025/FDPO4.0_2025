@@ -94,6 +94,17 @@ class MultiPlannerNode:
         self.reserved_nodes = {}
         self.reserved_goals = {}
 
+        # Regra para entregas intermitentes no armazém de saída
+        self.output_nodes = {35, 36, 37, 38}
+        self.output_pair_map = {
+            35: 37,
+            37: 35,
+            36: 38,
+            38: 36
+        }
+        self.output_drop_plan_count = 0
+        self.required_second_output_node = None
+
         self.pub_r1 = rospy.Publisher("/robot1_planned_paths", Int32MultiArray, queue_size=10)
         self.pub_r2 = rospy.Publisher("/robot2_planned_paths", Int32MultiArray, queue_size=10)
 
@@ -116,6 +127,9 @@ class MultiPlannerNode:
 
         self.reserved_nodes = {}
         self.reserved_goals = {}
+
+        self.output_drop_plan_count = 0
+        self.required_second_output_node = None
 
         for robot_id in self.robots:
             self.robots[robot_id]["node"] = 31
@@ -167,6 +181,11 @@ class MultiPlannerNode:
             if n not in self.reserved_goals
             and n not in unavailable_pickups
         ]
+
+        # Se estiver a fazer dropoff, aplicar regra especial do armazém de saída
+        if r["box"] != factory_module.EMPTY:
+            valid_nodes = self.apply_output_warehouse_rule(valid_nodes)
+
         rospy.loginfo(f"[{robot_id}] valid_nodes after filter = {valid_nodes}")
 
         if not valid_nodes:
@@ -244,6 +263,34 @@ class MultiPlannerNode:
                 rospy.logwarn(f"[{robot_id}] Failed to reserve box at node {best_goal}")
                 r["waiting_replan"] = True
                 return False
+
+        # Regra especial para as 2 primeiras entregas no armazém de saída
+        if task_type == "dropoff" and best_goal in self.output_nodes:
+            if self.output_drop_plan_count == 0:
+                self.required_second_output_node = self.output_pair_map[best_goal]
+                self.output_drop_plan_count = 1
+
+                rospy.logwarn(
+                    f"[OUTPUT_RULE] primeira entrega no armazém de saída reservada em {best_goal}. "
+                    f"A segunda terá de ir para {self.required_second_output_node}"
+                )
+
+            elif self.output_drop_plan_count == 1:
+                if best_goal != self.required_second_output_node:
+                    rospy.logerr(
+                        f"[OUTPUT_RULE] violação da regra: segunda entrega deveria ir para "
+                        f"{self.required_second_output_node}, mas foi escolhida {best_goal}"
+                    )
+                    r["waiting_replan"] = True
+                    return False
+
+                rospy.logwarn(
+                    f"[OUTPUT_RULE] segunda entrega no armazém de saída reservada em {best_goal}. "
+                    f"Depois disto, os destinos voltam a ser livres."
+                )
+
+                self.output_drop_plan_count = 2
+                self.required_second_output_node = None
 
         full_path = self.extend_path_with_previous_node(best_path)
         compact_path = self.extend_path_with_previous_node(
@@ -594,6 +641,37 @@ class MultiPlannerNode:
                 )
 
         return blocked
+
+    # -----------------------------------------------------
+
+    def apply_output_warehouse_rule(self, valid_nodes):
+        output_candidates = [n for n in valid_nodes if n in self.output_nodes]
+
+        # se não há destinos no armazém de saída, não há nada a fazer
+        if not output_candidates:
+            return valid_nodes
+
+        # primeira entrega para o armazém de saída: livre
+        if self.output_drop_plan_count == 0:
+            rospy.loginfo(
+                f"[OUTPUT_RULE] primeira entrega no armazém de saída ainda não definida. "
+                f"Candidatos atuais: {output_candidates}"
+            )
+            return valid_nodes
+
+        # segunda entrega para o armazém de saída: obrigatória no par correspondente
+        if self.output_drop_plan_count == 1:
+            required = self.required_second_output_node
+            filtered = [n for n in valid_nodes if n == required]
+
+            rospy.loginfo(
+                f"[OUTPUT_RULE] segunda entrega no armazém de saída deve ir para {required}. "
+                f"valid_nodes antes={valid_nodes}, depois={filtered}"
+            )
+            return filtered
+
+        # a partir da terceira entrega: livre
+        return valid_nodes
 
     # -----------------------------------------------------
 
