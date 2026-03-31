@@ -105,6 +105,9 @@ class MultiPlannerNode:
         self.output_drop_plan_count = 0
         self.required_second_output_node = None
 
+        # Conta quantos pickups já foram planeados desde o início da sequência
+        self.pickup_plan_count = 0
+
         self.pub_r1 = rospy.Publisher("/robot1_planned_paths", Int32MultiArray, queue_size=10)
         self.pub_r2 = rospy.Publisher("/robot2_planned_paths", Int32MultiArray, queue_size=10)
 
@@ -130,6 +133,7 @@ class MultiPlannerNode:
 
         self.output_drop_plan_count = 0
         self.required_second_output_node = None
+        self.pickup_plan_count = 0
 
         for robot_id in self.robots:
             self.robots[robot_id]["node"] = 31
@@ -205,45 +209,64 @@ class MultiPlannerNode:
         extra_blocked = self.get_extra_blocked_nodes(robot_id)
         blocked_nodes = reserved_by_other | extra_blocked
 
-        for node in valid_nodes:
-            if r["box"] == factory_module.EMPTY:
-                # Restrição extra para vermelhas (TYPE_A -> máquina A)
-                if not self.can_pickup_box_for_machine(
-                    robot_id=robot_id,
-                    pickup_node=node,
-                    source_box_type=factory_module.TYPE_A,
-                    machine_inputs=self.factory.machineA_inputs,
-                    machine_outputs=self.factory.machineA_outputs,
-                    label="red"
-                ):
-                    rospy.loginfo(f"[{robot_id}] pickup at node {node} blocked by red machine capacity")
+        if r["box"] == factory_module.EMPTY:
+            candidate_groups = self.split_pickup_candidates_by_priority(robot_id, valid_nodes)
+        else:
+            candidate_groups = [valid_nodes]
+
+        rospy.loginfo(f"[{robot_id}] candidate_groups = {candidate_groups}")
+
+        for candidate_nodes in candidate_groups:
+            local_best_path = None
+            local_best_goal = None
+            local_best_cost = float("inf")
+
+            for node in candidate_nodes:
+                if r["box"] == factory_module.EMPTY:
+                    # Restrição extra para vermelhas (TYPE_A -> máquina A)
+                    if not self.can_pickup_box_for_machine(
+                        robot_id=robot_id,
+                        pickup_node=node,
+                        source_box_type=factory_module.TYPE_A,
+                        machine_inputs=self.factory.machineA_inputs,
+                        machine_outputs=self.factory.machineA_outputs,
+                        label="red"
+                    ):
+                        rospy.loginfo(f"[{robot_id}] pickup at node {node} blocked by red machine capacity")
+                        continue
+
+                    # Restrição extra para verdes (TYPE_B -> máquina B)
+                    if not self.can_pickup_box_for_machine(
+                        robot_id=robot_id,
+                        pickup_node=node,
+                        source_box_type=factory_module.TYPE_B,
+                        machine_inputs=self.factory.machineB_inputs,
+                        machine_outputs=self.factory.machineB_outputs,
+                        label="green"
+                    ):
+                        rospy.loginfo(f"[{robot_id}] pickup at node {node} blocked by green machine capacity")
+                        continue
+
+                path = self.shortest_path_avoiding(robot_node, node, blocked_nodes)
+
+                rospy.loginfo(f"[{robot_id}] candidate goal={node}, avoided path={path}")
+
+                if not path:
                     continue
 
-                # Restrição extra para verdes (TYPE_B -> máquina B)
-                if not self.can_pickup_box_for_machine(
-                    robot_id=robot_id,
-                    pickup_node=node,
-                    source_box_type=factory_module.TYPE_B,
-                    machine_inputs=self.factory.machineB_inputs,
-                    machine_outputs=self.factory.machineB_outputs,
-                    label="green"
-                ):
-                    rospy.loginfo(f"[{robot_id}] pickup at node {node} blocked by green machine capacity")
-                    continue
+                cost = self.path_cost(path)
 
-            path = self.shortest_path_avoiding(robot_node, node, blocked_nodes)
+                if cost < local_best_cost:
+                    local_best_cost = cost
+                    local_best_path = path
+                    local_best_goal = node
 
-            rospy.loginfo(f"[{robot_id}] candidate goal={node}, avoided path={path}")
-
-            if not path:
-                continue
-
-            cost = self.path_cost(path)
-
-            if cost < best_cost:
-                best_cost = cost
-                best_path = path
-                best_goal = node
+            # Se encontrou solução neste grupo prioritário, para aqui
+            if local_best_path is not None:
+                best_path = local_best_path
+                best_goal = local_best_goal
+                best_cost = local_best_cost
+                break
 
         rospy.loginfo(f"[{robot_id}] best_path={best_path}, best_goal={best_goal}")
 
@@ -263,6 +286,9 @@ class MultiPlannerNode:
                 rospy.logwarn(f"[{robot_id}] Failed to reserve box at node {best_goal}")
                 r["waiting_replan"] = True
                 return False
+
+            self.pickup_plan_count += 1
+            rospy.loginfo(f"[{robot_id}] pickup_plan_count = {self.pickup_plan_count}")
 
         # Regra especial para as 2 primeiras entregas no armazém de saída
         if task_type == "dropoff" and best_goal in self.output_nodes:
@@ -730,6 +756,8 @@ class MultiPlannerNode:
 
         return released_any
     
+    # -----------------------------------------------------
+
     def get_unavailable_pickup_nodes(self, robot_id):
         blocked = set()
 
@@ -750,7 +778,125 @@ class MultiPlannerNode:
                 blocked.add(other["reserved_pickup_node"])
 
         return blocked
+
+    # -----------------------------------------------------
+
+    def get_box_type_at_node(self, node):
+        if node not in self.factory.index_of:
+            return None
+
+        idx = self.factory.index_of[node]
+        return self.boxes[idx]
+
+    # -----------------------------------------------------
+
+    def get_robot_active_task_box_type(self, robot_id):
+        r = self.robots[robot_id]
+
+        # Se já vai a transportar uma caixa, essa é a cor da tarefa ativa
+        if r["box"] != factory_module.EMPTY:
+            return r["box"]
+
+        # Se ainda vai buscar a caixa mas já reservou pickup, usar a cor dessa caixa
+        if r["reserved_pickup_node"] is not None:
+            return self.get_box_type_at_node(r["reserved_pickup_node"])
+
+        return None
+
+    # -----------------------------------------------------
+
+    def get_pickup_priority_mode(self, robot_id):
+        """
+        Devolve:
+          - "prefer_green"
+          - "prefer_non_green"
+          - None
+        """
+
+        other_robot = "r2" if robot_id == "r1" else "r1"
+        other_color = self.get_robot_active_task_box_type(other_robot)
+
+        # Regra especial da 2ª tarefa de pickup da partida
+        if self.pickup_plan_count == 1 and other_color is not None:
+            if other_color == factory_module.TYPE_B:
+                rospy.loginfo(
+                    f"[{robot_id}] second pickup priority: first task is GREEN, "
+                    f"so prioritizing NON-GREEN"
+                )
+                return "prefer_non_green"
+            else:
+                rospy.loginfo(
+                    f"[{robot_id}] second pickup priority: first task is NON-GREEN, "
+                    f"so prioritizing GREEN"
+                )
+                return "prefer_green"
+
+        # Regra geral: evitar dois verdes ao mesmo tempo
+        if other_color == factory_module.TYPE_B:
+            rospy.loginfo(
+                f"[{robot_id}] other robot already has GREEN task active, "
+                f"so prioritizing NON-GREEN"
+            )
+            return "prefer_non_green"
+
+        return None
+
+    # -----------------------------------------------------
+
+    def split_pickup_candidates_by_priority(self, robot_id, valid_nodes):
+        """
+        Devolve uma lista de grupos de candidatos por ordem de prioridade.
+        Exemplo:
+          [preferred_nodes, fallback_nodes]
+        ou apenas:
+          [valid_nodes]
+        """
+
+        mode = self.get_pickup_priority_mode(robot_id)
+
+        green_nodes = []
+        non_green_nodes = []
+        unknown_nodes = []
+
+        for node in valid_nodes:
+            box_type = self.get_box_type_at_node(node)
+
+            if box_type == factory_module.TYPE_B:
+                green_nodes.append(node)
+            elif box_type in (factory_module.TYPE_A, factory_module.TYPE_C):
+                non_green_nodes.append(node)
+            else:
+                unknown_nodes.append(node)
+
+        if mode == "prefer_green":
+            preferred = green_nodes
+            fallback = non_green_nodes + unknown_nodes
+
+            rospy.loginfo(
+                f"[{robot_id}] pickup priority prefer_green: "
+                f"preferred={preferred}, fallback={fallback}"
+            )
+
+            if preferred:
+                return [preferred, fallback] if fallback else [preferred]
+            return [valid_nodes]
+
+        if mode == "prefer_non_green":
+            preferred = non_green_nodes + unknown_nodes
+            fallback = green_nodes
+
+            rospy.loginfo(
+                f"[{robot_id}] pickup priority prefer_non_green: "
+                f"preferred={preferred}, fallback={fallback}"
+            )
+
+            if preferred:
+                return [preferred, fallback] if fallback else [preferred]
+            return [valid_nodes]
+
+        return [valid_nodes]
         
+    # -----------------------------------------------------
     
     def can_pickup_box_for_machine(self, robot_id, pickup_node, source_box_type, machine_inputs, machine_outputs, label):
         if pickup_node not in self.factory.index_of:
