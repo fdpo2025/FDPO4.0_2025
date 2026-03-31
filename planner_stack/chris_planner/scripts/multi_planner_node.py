@@ -95,21 +95,7 @@ class MultiPlannerNode:
         self.reserved_goals = {}
 
         # Regra para entregas intermitentes no armazém de saída
-        self.output_nodes = {35, 36, 37, 38}
-        self.output_pair_map = {
-            35: 37,
-            37: 35,
-            36: 38,
-            38: 36
-        }
-        self.output_adjacent_block_map = {
-            35: {36},
-            36: {35, 37},
-            37: {36, 38},
-            38: {37}
-        }
-        self.output_drop_plan_count = 0
-        self.required_second_output_node = None
+        self.output_nodes = {35, 36, 37, 38}        
 
         # Conta quantos pickups já foram planeados desde o início da sequência
         self.pickup_plan_count = 0
@@ -317,35 +303,6 @@ class MultiPlannerNode:
 
             self.pickup_plan_count += 1
             rospy.loginfo(f"[{robot_id}] pickup_plan_count = {self.pickup_plan_count}")
-
-        # Regra especial para as 2 primeiras entregas no armazém de saída
-        if task_type == "dropoff" and best_goal in self.output_nodes:
-            if self.output_drop_plan_count == 0:
-                self.required_second_output_node = self.output_pair_map[best_goal]
-                self.output_drop_plan_count = 1
-
-                rospy.logwarn(
-                    f"[OUTPUT_RULE] primeira entrega no armazém de saída reservada em {best_goal}. "
-                    f"A segunda terá de ir para {self.required_second_output_node}"
-                )
-
-            elif self.output_drop_plan_count == 1:
-                if best_goal != self.required_second_output_node:
-                    rospy.logerr(
-                        f"[OUTPUT_RULE] violação da regra: segunda entrega deveria ir para "
-                        f"{self.required_second_output_node}, mas foi escolhida {best_goal}"
-                    )
-                    r["waiting_replan"] = True
-                    self.publish_state_snapshot(robot_id, "planning failed - output rule", state)
-                    return False
-
-                rospy.logwarn(
-                    f"[OUTPUT_RULE] segunda entrega no armazém de saída reservada em {best_goal}. "
-                    f"Depois disto, os destinos voltam a ser livres."
-                )
-
-                self.output_drop_plan_count = 2
-                self.required_second_output_node = None
 
         full_path = self.extend_path_with_previous_node(best_path)
         compact_path = self.extend_path_with_previous_node(
@@ -679,7 +636,7 @@ class MultiPlannerNode:
         if 12 in reserved_by_other or 26 in reserved_by_other:
             blocked.add(19)
 
-        # Regra:
+        # Nova regra:
         # se o outro robô tiver no path os nós 11 e 27 consecutivos
         # (em qualquer ordem), bloquear o 19 enquanto ambos ainda estiverem reservados
         other_robot = "r2" if robot_id == "r1" else "r1"
@@ -707,11 +664,6 @@ class MultiPlannerNode:
                     f"has active transition 11<->27 and both nodes are still reserved"
                 )
 
-        # NOVA REGRA:
-        # se o outro robô estiver a fazer dropoff de uma azul no armazém de saída,
-        # bloquear os nós laterais desse destino
-        blocked |= self.get_blue_dropoff_side_blocks(robot_id)
-
         return blocked
 
     # -----------------------------------------------------
@@ -723,26 +675,47 @@ class MultiPlannerNode:
         if not output_candidates:
             return valid_nodes
 
-        # primeira entrega para o armazém de saída: livre
-        if self.output_drop_plan_count == 0:
-            rospy.loginfo(
-                f"[OUTPUT_RULE] primeira entrega no armazém de saída ainda não definida. "
-                f"Candidatos atuais: {output_candidates}"
-            )
-            return valid_nodes
+        # 1) verificar se já existe alguma caixa fisicamente colocada no output
+        output_has_box = False
+        for node in self.output_nodes:
+            idx = self.factory.index_of[node]
+            if self.boxes[idx] != factory_module.EMPTY:
+                output_has_box = True
+                break
 
-        # segunda entrega para o armazém de saída: obrigatória no par correspondente
-        if self.output_drop_plan_count == 1:
-            required = self.required_second_output_node
-            filtered = [n for n in valid_nodes if n == required]
+        # 2) verificar se já existe algum robô com dropoff planeado para o output
+        output_has_reserved_dropoff = False
+        for other_id, other in self.robots.items():
+            if (
+                other["goal"] is not None
+                and other["task_type"] == "dropoff"
+                and other["goal"] in self.output_nodes
+            ):
+                output_has_reserved_dropoff = True
+                break
+
+        # enquanto não houver caixa colocada nem dropoff já planeado,
+        # só permitir 36 e 37
+        if not output_has_box and not output_has_reserved_dropoff:
+            filtered = [
+                n for n in valid_nodes
+                if n not in self.output_nodes or n in {36, 37}
+            ]
 
             rospy.loginfo(
-                f"[OUTPUT_RULE] segunda entrega no armazém de saída deve ir para {required}. "
-                f"valid_nodes antes={valid_nodes}, depois={filtered}"
+                f"[OUTPUT_RULE] output vazio e sem dropoff reservado. "
+                f"valid_nodes before={valid_nodes}, after={filtered}"
             )
             return filtered
 
-        # a partir da terceira entrega: livre
+        # a partir do momento em que já exista uma caixa no output
+        # ou já exista um robô a caminho de um nó do output,
+        # todos os nós do output ficam disponíveis
+        rospy.loginfo(
+            f"[OUTPUT_RULE] output já ativo "
+            f"(has_box={output_has_box}, has_reserved_dropoff={output_has_reserved_dropoff}). "
+            f"Todos os nós de saída disponíveis."
+        )
         return valid_nodes
 
     # -----------------------------------------------------
@@ -1001,28 +974,6 @@ class MultiPlannerNode:
         )
 
         return available_lines > same_type_in_transit
-    
-    def get_blue_dropoff_side_blocks(self, robot_id):
-        blocked = set()
-
-        other_robot = "r2" if robot_id == "r1" else "r1"
-        other = self.robots[other_robot]
-
-        # Só bloquear se o outro robô estiver a fazer dropoff de uma azul
-        if (
-            other["busy"]
-            and other["task_type"] == "dropoff"
-            and other["box"] == factory_module.TYPE_C
-            and other["goal"] in self.output_nodes
-        ):
-            blocked |= self.output_adjacent_block_map.get(other["goal"], set())
-
-            rospy.loginfo(
-                f"[{robot_id}] blocking side nodes {sorted(blocked)} "
-                f"because {other_robot} is dropping BLUE at output node {other['goal']}"
-            )
-
-        return blocked
 
 
 if __name__ == "__main__":
