@@ -102,6 +102,12 @@ class MultiPlannerNode:
             36: 38,
             38: 36
         }
+        self.output_adjacent_block_map = {
+            35: {36},
+            36: {35, 37},
+            37: {36, 38},
+            38: {37}
+        }
         self.output_drop_plan_count = 0
         self.required_second_output_node = None
 
@@ -673,7 +679,7 @@ class MultiPlannerNode:
         if 12 in reserved_by_other or 26 in reserved_by_other:
             blocked.add(19)
 
-        # Nova regra:
+        # Regra:
         # se o outro robô tiver no path os nós 11 e 27 consecutivos
         # (em qualquer ordem), bloquear o 19 enquanto ambos ainda estiverem reservados
         other_robot = "r2" if robot_id == "r1" else "r1"
@@ -700,6 +706,11 @@ class MultiPlannerNode:
                     f"[{robot_id}] blocking node 19 because {other_robot} "
                     f"has active transition 11<->27 and both nodes are still reserved"
                 )
+
+        # NOVA REGRA:
+        # se o outro robô estiver a fazer dropoff de uma azul no armazém de saída,
+        # bloquear os nós laterais desse destino
+        blocked |= self.get_blue_dropoff_side_blocks(robot_id)
 
         return blocked
 
@@ -990,6 +1001,28 @@ class MultiPlannerNode:
         )
 
         return available_lines > same_type_in_transit
+    
+    def get_blue_dropoff_side_blocks(self, robot_id):
+        blocked = set()
+
+        other_robot = "r2" if robot_id == "r1" else "r1"
+        other = self.robots[other_robot]
+
+        # Só bloquear se o outro robô estiver a fazer dropoff de uma azul
+        if (
+            other["busy"]
+            and other["task_type"] == "dropoff"
+            and other["box"] == factory_module.TYPE_C
+            and other["goal"] in self.output_nodes
+        ):
+            blocked |= self.output_adjacent_block_map.get(other["goal"], set())
+
+            rospy.loginfo(
+                f"[{robot_id}] blocking side nodes {sorted(blocked)} "
+                f"because {other_robot} is dropping BLUE at output node {other['goal']}"
+            )
+
+        return blocked
 
 
 if __name__ == "__main__":
