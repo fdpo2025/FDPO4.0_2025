@@ -170,6 +170,11 @@ void NavigationController::loadNavigationParams() {
     nh_fl.param("max_etf", param.max_etf, 0.2);
     nh_fl.param("tol_init_line", param.tol_init_line, 0.1);
     nh_fl.param("line_switch_ratio", param.line_switch_ratio, 0.9);
+    nh_fl.param("use_stanley_follow_line", param.use_stanley_follow_line, false);
+    nh_fl.param("use_stanley_approaching", param.use_stanley_approaching, false);
+    nh_fl.param("stanley_k", param.stanley_k, 1.0);
+    nh_fl.param("stanley_soft_v", param.stanley_soft_v, 0.05);
+    nh_fl.param("stanley_eps", param.stanley_eps, 0.0);
     nh_fl.param("approaching_line_progress", param.approaching_line_progress, 0.50);
     nh_fl.param("k_approaching", param.k_approaching, 10.0);
     nh_fl.param("gain_approaching_fwd", param.gain_approaching_fwd, 2.0);
@@ -774,7 +779,12 @@ void NavigationController::followLine() {
 
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
 
-        w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
+        if (param.use_stanley_follow_line) {
+            double v_den = std::max(std::abs(vel_lin_nom_eff), param.stanley_soft_v) + param.stanley_eps;
+            w_d = error_ang + std::atan2(param.stanley_k * k1_eff, v_den);
+        } else {
+            w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
+        }
 
         double A = -vel_lin_nom_eff/(param.w_nom*param.w_nom);
         v_d = std::max(A * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
@@ -786,19 +796,32 @@ void NavigationController::followLine() {
 
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-        w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
-
         double denom = 1.0 - approaching_start_progress_;
         double progress_ramp = (denom > 0.01) ? (line_progress - approaching_start_progress_) / denom : 1.0;
         progress_ramp = std::max(0.0, std::min(1.0, progress_ramp));
-        v_d = std::max(last_vel_before_approaching_ * (1.0 - progress_ramp), param.approaching_vel_normal);
+        double v_ref_approaching = std::max(last_vel_before_approaching_ * (1.0 - progress_ramp),
+                                              param.approaching_vel_normal);
+
+        if (param.use_stanley_approaching) {
+            double v_den = std::max(std::abs(v_ref_approaching), param.stanley_soft_v) + param.stanley_eps;
+            w_d = error_ang + std::atan2(param.k_approaching * k1_eff, v_den);
+        } else {
+            w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
+        }
+
+        v_d = v_ref_approaching;
 
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching_PickDrop) {
-        w_d = param.k_approaching_pickdrop * k1_eff + param.gain_approaching_fwd_pickdrop * error_ang;
+        if (param.use_stanley_approaching) {
+            double v_den = std::max(param.approaching_vel_pickdrop, param.stanley_soft_v) + param.stanley_eps;
+            w_d = error_ang + std::atan2(param.k_approaching_pickdrop * k1_eff, v_den);
+        } else {
+            w_d = param.k_approaching_pickdrop * k1_eff + param.gain_approaching_fwd_pickdrop * error_ang;
+        }
 
         double w_ratio = (param.w_nom > 1e-6) ? std::min(std::abs(w_d) / param.w_nom, 1.0) : 1.0;
         v_d = std::max(param.approaching_vel_pickdrop * (1.0 - w_ratio * w_ratio), 0.0);
@@ -808,7 +831,12 @@ void NavigationController::followLine() {
 
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching_process_PickDrop) {
-        w_d = param.k_approaching_process * k1_eff + param.gain_approaching_fwd_process * error_ang;
+        if (param.use_stanley_approaching) {
+            double v_den = std::max(param.approaching_vel_process, param.stanley_soft_v) + param.stanley_eps;
+            w_d = error_ang + std::atan2(param.k_approaching_process * k1_eff, v_den);
+        } else {
+            w_d = param.k_approaching_process * k1_eff + param.gain_approaching_fwd_process * error_ang;
+        }
 
         double w_ratio = (param.w_nom > 1e-6) ? std::min(std::abs(w_d) / param.w_nom, 1.0) : 1.0;
         v_d = std::max(param.approaching_vel_process * (1.0 - w_ratio * w_ratio), 0.0);

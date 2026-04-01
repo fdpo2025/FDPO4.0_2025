@@ -4,6 +4,13 @@
 #  /follow_line/plan_handler/...
 
 navigation_controller:
+  # Stanley: ω = ψ + atan2(k·e, max(|v_ref|, soft_v)+eps) — Follow_Line e/ou approaching (k por estado no approaching)
+  use_stanley_follow_line: true
+  use_stanley_approaching: true
+  stanley_k: 1.0
+  stanley_soft_v: 0.05
+  stanley_eps: 0.0
+
   k_line: 8.5
   gain_fwd: 1.3
   vel_lin_nom: 0.2

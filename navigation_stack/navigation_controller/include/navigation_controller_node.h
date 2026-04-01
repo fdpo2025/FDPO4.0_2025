@@ -105,6 +105,11 @@ class NavigationController {
             double max_etf;       // MAX_ETF
             double tol_init_line; // (m) tolerance to GoTo_Init -> Follow_Line
             double line_switch_ratio;  // Ratio of line to switch to next (0.9 = 90%)
+            bool use_stanley_follow_line;   // Follow_Line: ψ + atan2(k·e, max(|v|,soft_v)+eps)
+            bool use_stanley_approaching;  // Approaching / PickDrop / process: mesma lei com k por estado
+            double stanley_k;               // Ganho lateral em Follow_Line (atan2)
+            double stanley_soft_v;          // Chão de |v| antes de somar eps (m/s)
+            double stanley_eps;             // ε em atan2(k·e, max(|v_ref|,soft_v)+eps)
             double approaching_line_progress;  // Line progress threshold to enter Approaching state (0.60 = 60%)
             double approaching_vel_normal;     // Piso da rampa linear no estado Approaching (antes de warehouse)
             double k_approaching;              // Ganhos estado Approaching (normal)
