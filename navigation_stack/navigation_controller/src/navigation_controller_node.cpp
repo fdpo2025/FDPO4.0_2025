@@ -777,10 +777,18 @@ void NavigationController::followLine() {
         completion_feedback_sent = false;
     }
 
+    auto stanleyDenomFromQuadraticW = [&](double v_nom_line, double w_probe) -> double {
+        double Aq = -v_nom_line / (param.w_nom * param.w_nom);
+        double v_quad = std::max(Aq * (w_probe - param.w_nom) * (w_probe + param.w_nom), 0.0);
+        return std::max(v_quad, param.stanley_soft_v) + param.stanley_eps;
+    };
+
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
 
         if (param.use_stanley_follow_line) {
-            double v_den = std::max(std::abs(vel_lin_nom_eff), param.stanley_soft_v) + param.stanley_eps;
+            double v_nom_lin = std::max(std::abs(vel_lin_nom_eff), param.stanley_soft_v) + param.stanley_eps;
+            double w_coarse = error_ang + std::atan2(param.stanley_k * k1_eff, v_nom_lin);
+            double v_den = stanleyDenomFromQuadraticW(vel_lin_nom_eff, w_coarse);
             w_d = error_ang + std::atan2(param.stanley_k * k1_eff, v_den);
         } else {
             w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
@@ -803,7 +811,9 @@ void NavigationController::followLine() {
                                               param.approaching_vel_normal);
 
         if (param.use_stanley_approaching) {
-            double v_den = std::max(std::abs(v_ref_approaching), param.stanley_soft_v) + param.stanley_eps;
+            double v_nom_lin = std::max(std::abs(v_ref_approaching), param.stanley_soft_v) + param.stanley_eps;
+            double w_coarse = error_ang + std::atan2(param.k_approaching * k1_eff, v_nom_lin);
+            double v_den = stanleyDenomFromQuadraticW(v_ref_approaching, w_coarse);
             w_d = error_ang + std::atan2(param.k_approaching * k1_eff, v_den);
         } else {
             w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
@@ -817,7 +827,11 @@ void NavigationController::followLine() {
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching_PickDrop) {
         if (param.use_stanley_approaching) {
-            double v_den = std::max(param.approaching_vel_pickdrop, param.stanley_soft_v) + param.stanley_eps;
+            double v_nom_lin = std::max(param.approaching_vel_pickdrop, param.stanley_soft_v) + param.stanley_eps;
+            double w_coarse = error_ang + std::atan2(param.k_approaching_pickdrop * k1_eff, v_nom_lin);
+            double w_ratio_c = (param.w_nom > 1e-6) ? std::min(std::abs(w_coarse) / param.w_nom, 1.0) : 1.0;
+            double v_quad = std::max(param.approaching_vel_pickdrop * (1.0 - w_ratio_c * w_ratio_c), 0.0);
+            double v_den = std::max(v_quad, param.stanley_soft_v) + param.stanley_eps;
             w_d = error_ang + std::atan2(param.k_approaching_pickdrop * k1_eff, v_den);
         } else {
             w_d = param.k_approaching_pickdrop * k1_eff + param.gain_approaching_fwd_pickdrop * error_ang;
@@ -832,7 +846,11 @@ void NavigationController::followLine() {
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching_process_PickDrop) {
         if (param.use_stanley_approaching) {
-            double v_den = std::max(param.approaching_vel_process, param.stanley_soft_v) + param.stanley_eps;
+            double v_nom_lin = std::max(param.approaching_vel_process, param.stanley_soft_v) + param.stanley_eps;
+            double w_coarse = error_ang + std::atan2(param.k_approaching_process * k1_eff, v_nom_lin);
+            double w_ratio_c = (param.w_nom > 1e-6) ? std::min(std::abs(w_coarse) / param.w_nom, 1.0) : 1.0;
+            double v_quad = std::max(param.approaching_vel_process * (1.0 - w_ratio_c * w_ratio_c), 0.0);
+            double v_den = std::max(v_quad, param.stanley_soft_v) + param.stanley_eps;
             w_d = error_ang + std::atan2(param.k_approaching_process * k1_eff, v_den);
         } else {
             w_d = param.k_approaching_process * k1_eff + param.gain_approaching_fwd_process * error_ang;
