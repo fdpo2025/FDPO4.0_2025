@@ -1,5 +1,8 @@
 <launch>
 
+  <!-- Follow line: parâmetros partilhados (navigation_controller + plan_handler) -->
+  <rosparam file="$(find conf)/launch/navigation/navigation_controller/follow_line_parameters.yaml" command="load" ns="/follow_line"/>
+
   <arg name="lidar_driver" default="ydlidar" doc="Tipo de driver LiDAR: 'hlds' ou 'ydlidar'"/>
   <arg name="use_ekf" default="true" doc="Usar EKF localizer (se false, map=odom)"/>
   <arg name="use_beacon_detector" default="true" doc="Usar beacon detector (desativado em modo perfect_localization)"/>

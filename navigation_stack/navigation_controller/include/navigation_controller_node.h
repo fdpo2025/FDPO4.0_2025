@@ -47,6 +47,7 @@ struct WayPoint {
     double vel_lin_nom;        // Velocidade linear nominal para esta linha, -1 = usar global
     bool pick_box;             // Se é warehouse de pick (true) ou drop (false)
     bool is_warehouse;          // Se o ponto final é uma warehouse
+    bool is_process_warehouse;  // Warehouse de process (segmento final antes de pick/drop process)
     int node_id;
 };
 
@@ -105,10 +106,16 @@ class NavigationController {
             double tol_init_line; // (m) tolerance to GoTo_Init -> Follow_Line
             double line_switch_ratio;  // Ratio of line to switch to next (0.9 = 90%)
             double approaching_line_progress;  // Line progress threshold to enter Approaching state (0.60 = 60%)
-            double approaching_vel;            // Constant velocity in Approaching state (m/s)
-            double k_approaching;              // Gain for angular control in Approaching state
-            double gain_approaching_fwd;         // Forward gain for control in Approaching state
+            double approaching_vel_normal;     // Piso da rampa linear no estado Approaching (antes de warehouse)
+            double k_approaching;              // Ganhos estado Approaching (normal)
+            double gain_approaching_fwd;
+            double k_approaching_pickdrop;     // Ganhos estado Approaching_PickDrop
+            double gain_approaching_fwd_pickdrop;
+            double approaching_vel_pickdrop;   // Vel. ref. na lei quadrática em |w_d| (PickDrop)
             double approaching_colinear_angle_rad;  // Se |Δθ| entre linha atual e pf→warehouse < isto, não entra em Approaching
+            double k_approaching_process;
+            double gain_approaching_fwd_process;
+            double approaching_vel_process;
 
         };
 
@@ -217,7 +224,8 @@ namespace navigation {
         enum {
             Follow_Line = 0,
             Approaching,        // Linhas normais: v proporcional a error_dist
-            Approaching_PickDrop  // Pick/drop (warehouse): v cúbica em w_d
+            Approaching_PickDrop,  // Pick/drop (warehouse não-process): v quadrática em |w_d|/w_nom
+            Approaching_process_PickDrop  // Pick/drop warehouse process: mesma lei, parâmetros dedicados
         };
     }
 

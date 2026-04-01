@@ -5,7 +5,21 @@
 PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
 {
     nh.param("planned_paths_topic", planned_paths_topic, std::string("/planned_paths"));
-    nh.param("queue_size", queue_size, 100); 
+    nh.param("queue_size", queue_size, 100);
+
+    ros::NodeHandle nh_fl("follow_line/plan_handler");
+    nh_fl.param("vel_lin_nom_warehouse_process", fl_.vel_lin_nom_warehouse_process, 0.025);
+    nh_fl.param("vel_lin_nom_warehouse_other", fl_.vel_lin_nom_warehouse_other, 0.06);
+    nh_fl.param("line_switch_before_pick", fl_.line_switch_before_pick, 0.95);
+    nh_fl.param("line_switch_plan_stack_before_pick", fl_.line_switch_plan_stack_before_pick, 1.0);
+    nh_fl.param("line_switch_drop_process", fl_.line_switch_drop_process, 0.95);
+    nh_fl.param("line_switch_drop_other", fl_.line_switch_drop_other, 0.60);
+    nh_fl.param("line_switch_after_warehouse_process", fl_.line_switch_after_warehouse_process, 1.0);
+    nh_fl.param("line_switch_after_warehouse", fl_.line_switch_after_warehouse, 0.7);
+    nh_fl.param("line_switch_normal", fl_.line_switch_normal, 0.75);
+    nh_fl.param("vel_lin_nom_after_warehouse", fl_.vel_lin_nom_after_warehouse, 0.1);
+    nh_fl.param("vel_lin_nom_normal", fl_.vel_lin_nom_normal, -1.0);
+    ROS_INFO("PlanHandlerNode: follow_line params from /follow_line/plan_handler (follow_line_parameters.yaml)");
 
     // Inicializar vetores
     factory_coordinates.resize(39);
@@ -149,11 +163,12 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
         if(is_current_warehouse) {
             point.is_warehouse = true;
+            point.is_process_warehouse = is_process_warehouse[value];
             was_last_warehouse_process = is_process_warehouse[value];
             point.line_switch_ratio = 1.0;
             point.backwards = false;
-            // Velocidade nominal: 0.03 m/s para warehouses de process, 0.05 m/s para outras
-            point.vel_lin_nom = is_process_warehouse[value] ? 0.025 : 0.06;
+            point.vel_lin_nom = is_process_warehouse[value] ? fl_.vel_lin_nom_warehouse_process
+                                                                 : fl_.vel_lin_nom_warehouse_other;
 
             // Se é o primeiro nó do caminho E é uma warehouse, NÃO fazer toggle do has_box
             // (o robô já está nessa posição, é apenas o ponto de partida)
@@ -189,18 +204,15 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             // (para completar 100% da linha antes de chegar à warehouse de pick)
             if (point.pick_box) {
                 if (!control_points.empty()) {
-                    control_points.back().line_switch_ratio = 0.95;
-                    ROS_INFO("PlanHandlerNode: Set line_switch_ratio=1.0 for previous point (before pick warehouse)");
+                    control_points.back().line_switch_ratio = fl_.line_switch_before_pick;
+                    ROS_INFO("PlanHandlerNode: Set line_switch_ratio for previous point (before pick warehouse)");
                 }
-                // Também atualizar no plan_stack se não estiver vazio
                 if (!plan_stack.empty()) {
-                    plan_stack.back().line_switch_ratio = 1.0;
+                    plan_stack.back().line_switch_ratio = fl_.line_switch_plan_stack_before_pick;
                 }
             } else {
-                // Se é warehouse de drop (pick_box = false)
-                // Para warehouses de process: usar line_switch_ratio = 0.95
-                // Para outras warehouses: usar line_switch_ratio = 0.60
-                double drop_switch_ratio = is_process_warehouse[value] ? 0.95 : 0.60;
+                double drop_switch_ratio = is_process_warehouse[value] ? fl_.line_switch_drop_process
+                                                                          : fl_.line_switch_drop_other;
                 
                 if (!control_points.empty()) {
                     control_points.back().line_switch_ratio = drop_switch_ratio;
@@ -215,17 +227,20 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
         } else {
             point.is_warehouse = false;
+            point.is_process_warehouse = false;
 
             //point.line_switch_ratio = 0.8 * fe_warehouse_coordinate + 0.75 * !fe_warehouse_coordinate; // complete line if backwards
             
             if (fe_warehouse_coordinate) {
-                point.line_switch_ratio = was_last_warehouse_process ? 1.0 : 0.7;
+                point.line_switch_ratio = was_last_warehouse_process ? fl_.line_switch_after_warehouse_process
+                                                                        : fl_.line_switch_after_warehouse;
             } else {
-                point.line_switch_ratio = 0.75;
-            }            
+                point.line_switch_ratio = fl_.line_switch_normal;
+            }
 
-            point.backwards = fe_warehouse_coordinate;  // backwards ao sair de qualquer warehouse (pick ou drop)
-            point.vel_lin_nom = 0.1 * fe_warehouse_coordinate + 0.3 * !fe_warehouse_coordinate;
+            point.backwards = fe_warehouse_coordinate;
+            point.vel_lin_nom = fe_warehouse_coordinate ? fl_.vel_lin_nom_after_warehouse
+                                                         : fl_.vel_lin_nom_normal;
             point.should_pub = false;       
         }
 
@@ -262,6 +277,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             nav_plan.points[i].backwards = cp.backwards;
             nav_plan.points[i].pick_box = cp.pick_box;
             nav_plan.points[i].is_warehouse = cp.is_warehouse;
+            nav_plan.points[i].is_process_warehouse = cp.is_process_warehouse;
 
             // =========================
             // NODE_ID
