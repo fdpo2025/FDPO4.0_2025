@@ -5,8 +5,11 @@
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/Pose2D.h>
 #include <std_msgs/Float32.h>
+#include <std_msgs/Int32.h>
+#include <std_msgs/Int32MultiArray.h>
 #include <std_msgs/String.h>
 #include <nav_msgs/Odometry.h>
+#include <plan_handler/CompletionFeedback.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_broadcaster.h>
 #include <fcntl.h>
@@ -18,6 +21,7 @@
 #include <string>
 #include <sstream>
 #include <cstdio>
+#include <vector>
 
 struct Pose {
 
@@ -32,7 +36,12 @@ namespace Communication {
         struct ToPico {
 
             double v_d, w_d;
-            bool pick_box; 
+            bool pick_box;
+            int cp;
+            int final_node;
+            int status;
+            int wait_target;
+            std::string path_csv;
 
         };
 
@@ -86,8 +95,28 @@ class PiPicoDriver {
         ros::Subscriber pickBoxSub;
         void pickBoxCallBack(const std_msgs::Bool::ConstPtr& msg);  
 
+        ros::Subscriber plannedPathSub;
+        void plannedPathCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg);
+
+        ros::Subscriber navFeedbackSub;
+        void navFeedbackCallBack(const plan_handler::CompletionFeedback::ConstPtr& msg);
+        
+        ros::Subscriber radioWaitTargetSub;
+        void radioWaitTargetCallBack(const std_msgs::Int32::ConstPtr& msg);
+
         ros::Publisher posePub;
+        ros::Publisher robotIdPub;
+        ros::Publisher radioWaitReleasePub;
         void pubOdom();
+
+        int robot_id_ = -1;
+        bool wait_release_pending_ = false;
+        std::vector<int> active_path_nodes_;
+        size_t active_path_index_ = 0;
+        void updateMotionStatus();
+        std::string buildPathCsv(const std::vector<int>& path) const;
+        void tryReadBootIdentity();
+        bool decodeIdentityLine(const std::string& line, int& out_id) const;
 
         tf::TransformBroadcaster tf_broadcaster;
 

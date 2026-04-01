@@ -1,0 +1,6 @@
+<launch>
+  <arg name="node_name" default="hardcoded_intelligent_node" />
+  <include file="$(find hardcoded_intelligent)/launch/hardcoded_intelligent.launch">
+    <arg name="node_name" value="$(arg node_name)" />
+  </include>
+</launch>

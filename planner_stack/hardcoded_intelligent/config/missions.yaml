@@ -1,0 +1,9 @@
+missions:
+  robot_0:
+    targets:
+      - ["R", 15, 10, 22, "W", "MSG_1", 25, 60]
+      - [22, 14, 50, 65]
+  robot_1:
+    targets:
+      - ["G", 18]
+      - [18, "W", "MSG_0", 24]

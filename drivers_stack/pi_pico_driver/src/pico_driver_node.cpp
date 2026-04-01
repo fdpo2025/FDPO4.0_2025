@@ -1,4 +1,5 @@
 #include "pico_driver_node.h"
+#include <cmath>
 
 PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
 
@@ -6,6 +7,11 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   messageToSend.v_d = 0.0;
   messageToSend.w_d = 0.0;
   messageToSend.pick_box = false;
+  messageToSend.cp = 0;
+  messageToSend.final_node = 0;
+  messageToSend.status = 0;
+  messageToSend.wait_target = -2;
+  messageToSend.path_csv = "";
   
   messageToReceive.odom_pos.x = 0.0;
   messageToReceive.odom_pos.y = 0.0;
@@ -17,8 +23,13 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   // -> Subs
   velSub = nh.subscribe("/cmd_vel", 10, &PiPicoDriver::velCallBack, this);
   pickBoxSub = nh.subscribe("/pick_box", 10, &PiPicoDriver::pickBoxCallBack, this);
+  plannedPathSub = nh.subscribe("/planned_paths", 10, &PiPicoDriver::plannedPathCallBack, this);
+  navFeedbackSub = nh.subscribe("/nav_completion_feedback", 20, &PiPicoDriver::navFeedbackCallBack, this);
+  radioWaitTargetSub = nh.subscribe("/radio_wait_target", 10, &PiPicoDriver::radioWaitTargetCallBack, this);
   // -> Pubs
   posePub = nh.advertise<nav_msgs::Odometry>("/odom", 10);
+  robotIdPub = nh.advertise<std_msgs::Int32>("/robot_identity", 1, true);
+  radioWaitReleasePub = nh.advertise<std_msgs::Bool>("/radio_wait_release", 10);
   // -> Timer (100 Hz para evitar watchdog timeout no Pico)
   commTimer = nh.createTimer(ros::Duration(0.01), &PiPicoDriver::commTick, this);
 
@@ -32,6 +43,7 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   
   serial_fd_ = -1;
   startSerial(serial_port);
+  tryReadBootIdentity();
   
 }
 
@@ -92,6 +104,34 @@ void PiPicoDriver::pickBoxCallBack(const std_msgs::Bool::ConstPtr& msg) {
 
   messageToSend.pick_box = msg->data; 
   
+}
+
+void PiPicoDriver::plannedPathCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg) {
+  if (msg->data.empty()) {
+    return;
+  }
+
+  active_path_nodes_.assign(msg->data.begin(), msg->data.end());
+  active_path_index_ = 0;
+  messageToSend.cp = active_path_nodes_.front();
+  messageToSend.final_node = active_path_nodes_.back();
+  messageToSend.path_csv = buildPathCsv(active_path_nodes_);
+}
+
+void PiPicoDriver::navFeedbackCallBack(const plan_handler::CompletionFeedback::ConstPtr&) {
+  if (active_path_nodes_.empty()) {
+    return;
+  }
+
+  if (active_path_index_ + 1 < active_path_nodes_.size()) {
+    active_path_index_++;
+    messageToSend.cp = active_path_nodes_[active_path_index_];
+  }
+}
+
+void PiPicoDriver::radioWaitTargetCallBack(const std_msgs::Int32::ConstPtr& msg) {
+  messageToSend.wait_target = msg->data;
+  wait_release_pending_ = true;
 }
 
 void PiPicoDriver::pubOdom() {
@@ -171,6 +211,16 @@ std::string PiPicoDriver::syncCall(const std::string& cmd, int timeout_ms) {
 }
 
 void PiPicoDriver::decodeMsg(const std::string& msg) {
+  int parsed_id = -1;
+  if (decodeIdentityLine(msg, parsed_id)) {
+    robot_id_ = parsed_id;
+    std_msgs::Int32 id_msg;
+    id_msg.data = robot_id_;
+    robotIdPub.publish(id_msg);
+    ROS_INFO_THROTTLE(5.0, "[PiPicoDriver] Robot identity detected: %d", robot_id_);
+    return;
+  }
+
   // Procurar por "POS:" em qualquer posição da mensagem (não só no início)
   size_t pos_idx = msg.find("POS:");
   if (pos_idx != std::string::npos) {
@@ -180,17 +230,23 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
     double x=0, y=0, theta=0;
     double v=0.0, w=0.0;
 
+    int wait_release = 0;
     int n = std::sscanf(
       pos_part.c_str(),
-      "POS: %lf, %lf, %lf, V: %lf, W: %lf",
-      &x, &y, &theta, &v, &w
+      "POS: %lf, %lf, %lf, V: %lf, W: %lf, WAIT: %d",
+      &x, &y, &theta, &v, &w, &wait_release
     );
 
-    if (n == 5) {
+    if (n >= 5) {
       messageToReceive.odom_pos = {x, y, theta};
       messageToReceive.v_linear = v;
       messageToReceive.w_angular = w;
       pubOdom();
+      if (n == 6 && wait_release != 0) {
+        std_msgs::Bool wait_msg;
+        wait_msg.data = true;
+        radioWaitReleasePub.publish(wait_msg);
+      }
       return;
     }
 
@@ -209,11 +265,17 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
 }
 
 void PiPicoDriver::commTick(const ros::TimerEvent&) {
+  updateMotionStatus();
   
   // 1) Build the command
   std::string cmd = "CMD:" + std::to_string(messageToSend.v_d) + "," +
                              std::to_string(messageToSend.w_d) + "," +
-                                           (messageToSend.pick_box ? "1" : "0"); 
+                                           (messageToSend.pick_box ? "1" : "0") +
+                    " CP:" + std::to_string(messageToSend.cp) +
+                    " FINAL:" + std::to_string(messageToSend.final_node) +
+                    " STATUS:" + std::to_string(messageToSend.status) +
+                    " WAITTO:" + std::to_string(wait_release_pending_ ? messageToSend.wait_target : -2) +
+                    " PATH:" + messageToSend.path_csv;
 
   // 2) Send and Wait for response
   if (debug_comm_) {
@@ -238,5 +300,73 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
     return;
   }
   con_state.missed = 0; con_state.link_ok = true;
+  wait_release_pending_ = false;
+  messageToSend.wait_target = -2;
 
+}
+
+void PiPicoDriver::updateMotionStatus() {
+  const bool moving = (std::abs(messageToSend.v_d) > 1e-4) || (std::abs(messageToSend.w_d) > 1e-4);
+  messageToSend.status = moving ? 1 : 0;
+}
+
+std::string PiPicoDriver::buildPathCsv(const std::vector<int>& path) const {
+  std::ostringstream ss;
+  for (size_t i = 0; i < path.size(); ++i) {
+    if (i != 0) {
+      ss << ",";
+    }
+    ss << path[i];
+  }
+  return ss.str();
+}
+
+void PiPicoDriver::tryReadBootIdentity() {
+  if (serial_fd_ < 0) {
+    return;
+  }
+
+  ros::Time start = ros::Time::now();
+  ros::Duration timeout(2.0);
+  std::string response;
+  char buf[256];
+
+  while (ros::Time::now() - start < timeout) {
+    int n = read(serial_fd_, buf, sizeof(buf) - 1);
+    if (n <= 0) {
+      continue;
+    }
+
+    buf[n] = '\0';
+    response += std::string(buf);
+    size_t newline_pos = response.find('\n');
+    while (newline_pos != std::string::npos) {
+      std::string line = response.substr(0, newline_pos);
+      int id = -1;
+      if (decodeIdentityLine(line, id)) {
+        robot_id_ = id;
+        std_msgs::Int32 id_msg;
+        id_msg.data = robot_id_;
+        robotIdPub.publish(id_msg);
+        ROS_INFO("[PiPicoDriver] Handshake ID captured: %d", robot_id_);
+        return;
+      }
+      response.erase(0, newline_pos + 1);
+      newline_pos = response.find('\n');
+    }
+  }
+}
+
+bool PiPicoDriver::decodeIdentityLine(const std::string& line, int& out_id) const {
+  const std::string prefix = "ID:";
+  if (line.rfind(prefix, 0) != 0) {
+    return false;
+  }
+
+  try {
+    out_id = std::stoi(line.substr(prefix.size()));
+    return true;
+  } catch (...) {
+    return false;
+  }
 }

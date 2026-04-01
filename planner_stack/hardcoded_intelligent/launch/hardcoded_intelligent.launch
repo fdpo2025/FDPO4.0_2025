@@ -1,0 +1,8 @@
+<launch>
+  <arg name="node_name" default="hardcoded_intelligent_node" />
+
+  <node name="$(arg node_name)" pkg="hardcoded_intelligent" type="hardcoded_intelligent_node" output="screen">
+    <rosparam command="load" file="$(find hardcoded_intelligent)/config/factory_graph.yaml" />
+    <rosparam command="load" file="$(find hardcoded_intelligent)/config/missions.yaml" />
+  </node>
+</launch>

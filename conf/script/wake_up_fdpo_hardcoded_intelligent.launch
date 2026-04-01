@@ -1,0 +1,38 @@
+<launch>
+  <arg name="map_file" default="$(find conf)/launch/hmi/maps/factory_map.yaml"/>
+  <arg name="rviz_config" default="$(find conf)/launch/hmi/fdpo_simulation.rviz"/>
+  <arg name="lidar_driver" default="ydlidar" doc="Escolha o driver de LiDAR: 'hlds' ou 'ydlidar'"/>
+  <arg name="debug_pico_comm" default="false" doc="Mostrar logs de comunicacao Pi4-Pico"/>
+  <arg name="use_ekf" default="true" doc="Usar EKF localizer com beacons"/>
+  <arg name="use_raw_odom" default="false" doc="Usar odometria pura (/odom)"/>
+  <arg name="use_ss_controller" default="false" doc="Usar state space controller"/>
+  <arg name="use_hal" default="true"/>
+  <arg name="use_navigation" default="true"/>
+  <arg name="use_hmi" default="true"/>
+  <arg name="use_rviz" default="false" doc="Ativar RViz automaticamente"/>
+  <arg name="use_wifi" default="true"/>
+
+  <include if="$(arg use_hal)" file="$(find conf)/system/hal.xml">
+    <arg name="lidar_driver" value="$(arg lidar_driver)"/>
+    <arg name="debug_pico_comm" value="$(arg debug_pico_comm)"/>
+  </include>
+
+  <include if="$(arg use_navigation)" file="$(find conf)/system/navigation.xml">
+    <arg name="lidar_driver" value="$(arg lidar_driver)"/>
+    <arg name="use_ekf" value="$(arg use_ekf)"/>
+    <arg name="use_raw_odom" value="$(arg use_raw_odom)"/>
+    <arg name="use_ss_controller" value="$(arg use_ss_controller)"/>
+  </include>
+
+  <include if="$(arg use_hmi)" file="$(find conf)/system/hmi.xml">
+    <arg name="map_file" value="$(arg map_file)"/>
+    <arg name="rviz_config" value="$(arg rviz_config)"/>
+    <arg name="use_rviz" value="$(arg use_rviz)"/>
+  </include>
+
+  <include file="$(find conf)/system/wifi.xml">
+    <arg name="enable" value="$(arg use_wifi)"/>
+  </include>
+
+  <include file="$(find conf)/system/hardcoded_intelligent.xml"/>
+</launch>
