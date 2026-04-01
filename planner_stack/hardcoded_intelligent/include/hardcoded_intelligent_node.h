@@ -39,14 +39,20 @@ private:
   void onWaitRelease(const std_msgs::Bool::ConstPtr& msg);
 
   bool loadMissions();
+  std::string selectMangaKey(const std::string& color_sequence) const;
   std::vector<MissionSegment> buildMissionSegments(const std::string& color_sequence) const;
-  std::vector<int> resolveMissionLeg(const XmlRpc::XmlRpcValue& leg, const std::string& color_sequence) const;
-  int resolveColorToInputNode(char color, const std::string& color_sequence, std::map<char, int>& local_color_claim_counter) const;
-  int getColorClaimBaseRank(char color) const;
+  std::vector<int> resolveMissionLeg(const XmlRpc::XmlRpcValue& leg, const std::string& color_sequence,
+                                     const XmlRpc::XmlRpcValue& manga_cfg) const;
+  int resolveColorToInputNode(char color, const std::string& color_sequence, std::map<char, int>& local_color_claim_counter,
+                              const XmlRpc::XmlRpcValue& manga_cfg) const;
+  int getColorClaimBaseRank(char color, const XmlRpc::XmlRpcValue& manga_cfg) const;
   bool robotUsesColor(const XmlRpc::XmlRpcValue& robot_cfg, char color) const;
+  bool parseColorWithWaitSuffix(const std::string& token, char& color_out, bool& wait_at_pick_out) const;
   bool parseMessageToken(const XmlRpc::XmlRpcValue& item, int& target_robot_id) const;
   bool isWaitToken(const XmlRpc::XmlRpcValue& item) const;
   bool tryReadInt(const XmlRpc::XmlRpcValue& item, int& value) const;
+  void appendWarehousePickupTraversal(int input_shelf_node, std::vector<int>& out, bool wait_at_pick) const;
+  void collapseConsecutiveDuplicateNodes(std::vector<int>& nodes) const;
 
   void startMission(const std::string& color_sequence);
   void publishCurrentSegment();

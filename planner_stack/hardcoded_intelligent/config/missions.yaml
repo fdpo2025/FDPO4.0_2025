@@ -1,9 +1,43 @@
+# Manga escolhida automaticamente a partir de /color_sequence:
+#   manga_3 : aparecem R, G e B
+#   manga_2 : aparecem B e G (e nao manga_3)
+#   manga_1 : apenas B em todas as posicoes
+#
+# Cores no armazem: R/G/B ou R_W/G_W/B_W (wait no pick antes de voltar ao no de aproximacao).
+
 missions:
-  robot_0:
-    targets:
-      - ["R", 15, 10, 22, "W", "MSG_1", 25, 60]
-      - [22, 14, 50, 65]
-  robot_1:
-    targets:
-      - ["G", 18]
-      - [18, "W", "MSG_0", 24]
+  manga_1:
+    robot_0:
+      targets:
+        - [31, 16, "MSG_1", "B", 11, "MSG_1", 27, 28, 36]
+        - ["W", 28, 27, 11, "G", 11, "MSG_1", 12, 19, 20]
+        - [20, 19, 26, 27, 30, 22, 21, 22, "MSG_1", 30, 29, 37]
+    robot_1:
+      targets:
+        - ["W", 31, 16, "B", "W", 11, 27, 35]
+        - [35, 27, "MSG_0", 11, "G", "W", 11, 12, 13]
+        - [13, 12, 4, 7, 15, 14, "W", 15, 30, 38]
+
+  manga_2:
+    robot_0:
+      targets:
+        - [31, 16, "MSG_1", "B", 11, "MSG_1", 27, 28, 36]
+        - ["W", 28, 27, 11, "G", 11, "MSG_1", 12, 19, 20]
+        - [20, 19, 26, 27, 30, 22, 21, 22, "MSG_1", 30, 29, 37]
+    robot_1:
+      targets:
+        - ["W", 31, 16, "B", "W", 11, 27, 35]
+        - [35, 27, "MSG_0", 11, "G", "W", 11, 12, 13]
+        - [13, 12, 4, 7, 15, 14, "W", 15, 30, 38]
+
+  manga_3:
+    robot_0:
+      targets:
+        - [31, 16, "MSG_1", "B", 11, "MSG_1", 27, 28, 36]
+        - ["W", 28, 27, 11, "G", 11, "MSG_1", 12, 19, 20]
+        - [20, 19, 26, 27, 30, 22, 21, 22, "MSG_1", 30, 29, 37]
+    robot_1:
+      targets:
+        - ["W", 31, 16, "B", "W", 11, 27, 35]
+        - [35, 27, "MSG_0", 11, "G", "W", 11, 12, 13]
+        - [13, 12, 4, 7, 15, 14, "W", 15, 30, 38]

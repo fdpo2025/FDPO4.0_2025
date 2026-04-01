@@ -57,8 +57,55 @@ bool HardcodedIntelligentNode::loadMissions()
     return false;
   }
 
-  ROS_INFO("Missions loaded from ROS params.");
+  ROS_INFO("Missions loaded (manga_1 / manga_2 / manga_3).");
   return true;
+}
+
+std::string HardcodedIntelligentNode::selectMangaKey(const std::string& color_sequence) const
+{
+  bool has_r = false;
+  bool has_g = false;
+  bool has_b = false;
+  for (char ch : color_sequence) {
+    if (!std::isalpha(static_cast<unsigned char>(ch))) {
+      continue;
+    }
+    const char u = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    if (u == 'R') {
+      has_r = true;
+    }
+    if (u == 'G') {
+      has_g = true;
+    }
+    if (u == 'B') {
+      has_b = true;
+    }
+  }
+
+  if (has_r && has_g && has_b) {
+    return "manga_3";
+  }
+  if (has_b && has_g) {
+    return "manga_2";
+  }
+
+  bool all_b = !color_sequence.empty();
+  for (char ch : color_sequence) {
+    if (!std::isalpha(static_cast<unsigned char>(ch))) {
+      continue;
+    }
+    const char u = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    if (u != 'B') {
+      all_b = false;
+      break;
+    }
+  }
+  if (all_b && has_b) {
+    return "manga_1";
+  }
+
+  ROS_WARN("Color sequence does not match manga rules (expected all-B, B+G, or R+G+B); using manga_1.");
+  return "manga_1";
 }
 
 void HardcodedIntelligentNode::onColorSequence(const std_msgs::String::ConstPtr& msg)
@@ -205,26 +252,36 @@ std::vector<HardcodedIntelligentNode::MissionSegment> HardcodedIntelligentNode::
     return result;
   }
 
-  const std::string robot_key = "robot_" + std::to_string(robot_id_);
-  if (!missions_root_.hasMember(robot_key)) {
-    ROS_WARN("No section '%s' in missions file.", robot_key.c_str());
+  const std::string manga_key = selectMangaKey(color_sequence);
+  ROS_INFO("Mission manga selected: %s (color_sequence=%s)", manga_key.c_str(), color_sequence.c_str());
+
+  if (!missions_root_.hasMember(manga_key)) {
+    ROS_WARN("No '%s' block in missions file.", manga_key.c_str());
     return result;
   }
 
-  XmlRpc::XmlRpcValue robot_cfg = missions_root_[robot_key];
+  XmlRpc::XmlRpcValue manga_cfg = missions_root_[manga_key];
+
+  const std::string robot_key = "robot_" + std::to_string(robot_id_);
+  if (!manga_cfg.hasMember(robot_key)) {
+    ROS_WARN("No section '%s' under '%s' in missions file.", robot_key.c_str(), manga_key.c_str());
+    return result;
+  }
+
+  XmlRpc::XmlRpcValue robot_cfg = manga_cfg[robot_key];
   if (!robot_cfg.hasMember("targets")) {
-    ROS_WARN("%s has no 'targets' entry.", robot_key.c_str());
+    ROS_WARN("%s/%s has no 'targets' entry.", manga_key.c_str(), robot_key.c_str());
     return result;
   }
 
   XmlRpc::XmlRpcValue targets = robot_cfg["targets"];
   if (targets.getType() != XmlRpc::XmlRpcValue::TypeArray) {
-    ROS_WARN("%s.targets must be an array of legs.", robot_key.c_str());
+    ROS_WARN("%s.%s.targets must be an array of legs.", manga_key.c_str(), robot_key.c_str());
     return result;
   }
 
   for (int i = 0; i < targets.size(); ++i) {
-    std::vector<int> leg_nodes = resolveMissionLeg(targets[i], color_sequence);
+    std::vector<int> leg_nodes = resolveMissionLeg(targets[i], color_sequence, manga_cfg);
     if (leg_nodes.empty()) {
       continue;
     }
@@ -257,7 +314,8 @@ std::vector<HardcodedIntelligentNode::MissionSegment> HardcodedIntelligentNode::
   return result;
 }
 
-std::vector<int> HardcodedIntelligentNode::resolveMissionLeg(const XmlRpc::XmlRpcValue& leg, const std::string& color_sequence) const
+std::vector<int> HardcodedIntelligentNode::resolveMissionLeg(const XmlRpc::XmlRpcValue& leg, const std::string& color_sequence,
+                                                             const XmlRpc::XmlRpcValue& manga_cfg) const
 {
   std::vector<int> resolved;
   if (leg.getType() != XmlRpc::XmlRpcValue::TypeArray) {
@@ -281,12 +339,21 @@ std::vector<int> HardcodedIntelligentNode::resolveMissionLeg(const XmlRpc::XmlRp
 
     if (item.getType() == XmlRpc::XmlRpcValue::TypeString) {
       std::string token = static_cast<std::string>(item);
+      char color_letter = ' ';
+      bool wait_at_pick = false;
+      if (parseColorWithWaitSuffix(token, color_letter, wait_at_pick)) {
+        const int input_node = resolveColorToInputNode(color_letter, color_sequence, local_color_claim_counter, manga_cfg);
+        if (input_node >= 0) {
+          appendWarehousePickupTraversal(input_node, resolved, wait_at_pick);
+        }
+        continue;
+      }
       if (token.size() == 1) {
-        const char c = static_cast<char>(std::toupper(token[0]));
+        const char c = static_cast<char>(std::toupper(static_cast<unsigned char>(token[0])));
         if (c == 'R' || c == 'G' || c == 'B') {
-          int input_node = resolveColorToInputNode(c, color_sequence, local_color_claim_counter);
+          const int input_node = resolveColorToInputNode(c, color_sequence, local_color_claim_counter, manga_cfg);
           if (input_node >= 0) {
-            resolved.push_back(input_node);
+            appendWarehousePickupTraversal(input_node, resolved, false);
           }
           continue;
         }
@@ -299,12 +366,14 @@ std::vector<int> HardcodedIntelligentNode::resolveMissionLeg(const XmlRpc::XmlRp
     }
   }
 
+  collapseConsecutiveDuplicateNodes(resolved);
   return resolved;
 }
 
-int HardcodedIntelligentNode::resolveColorToInputNode(char color, const std::string& color_sequence, std::map<char, int>& local_color_claim_counter) const
+int HardcodedIntelligentNode::resolveColorToInputNode(char color, const std::string& color_sequence, std::map<char, int>& local_color_claim_counter,
+                                                      const XmlRpc::XmlRpcValue& manga_cfg) const
 {
-  const int base_rank = getColorClaimBaseRank(color);
+  const int base_rank = getColorClaimBaseRank(color, manga_cfg);
   const int local_rank = local_color_claim_counter[color];
   const int desired_occurrence = base_rank + local_rank;
 
@@ -328,14 +397,13 @@ int HardcodedIntelligentNode::resolveColorToInputNode(char color, const std::str
   return -1;
 }
 
-int HardcodedIntelligentNode::getColorClaimBaseRank(char color) const
+int HardcodedIntelligentNode::getColorClaimBaseRank(char color, const XmlRpc::XmlRpcValue& manga_cfg) const
 {
-  if (!missions_root_.valid()) {
+  if (manga_cfg.getType() != XmlRpc::XmlRpcValue::TypeStruct) {
     return 0;
   }
-
   int rank = 0;
-  for (auto it = missions_root_.begin(); it != missions_root_.end(); ++it) {
+  for (auto it = manga_cfg.begin(); it != manga_cfg.end(); ++it) {
     const std::string robot_key = it->first;
     if (robot_key.rfind("robot_", 0) != 0) {
       continue;
@@ -376,12 +444,43 @@ bool HardcodedIntelligentNode::robotUsesColor(const XmlRpc::XmlRpcValue& robot_c
         continue;
       }
       std::string token = static_cast<std::string>(item);
-      if (token.size() == 1 && static_cast<char>(std::toupper(token[0])) == color) {
+      if (token.size() == 1 && static_cast<char>(std::toupper(static_cast<unsigned char>(token[0]))) == color) {
+        return true;
+      }
+      char cw = ' ';
+      bool dummy_wait = false;
+      if (parseColorWithWaitSuffix(token, cw, dummy_wait) && cw == color) {
         return true;
       }
     }
   }
   return false;
+}
+
+bool HardcodedIntelligentNode::parseColorWithWaitSuffix(const std::string& token, char& color_out, bool& wait_at_pick_out) const
+{
+  const size_t pos = token.find('_');
+  if (pos == std::string::npos || pos == 0) {
+    return false;
+  }
+  const std::string left = token.substr(0, pos);
+  std::string right = token.substr(pos + 1);
+  for (char& ch : right) {
+    ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+  }
+  if (right != "W") {
+    return false;
+  }
+  if (left.size() != 1) {
+    return false;
+  }
+  const char c = static_cast<char>(std::toupper(static_cast<unsigned char>(left[0])));
+  if (c != 'R' && c != 'G' && c != 'B') {
+    return false;
+  }
+  color_out = c;
+  wait_at_pick_out = true;
+  return true;
 }
 
 bool HardcodedIntelligentNode::parseMessageToken(const XmlRpc::XmlRpcValue& item, int& target_robot_id) const
@@ -438,6 +537,51 @@ bool HardcodedIntelligentNode::tryReadInt(const XmlRpc::XmlRpcValue& item, int& 
   }
 
   return false;
+}
+
+void HardcodedIntelligentNode::appendWarehousePickupTraversal(int input_shelf_node, std::vector<int>& out, bool wait_at_pick) const
+{
+  // Armazém de entrada: slot 0..3; aproximação em linha: 8..11 (cf. factory graph).
+  int approach = -1;
+  switch (input_shelf_node) {
+    case 0:
+      approach = 8;
+      break;
+    case 1:
+      approach = 9;
+      break;
+    case 2:
+      approach = 10;
+      break;
+    case 3:
+      approach = 11;
+      break;
+    default:
+      ROS_WARN("appendWarehousePickupTraversal: node %d is not an input shelf (0-3); using as single waypoint.", input_shelf_node);
+      out.push_back(input_shelf_node);
+      return;
+  }
+  out.push_back(approach);
+  out.push_back(input_shelf_node);
+  if (wait_at_pick) {
+    out.push_back(-1);
+  }
+  out.push_back(approach);
+}
+
+void HardcodedIntelligentNode::collapseConsecutiveDuplicateNodes(std::vector<int>& nodes) const
+{
+  if (nodes.empty()) {
+    return;
+  }
+  std::vector<int> out;
+  out.reserve(nodes.size());
+  for (int x : nodes) {
+    if (out.empty() || out.back() != x) {
+      out.push_back(x);
+    }
+  }
+  nodes.swap(out);
 }
 
 bool HardcodedIntelligentNode::validatePath(const std::vector<int>& path) const
