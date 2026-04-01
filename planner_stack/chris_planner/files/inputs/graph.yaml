@@ -38,69 +38,115 @@ points_map:
   '36': {x: 0.395, y: -0.468}
   '37': {x: 0.545, y: -0.468}
   '38': {x: 0.695, y: -0.468}
+
+  '100': {x: -0.687, y: 0.468}
+  '101': {x: -0.545, y: 0.468}
+  '102': {x: -0.386, y: 0.468}
+  '103': {x: -0.245, y: 0.468}
+  '113': {x: 0.227, y: 0.15}
+  '114': {x: 0.468, y: 0.15}
+  '117': {x: -0.468, y: -0.0}
+  '118': {x: -0.227, y: -0.0}
+  '120': {x: 0.227, y: -0.0}
+  '121': {x: 0.468, y: -0.0}
+  '124': {x: -0.468, y: -0.15}
+  '125': {x: -0.227, y: -0.15}
+  '135': {x: 0.245, y: -0.468}
+  '136': {x: 0.395, y: -0.468}
+  '137': {x: 0.545, y: -0.468}
+  '138': {x: 0.695, y: -0.468}
+
 adj:
   '0':
   - {node_to: '8', dist: 0.235}
+
   '1':
   - {node_to: '9', dist: 0.235}
+
   '2':
   - {node_to: '10', dist: 0.235}
+
   '3':
   - {node_to: '11', dist: 0.235}
+
   '4':
   - {node_to: '5', dist: 0.227}
   - {node_to: '11', dist: 0.274}
   - {node_to: '12', dist: 0.205}
+
   '5':
   - {node_to: '4', dist: 0.227}
   - {node_to: '6', dist: 0.241}
+
   '6':
   - {node_to: '5', dist: 0.241}
   - {node_to: '7', dist: 0.227}
+
   '7':
   - {node_to: '6', dist: 0.227}
   - {node_to: '15', dist: 0.205}
+
   '8':
   - {node_to: '0', dist: 0.235}
   - {node_to: '9', dist: 0.142}
   - {node_to: '16', dist: 0.233}
+  - {node_to: '100', dist: 0.235}
+
   '9':
   - {node_to: '1', dist: 0.235}
   - {node_to: '8', dist: 0.142}
   - {node_to: '10', dist: 0.159}
   - {node_to: '16', dist: 0.273}
+  - {node_to: '101', dist: 0.235}
+
   '10':
   - {node_to: '2', dist: 0.235}
   - {node_to: '9', dist: 0.159}
   - {node_to: '11', dist: 0.141}
+  - {node_to: '102', dist: 0.235}
+
   '11':
   - {node_to: '3', dist: 0.235}
   - {node_to: '4', dist: 0.274}
   - {node_to: '10', dist: 0.141}
   - {node_to: '12', dist: 0.259}
-  - {node_to: '19', dist: 0.4} 
+  - {node_to: '19', dist: 0.4}
+  - {node_to: '103', dist: 0.235}
+
   '12':
   - {node_to: '4', dist: 0.205}
   - {node_to: '11', dist: 0.259}
   - {node_to: '13', dist: 0.227}
   - {node_to: '19', dist: 0.15}
+  - {node_to: '113', dist: 0.235}
+
   '13':
   - {node_to: '12', dist: 0.227}
+
   '14':
   - {node_to: '15', dist: 0.227}
+  - {node_to: '114', dist: 0.235}
+
   '15':
   - {node_to: '7', dist: 0.205}
   - {node_to: '14', dist: 0.227}
   - {node_to: '22', dist: 0.15}
+  - {node_to: '121', dist: 0.235}
+
   '16':
   - {node_to: '8', dist: 0.233}
   - {node_to: '9', dist: 0.273}
   - {node_to: '17', dist: 0.219}
   - {node_to: '23', dist: 0.15}
+  - {node_to: '117', dist: 0.235}
+
   '17':
   - {node_to: '16', dist: 0.219}
+
   '18':
   - {node_to: '19', dist: 0.227}
+  - {node_to: '118', dist: 0.235}
+
   '19':
   - {node_to: '12', dist: 0.15}
   - {node_to: '18', dist: 0.227}
@@ -108,65 +154,144 @@ adj:
   - {node_to: '26', dist: 0.15}
   - {node_to: '11', dist: 0.4}
   - {node_to: '27', dist: 0.4}
+  - {node_to: '118', dist: 0.235}
+  - {node_to: '120', dist: 0.235}
+
   '20':
   - {node_to: '19', dist: 0.227}
+  - {node_to: '120', dist: 0.235}
+
   '21':
   - {node_to: '22', dist: 0.227}
+
   '22':
   - {node_to: '15', dist: 0.15}
   - {node_to: '21', dist: 0.227}
   - {node_to: '29', dist: 0.277}
   - {node_to: '30', dist: 0.233}
+  - {node_to: '121', dist: 0.235}
+
   '23':
   - {node_to: '16', dist: 0.15}
   - {node_to: '24', dist: 0.219}
   - {node_to: '31', dist: 0.205}
+  - {node_to: '124', dist: 0.235}
+
   '24':
   - {node_to: '23', dist: 0.219}
+
   '25':
   - {node_to: '26', dist: 0.227}
+  - {node_to: '125', dist: 0.235}
+
   '26':
   - {node_to: '19', dist: 0.15}
   - {node_to: '25', dist: 0.227}
   - {node_to: '27', dist: 0.259}
   - {node_to: '34', dist: 0.205}
+  - {node_to: '125', dist: 0.235}
+
   '27':
   - {node_to: '26', dist: 0.259}
   - {node_to: '28', dist: 0.15}
   - {node_to: '34', dist: 0.274}
   - {node_to: '35', dist: 0.235}
-  - {node_to: '19', dist: 0.4} 
+  - {node_to: '19', dist: 0.4}
+  - {node_to: '135', dist: 0.235}
+
   '28':
   - {node_to: '27', dist: 0.15}
   - {node_to: '29', dist: 0.15}
   - {node_to: '36', dist: 0.235}
+  - {node_to: '136', dist: 0.235}
+
   '29':
   - {node_to: '22', dist: 0.277}
   - {node_to: '28', dist: 0.15}
   - {node_to: '30', dist: 0.15}
   - {node_to: '37', dist: 0.235}
+  - {node_to: '137', dist: 0.235}
+
   '30':
   - {node_to: '22', dist: 0.233}
   - {node_to: '29', dist: 0.15}
   - {node_to: '38', dist: 0.235}
+  - {node_to: '138', dist: 0.235}
+
   '31':
   - {node_to: '23', dist: 0.205}
   - {node_to: '32', dist: 0.219}
+
   '32':
   - {node_to: '31', dist: 0.219}
   - {node_to: '33', dist: 0.241}
+
   '33':
   - {node_to: '32', dist: 0.241}
   - {node_to: '34', dist: 0.227}
+
   '34':
   - {node_to: '26', dist: 0.205}
   - {node_to: '27', dist: 0.274}
   - {node_to: '33', dist: 0.227}
+  - {node_to: '135', dist: 0.235}
+
   '35':
   - {node_to: '27', dist: 0.235}
+
   '36':
   - {node_to: '28', dist: 0.235}
+
   '37':
   - {node_to: '29', dist: 0.235}
+
   '38':
+  - {node_to: '30', dist: 0.235}
+
+  '100':
+  - {node_to: '8', dist: 0.235}
+
+  '101':
+  - {node_to: '9', dist: 0.235}
+
+  '102':
+  - {node_to: '10', dist: 0.235}
+
+  '103':
+  - {node_to: '11', dist: 0.235}
+
+  '113':
+  - {node_to: '12', dist: 0.235}
+
+  '114':
+  - {node_to: '15', dist: 0.235}
+
+  '117':
+  - {node_to: '16', dist: 0.235}
+
+  '118':
+  - {node_to: '19', dist: 0.235}
+
+  '120':
+  - {node_to: '19', dist: 0.235}
+
+  '121':
+  - {node_to: '22', dist: 0.235}
+
+  '124':
+  - {node_to: '23', dist: 0.235}
+
+  '125':
+  - {node_to: '26', dist: 0.235}
+
+  '135':
+  - {node_to: '27', dist: 0.235}
+
+  '136':
+  - {node_to: '28', dist: 0.235}
+
+  '137':
+  - {node_to: '29', dist: 0.235}
+
+  '138':
   - {node_to: '30', dist: 0.235}
