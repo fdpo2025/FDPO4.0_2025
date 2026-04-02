@@ -103,14 +103,22 @@ class PiPicoDriver {
         ros::Subscriber radioWaitTargetSub;
         void radioWaitTargetCallBack(const std_msgs::Int32::ConstPtr& msg);
 
+        ros::Subscriber colorSeqWifiSub_;
+        void colorSeqWifiCallback(const std_msgs::String::ConstPtr& msg);
+
         ros::Publisher posePub;
         ros::Publisher robotIdPub;
         ros::Publisher radioWaitReleasePub;
+        ros::Publisher missionColorPub_;
         void pubOdom();
 
         int robot_id_ = -1;
         bool identity_logged_once_{false};
         bool wait_release_pending_ = false;
+        std::string pending_colorseq_for_pico_;
+        std::string last_wifi_color_seq_;
+        std::string wifi_iwp_sub_topic_;
+        std::string color_sequence_pub_topic_;
         std::vector<int> active_path_nodes_;
         size_t active_path_index_ = 0;
         void updateMotionStatus();

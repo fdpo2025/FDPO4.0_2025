@@ -5,6 +5,8 @@
     <arg name="debug_comm" default="true" doc="Enable/disable communication debug logs"/>
     <arg name="debug_identity" default="true" doc="Logs extra para /robot_identity (ID no POS)"/>
     <arg name="debug_radio" default="true" doc="Logs WAIT/radio_wait_target na série"/>
+    <arg name="wifi_iwp_sub_topic" default="/wifi_iwp_color_sequence" doc="Duplicado do wifi_driver (IWP)"/>
+    <arg name="color_sequence_pub_topic" default="/color_sequence" doc="Missão após handshake rádio"/>
 
     <node pkg="pi_pico_driver" type="pico_driver_node" name="pico_driver_node" output="screen">
         <param name="serial_port" value="$(arg serial_port)"/>
@@ -12,6 +14,8 @@
         <param name="debug_comm"  value="$(arg debug_comm)"/>
         <param name="debug_identity" value="$(arg debug_identity)"/>
         <param name="debug_radio" value="$(arg debug_radio)"/>
+        <param name="wifi_iwp_sub_topic" value="$(arg wifi_iwp_sub_topic)"/>
+        <param name="color_sequence_pub_topic" value="$(arg color_sequence_pub_topic)"/>
     </node>
 
 </launch>

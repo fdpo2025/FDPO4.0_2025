@@ -34,7 +34,7 @@ private:
     int notify_robot_id = -2; // -2: none, -1: broadcast, >=0: target robot id
   };
 
-  void onColorSequence(const std_msgs::String::ConstPtr& msg);
+  void onMissionColorSequence(const std_msgs::String::ConstPtr& msg);
   void onRobotIdentity(const std_msgs::Int32::ConstPtr& msg);
   void onNavigationFeedback(const plan_handler::CompletionFeedback::ConstPtr& msg);
   void onWaitRelease(const std_msgs::Bool::ConstPtr& msg);
@@ -68,7 +68,7 @@ private:
   bool tryReadDouble(const XmlRpc::XmlRpcValue& v, double& out) const;
 
   ros::NodeHandle nh_;
-  ros::Subscriber color_seq_sub_;
+  ros::Subscriber mission_color_sub_;
   ros::Subscriber robot_identity_sub_;
   ros::Subscriber nav_feedback_sub_;
   ros::Subscriber wait_release_sub_;
@@ -76,6 +76,8 @@ private:
   ros::Publisher mission_state_pub_;
   ros::Publisher radio_wait_target_pub_;
   ros::Publisher spawn_pose_pub_;
+
+  std::string color_sequence_topic_;
 
   XmlRpc::XmlRpcValue missions_root_;
   std::vector<int> valid_node_ids_;

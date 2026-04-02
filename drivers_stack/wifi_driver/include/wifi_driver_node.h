@@ -16,8 +16,9 @@ public:
 private:
   ros::NodeHandle nh_;
 
-  // ROS publisher
+  // ROS publisher (/color_sequence = compat; cópia para pi_pico encaminhar IWP sem loop)
   ros::Publisher color_pub_;
+  ros::Publisher color_pub_iwp_dup_;
 
   // UDP config
   std::string server_ip_;

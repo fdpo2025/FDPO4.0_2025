@@ -1,6 +1,13 @@
 #include "wifi_driver_node.h"
 
 #include <sys/socket.h>
+
+namespace {
+void publishColorBoth(ros::Publisher& main_pub, ros::Publisher& dup_pub, const std_msgs::String& msg) {
+  main_pub.publish(msg);
+  dup_pub.publish(msg);
+}
+}  // namespace
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
@@ -23,8 +30,12 @@ WifiDriverNode::WifiDriverNode(ros::NodeHandle& nh)
   ROS_INFO("Config: server_ip=%s port=%d timeout=%.2f",
           server_ip_.c_str(), port_, timeout_s_);
 
+  std::string iwp_dup_topic;
+  nh_.param<std::string>("iwp_duplicate_topic", iwp_dup_topic, std::string("/wifi_iwp_color_sequence"));
+
   // publica sequencia de cores
   color_pub_ = nh_.advertise<std_msgs::String>("/color_sequence", 10, true);
+  color_pub_iwp_dup_ = nh_.advertise<std_msgs::String>(iwp_dup_topic, 10, true);
 
   sock_fd_ = -1;
 
@@ -40,7 +51,8 @@ WifiDriverNode::WifiDriverNode(ros::NodeHandle& nh)
   ROS_INFO("Service 'start_iwp' advertised. Call with data:=true to start IWP.");
 
 
-  ROS_INFO("WifiDriverNode pronto. Vai publicar em /color_sequence quando receber != STOP");
+  ROS_INFO("WifiDriverNode pronto. Publica /color_sequence e duplicado em %s (pico bridge).",
+           iwp_dup_topic.c_str());
 }
 
 bool WifiDriverNode::setupSocket()
@@ -159,7 +171,7 @@ void WifiDriverNode::doIWP()
 
     std_msgs::String msg;
     msg.data = resp;
-    color_pub_.publish(msg);
+    publishColorBoth(color_pub_, color_pub_iwp_dup_, msg);
 
     last_published_ = resp;
     ROS_INFO("[PUB] /color_sequence = %s", resp.c_str());
@@ -243,7 +255,7 @@ void WifiDriverNode::timerCb(const ros::TimerEvent&)
       {
         std_msgs::String msg;
         msg.data = color_sequence_;
-        color_pub_.publish(msg);
+        publishColorBoth(color_pub_, color_pub_iwp_dup_, msg);
         last_published_ = color_sequence_;
         ROS_INFO("[PUB] /color_sequence = %s", color_sequence_.c_str());
       }

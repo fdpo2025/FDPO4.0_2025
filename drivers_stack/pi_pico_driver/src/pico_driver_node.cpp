@@ -26,6 +26,10 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   plannedPathSub = nh.subscribe("/planned_paths", 10, &PiPicoDriver::plannedPathCallBack, this);
   navFeedbackSub = nh.subscribe("/nav_completion_feedback", 20, &PiPicoDriver::navFeedbackCallBack, this);
   radioWaitTargetSub = nh.subscribe("/radio_wait_target", 10, &PiPicoDriver::radioWaitTargetCallBack, this);
+  nh.param<std::string>("wifi_iwp_sub_topic", wifi_iwp_sub_topic_, "/wifi_iwp_color_sequence");
+  nh.param<std::string>("color_sequence_pub_topic", color_sequence_pub_topic_, "/color_sequence");
+  missionColorPub_ = nh.advertise<std_msgs::String>(color_sequence_pub_topic_, 1, true);
+  colorSeqWifiSub_ = nh.subscribe(wifi_iwp_sub_topic_, 1, &PiPicoDriver::colorSeqWifiCallback, this);
   // -> Pubs
   posePub = nh.advertise<nav_msgs::Odometry>("/odom", 10);
   robotIdPub = nh.advertise<std_msgs::Int32>("/robot_identity", 1, true);
@@ -40,6 +44,8 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   nh.param("debug_identity", debug_identity_, false);
   nh.param("debug_radio", debug_radio_, false);
 
+  ROS_INFO("[PiPicoDriver] sub IWP=%s pub missão=%s (após handshake rádio)",
+           wifi_iwp_sub_topic_.c_str(), color_sequence_pub_topic_.c_str());
   ROS_INFO("[PiPicoDriver] Usando porta serial: %s", serial_port.c_str());
   ROS_INFO("[PiPicoDriver] debug_comm=%s debug_identity=%s debug_radio=%s",
            debug_comm_ ? "on" : "off", debug_identity_ ? "on" : "off", debug_radio_ ? "on" : "off");
@@ -275,6 +281,49 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
         wait_msg.data = true;
         radioWaitReleasePub.publish(wait_msg);
       }
+
+      {
+        const size_t hp = msg.find("CHSOK:");
+        if (hp != std::string::npos) {
+          int chs = 0;
+          std::sscanf(msg.c_str() + hp, "CHSOK: %d", &chs);
+          if (chs == 1 && robot_id_ == 0 && last_wifi_color_seq_.size() == 4) {
+            std_msgs::String out;
+            out.data = last_wifi_color_seq_;
+            missionColorPub_.publish(out);
+            ROS_INFO("[PiPicoDriver] Handshake rádio OK (master) -> %s = \"%s\"",
+                     color_sequence_pub_topic_.c_str(), out.data.c_str());
+          }
+        }
+      }
+
+      {
+        const size_t cq = msg.find("CSEQ:");
+        if (cq != std::string::npos) {
+          size_t s = cq + 5;
+          while (s < msg.size() && (msg[s] == ' ' || msg[s] == '\t')) {
+            ++s;
+          }
+          if (s + 4 <= msg.size()) {
+            std::string cs = msg.substr(s, 4);
+            bool ok = true;
+            for (char c : cs) {
+              const char u = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+              if (u != 'R' && u != 'G' && u != 'B') {
+                ok = false;
+                break;
+              }
+            }
+            if (ok && robot_id_ > 0) {
+              std_msgs::String out;
+              out.data = cs;
+              missionColorPub_.publish(out);
+              ROS_INFO("[PiPicoDriver] Sequência via rádio (escravo) -> %s = \"%s\"",
+                       color_sequence_pub_topic_.c_str(), out.data.c_str());
+            }
+          }
+        }
+      }
       return;
     }
 
@@ -296,9 +345,31 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
   }
 }
 
+void PiPicoDriver::colorSeqWifiCallback(const std_msgs::String::ConstPtr& msg) {
+  if (msg->data.size() != 4) {
+    return;
+  }
+  for (char c : msg->data) {
+    const char u = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (u != 'R' && u != 'G' && u != 'B') {
+      return;
+    }
+  }
+  last_wifi_color_seq_ = msg->data;
+  pending_colorseq_for_pico_ = msg->data;
+}
+
 void PiPicoDriver::commTick(const ros::TimerEvent&) {
   updateMotionStatus();
-  
+
+  if (robot_id_ == 0 && !pending_colorseq_for_pico_.empty()) {
+    const std::string seq = pending_colorseq_for_pico_;
+    const std::string resp = syncCall(std::string("COLORSEQ:") + seq, 80);
+    if (!resp.empty()) {
+      pending_colorseq_for_pico_.clear();
+    }
+  }
+
   // 1) Build the command
   std::string cmd = "CMD:" + std::to_string(messageToSend.v_d) + "," +
                              std::to_string(messageToSend.w_d) + "," +
@@ -425,6 +496,12 @@ bool PiPicoDriver::tryParseEmbeddedRobotId(const std::string& msg, int& out_id) 
 void PiPicoDriver::applyRobotIdentity(int id) {
   if (id < 0) {
     return;
+  }
+  if (robot_id_ == id) {
+    return;
+  }
+  if (id != 0) {
+    pending_colorseq_for_pico_.clear();
   }
   robot_id_ = id;
   std_msgs::Int32 id_msg;

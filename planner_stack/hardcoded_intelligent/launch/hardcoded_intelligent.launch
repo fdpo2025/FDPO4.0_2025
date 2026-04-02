@@ -1,9 +1,11 @@
 <launch>
   <arg name="node_name" default="hardcoded_intelligent_node" />
   <arg name="debug_verbose" default="true" doc="ROS_INFO extra (FSM, filas, spawn)"/>
+  <arg name="color_sequence_topic" default="/color_sequence" />
 
   <node name="$(arg node_name)" pkg="hardcoded_intelligent" type="hardcoded_intelligent_node" output="screen">
     <param name="debug_verbose" value="$(arg debug_verbose)"/>
+    <param name="color_sequence_topic" value="$(arg color_sequence_topic)"/>
     <rosparam command="load" file="$(find hardcoded_intelligent)/config/factory_graph.yaml" />
     <rosparam command="load" file="$(find hardcoded_intelligent)/config/missions.yaml" />
   </node>

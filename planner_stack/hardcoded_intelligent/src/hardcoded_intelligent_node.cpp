@@ -28,7 +28,9 @@ HardcodedIntelligentNode::HardcodedIntelligentNode(ros::NodeHandle& nh)
   loadValidNodeIds();
   loadMissions();
 
-  color_seq_sub_ = nh_.subscribe("/color_sequence", 1, &HardcodedIntelligentNode::onColorSequence, this);
+  nh_.param<std::string>("color_sequence_topic", color_sequence_topic_, "/color_sequence");
+  mission_color_sub_ =
+      nh_.subscribe(color_sequence_topic_, 1, &HardcodedIntelligentNode::onMissionColorSequence, this);
   robot_identity_sub_ = nh_.subscribe("/robot_identity", 1, &HardcodedIntelligentNode::onRobotIdentity, this);
   nav_feedback_sub_ = nh_.subscribe("/nav_completion_feedback", 20, &HardcodedIntelligentNode::onNavigationFeedback, this);
   wait_release_sub_ = nh_.subscribe("/radio_wait_release", 5, &HardcodedIntelligentNode::onWaitRelease, this);
@@ -38,7 +40,9 @@ HardcodedIntelligentNode::HardcodedIntelligentNode(ros::NodeHandle& nh)
   spawn_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/hardcoded_intelligent/spawn_pose", 1, true);
 
   setState(STATE_IDLE);
-  ROS_INFO("hardcoded_intelligent initialized. Waiting for /robot_identity and /color_sequence");
+  ROS_INFO(
+      "hardcoded_intelligent: aguarda /robot_identity e sequência em %s (wifi + pico após handshake).",
+      color_sequence_topic_.c_str());
 }
 
 void HardcodedIntelligentNode::loadValidNodeIds()
@@ -120,18 +124,22 @@ std::string HardcodedIntelligentNode::selectMangaKey(const std::string& color_se
   return "manga_1";
 }
 
-void HardcodedIntelligentNode::onColorSequence(const std_msgs::String::ConstPtr& msg)
+void HardcodedIntelligentNode::onMissionColorSequence(const std_msgs::String::ConstPtr& msg)
 {
-  HI_DBG("[hardcoded_intelligent] onColorSequence: \"%s\" (current robot_id_=%d)", msg->data.c_str(), robot_id_);
+  HI_DBG("[hardcoded_intelligent] onMissionColorSequence: \"%s\" (robot_id_=%d)", msg->data.c_str(), robot_id_);
   startMission(msg->data);
 }
 
 void HardcodedIntelligentNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& msg)
 {
+  const int new_id = msg->data;
   std::string replay;
   {
     std::lock_guard<std::mutex> lock(mtx_);
-    robot_id_ = msg->data;
+    if (robot_id_ == new_id && robot_id_ >= 0) {
+      return;
+    }
+    robot_id_ = new_id;
     ROS_INFO("Received robot identity: %d", robot_id_);
     replay = pending_color_sequence_;
     pending_color_sequence_.clear();
@@ -184,6 +192,11 @@ void HardcodedIntelligentNode::onWaitRelease(const std_msgs::Bool::ConstPtr& msg
 void HardcodedIntelligentNode::startMission(const std::string& color_sequence)
 {
   std::lock_guard<std::mutex> lock(mtx_);
+  if (state_ != STATE_IDLE && color_sequence == last_color_sequence_) {
+    ROS_WARN_THROTTLE(2.0,
+                      "[hardcoded_intelligent] Ignorando /color_sequence repetida durante missão ativa.");
+    return;
+  }
   if (robot_id_ < 0) {
     pending_color_sequence_ = color_sequence;
     HI_DBG("[hardcoded_intelligent] startMission: robot_id ainda < 0; sequência \"%s\" em fila",
@@ -198,6 +211,7 @@ void HardcodedIntelligentNode::startMission(const std::string& color_sequence)
   HI_DBG("[hardcoded_intelligent] startMission: robot_%d sequence=\"%s\" manga=%s", robot_id_,
          color_sequence.c_str(), manga_key.c_str());
   std::vector<MissionSegment> segments = buildMissionSegments(color_sequence, manga_key);
+
   if (segments.empty()) {
     ROS_WARN("No mission segments built for robot_%d.", robot_id_);
     setState(STATE_IDLE);
