@@ -7,6 +7,7 @@
 #include <std_msgs/Int32MultiArray.h>
 
 #include "planner.h"
+#include "warehouse_approach_topology.h"
 
 #include <string>
 #include <memory>
@@ -128,4 +129,6 @@ private:
 
     // Pickup plan counter
     int pickup_plan_count_;
+
+    WarehouseApproachTopology approach_topology_;
 };

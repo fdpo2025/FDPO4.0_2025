@@ -6,6 +6,7 @@
 #include <std_msgs/Int32MultiArray.h>
 
 #include "planner.h"
+#include "warehouse_approach_topology.h"
 
 #include <string>
 #include <memory>
@@ -27,4 +28,5 @@ private:
     std::unique_ptr<Planner> planner_;
     bool running_;
     std::unordered_set<int> warehouse_nodes_;
+    WarehouseApproachTopology approach_topology_;
 };

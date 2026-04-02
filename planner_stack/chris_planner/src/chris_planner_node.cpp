@@ -1,10 +1,13 @@
 #include "chris_planner_node.h"
 
+#include <ros/package.h>
 #include <yaml-cpp/yaml.h>
 
 ChrisPlannerNode::ChrisPlannerNode(ros::NodeHandle& nh)
     : nh_(nh)
     , running_(false)
+    , approach_topology_(ros::package::getPath("chris_planner") +
+                         "/files/inputs/warehouse_approach_topology.yaml")
 {
     std::string package_path = ros::package::getPath("chris_planner");
 
@@ -102,26 +105,16 @@ void ChrisPlannerNode::colorSequenceCallback(const std_msgs::String::ConstPtr& m
 
 std::vector<int> ChrisPlannerNode::resolveApproachSides(const std::vector<int>& path) const
 {
-    const auto& pm = planner_->factory.points_map;
-    constexpr double eps = 0.01;
-
     auto result = path;
     for (int idx = 0; idx < static_cast<int>(result.size()); ++idx) {
         if (!warehouse_nodes_.count(result[idx])) continue;
+        if (idx < 2) continue;
 
         int wh = result[idx];
-        double wh_x = pm.at(wh).first;
-        bool found = false;
-
-        for (int i = idx - 1; i >= 0; --i) {
-            double node_x = pm.at(result[i]).first;
-            if (std::abs(node_x - wh_x) > eps) {
-                result[idx] = (node_x > wh_x) ? wh : wh + 100;
-                found = true;
-                break;
-            }
-        }
-        if (!found) result[idx] = wh + 100;
+        int neighbor = result[idx - 1];
+        int pred = result[idx - 2];
+        bool right = approach_topology_.isRightApproach(wh, neighbor, pred);
+        result[idx] = right ? wh : wh + 100;
     }
     return result;
 }

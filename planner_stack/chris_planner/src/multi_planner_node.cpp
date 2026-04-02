@@ -12,6 +12,8 @@
 MultiPlannerNode::MultiPlannerNode(ros::NodeHandle& nh)
     : nh_(nh)
     , pickup_plan_count_(0)
+    , approach_topology_(ros::package::getPath("chris_planner") +
+                         "/files/inputs/warehouse_approach_topology.yaml")
 {
     std::string package_path = ros::package::getPath("chris_planner");
 
@@ -575,23 +577,16 @@ std::vector<int> MultiPlannerNode::extendPathWithPreviousNode(
 int MultiPlannerNode::determineApproachSideNode(
     const std::vector<int>& full_path, int warehouse_node) const
 {
-    const auto& pm = planner_->factory.points_map;
-    double wh_x = pm.at(warehouse_node).first;
-    constexpr double eps = 0.01;
-
     int wh_idx = -1;
     for (int i = static_cast<int>(full_path.size()) - 1; i >= 0; --i) {
         if (full_path[i] == warehouse_node) { wh_idx = i; break; }
     }
-    if (wh_idx < 0) return warehouse_node;
+    if (wh_idx < 2) return warehouse_node + 100;
 
-    for (int i = wh_idx - 1; i >= 0; --i) {
-        double node_x = pm.at(full_path[i]).first;
-        if (std::abs(node_x - wh_x) > eps) {
-            return (node_x > wh_x) ? warehouse_node : warehouse_node + 100;
-        }
-    }
-    return warehouse_node + 100;
+    int neighbor = full_path[wh_idx - 1];
+    int pred = full_path[wh_idx - 2];
+    bool right = approach_topology_.isRightApproach(warehouse_node, neighbor, pred);
+    return right ? warehouse_node : warehouse_node + 100;
 }
 
 // =====================================================================

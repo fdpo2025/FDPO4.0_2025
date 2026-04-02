@@ -27,6 +27,7 @@ set(PLANNER_LIB_SOURCES
   src/graph.cpp
   src/factory_model.cpp
   src/planner.cpp
+  src/warehouse_approach_topology.cpp
 )
 
 # chris_planner_node
