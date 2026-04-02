@@ -4,9 +4,10 @@
 ekf_params:
   # Initial pose in map frame
   initial_pose:
-    x: -0.695            # -695mm (left of center)
-    y: -0.355              # -355mm (below center)
-    theta: 1.5708        # 90° 
+    x: -0.695
+    y: -0.355
+    # Orientação inicial em radianos (qualquer ângulo válido; deve bater com o robô real e os balizos).
+    theta: 1.5708
   
   # Initial state covariance matrix P
   initial_covariance:

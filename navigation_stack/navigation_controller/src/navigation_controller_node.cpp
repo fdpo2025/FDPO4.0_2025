@@ -1,5 +1,6 @@
 #include "navigation_controller_node.h"
 #include <cmath>
+#include <limits>
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0),
 navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line),
@@ -130,6 +131,7 @@ void NavigationController::loadRouteFromParameters(){
         // Verificar se já estamos perto do primeiro waypoint (skip inicial)
         // Se line_progress >= switch_ratio, avançar para a próxima linha
         skipNearbyWaypoints();
+        maybeTrimRouteToNearestForwardPoint();
     }
     
     // Reset completion feedback flag quando nova rota é carregada
@@ -169,9 +171,10 @@ void NavigationController::loadNavigationParams() {
     nh.param("k_approaching", param.k_approaching, 10.0); // Ganho para controle angular no estado Approaching
     nh.param("gain_approaching_fwd", param.gain_approaching_fwd, 2.0); // Ganho forward para controle no estado Approaching
     nh.param("approaching_colinear_angle_rad", param.approaching_colinear_angle_rad, 0.087); // ~5°: linha reta até warehouse → sem Approaching
+    nh.param("route_trim_tol_m", param.route_trim_tol_m, 0.05); // Só faz trim se dist ao 1.º segmento >= isto
 
-    ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f", 
-             param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
+    ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f, route_trim_tol_m=%.3f", 
+             param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio, param.route_trim_tol_m);
 
 }
 
@@ -535,6 +538,95 @@ void NavigationController::skipNearbyWaypoints() {
         }
     }
     
+    updateDesiredPose();
+}
+
+double NavigationController::closestPointOnSegment(
+    double px, double py, double qx, double qy,
+    double rx, double ry,
+    double& out_cx, double& out_cy, double& out_t) const {
+    const double dx = qx - px;
+    const double dy = qy - py;
+    const double len2 = dx * dx + dy * dy;
+    if (len2 < 1e-12) {
+        out_cx = px;
+        out_cy = py;
+        out_t = 0.0;
+        return std::hypot(rx - px, ry - py);
+    }
+    double t = ((rx - px) * dx + (ry - py) * dy) / len2;
+    if (t < 0.0) t = 0.0;
+    else if (t > 1.0) t = 1.0;
+    out_t = t;
+    out_cx = px + t * dx;
+    out_cy = py + t * dy;
+    return std::hypot(rx - out_cx, ry - out_cy);
+}
+
+void NavigationController::maybeTrimRouteToNearestForwardPoint() {
+    if (route.empty()) return;
+
+    const double rx = poseCurr.x;
+    const double ry = poseCurr.y;
+
+    double c0x, c0y, t0;
+    const double d0 = closestPointOnSegment(
+        previousWaypoint.pose.x, previousWaypoint.pose.y,
+        route.front().pose.x, route.front().pose.y,
+        rx, ry, c0x, c0y, t0);
+    if (d0 < param.route_trim_tol_m) {
+        return;
+    }
+
+    constexpr double k_eps = 1e-6;
+    double best_d = std::numeric_limits<double>::infinity();
+    int best_k = -1;
+    double best_cx = 0.0, best_cy = 0.0, best_theta = 0.0;
+
+    const int nseg = static_cast<int>(route.size());
+    for (int k = 0; k < nseg; ++k) {
+        double pix, piy, pfx, pfy;
+        if (k == 0) {
+            pix = previousWaypoint.pose.x;
+            piy = previousWaypoint.pose.y;
+            pfx = route[0].pose.x;
+            pfy = route[0].pose.y;
+        } else {
+            pix = route[k - 1].pose.x;
+            piy = route[k - 1].pose.y;
+            pfx = route[k].pose.x;
+            pfy = route[k].pose.y;
+        }
+        double cx, cy, t_seg;
+        const double d = closestPointOnSegment(pix, piy, pfx, pfy, rx, ry, cx, cy, t_seg);
+        if (d < best_d - k_eps) {
+            best_d = d;
+            best_k = k;
+            best_cx = cx;
+            best_cy = cy;
+            best_theta = std::atan2(pfy - piy, pfx - pix);
+        } else if (std::abs(d - best_d) <= k_eps && k > best_k) {
+            best_k = k;
+            best_cx = cx;
+            best_cy = cy;
+            best_theta = std::atan2(pfy - piy, pfx - pix);
+        }
+    }
+
+    if (best_k < 0) return;
+
+    previousWaypoint.pose.x = best_cx;
+    previousWaypoint.pose.y = best_cy;
+    previousWaypoint.pose.theta = best_theta;
+    if (best_k > 0) {
+        for (int i = 0; i < best_k; ++i) {
+            route.pop_front();
+        }
+        ROS_INFO("Route trim: nearest forward segment k=%d (dist=%.3f m), popped %d waypoints",
+                 best_k, best_d, best_k);
+    } else {
+        ROS_INFO("Route trim: snapped to nearest point on first segment (dist=%.3f m)", best_d);
+    }
     updateDesiredPose();
 }
 
@@ -1271,6 +1363,7 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
         
         // Verificar se já estamos perto do primeiro waypoint (skip inicial)
         skipNearbyWaypoints();
+        maybeTrimRouteToNearestForwardPoint();
     }
     
     // Publicar linhas de visualização

@@ -41,7 +41,8 @@ private:
 
   bool loadMissions();
   std::string selectMangaKey(const std::string& color_sequence) const;
-  std::vector<MissionSegment> buildMissionSegments(const std::string& color_sequence) const;
+  std::vector<MissionSegment> buildMissionSegments(const std::string& color_sequence,
+                                                  const std::string& manga_key) const;
   std::vector<int> resolveMissionLeg(const XmlRpc::XmlRpcValue& leg, const std::string& color_sequence,
                                      const XmlRpc::XmlRpcValue& manga_cfg) const;
   int resolveColorToInputNode(char color, const std::string& color_sequence, std::map<char, int>& local_color_claim_counter,
@@ -62,7 +63,8 @@ private:
 
   bool validatePath(const std::vector<int>& path) const;
   void loadValidNodeIds();
-  void publishSpawnPoseForRobot();
+  void publishSpawnPose(const std::string& manga_key);
+  void publishRadioWakeRequest(int wait_topic_value);
   bool tryReadDouble(const XmlRpc::XmlRpcValue& v, double& out) const;
 
   ros::NodeHandle nh_;
@@ -81,7 +83,6 @@ private:
   std::deque<MissionSegment> pending_segments_;
   std::vector<int> active_segment_nodes_;
   std::string last_color_sequence_;
-  /// Se /color_sequence chegar antes de /robot_identity, guarda aqui e inicia missão ao receber ID.
   std::string pending_color_sequence_;
   int active_segment_feedback_count_ = 0;
   int robot_id_ = -1;

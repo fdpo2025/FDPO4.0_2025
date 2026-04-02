@@ -106,6 +106,7 @@ class NavigationController {
             double k_approaching;              // Gain for angular control in Approaching state
             double gain_approaching_fwd;         // Forward gain for control in Approaching state
             double approaching_colinear_angle_rad;  // Se |Δθ| entre linha atual e pf→warehouse < isto, não entra em Approaching
+            double route_trim_tol_m;  // Se dist ao 1.º segmento < isto, não faz trim (comportamento idêntico)
 
         };
 
@@ -166,6 +167,11 @@ class NavigationController {
         ros::Time pick_box_forward_start_time;
         bool in_pick_box_forward;  // Se está no estado de andar para frente após pick
         void skipNearbyWaypoints();  // Skip waypoints se já estamos perto deles
+        /** Ponto mais próximo na polilinha sem “recuar” na ordem (empate → segmento mais à frente). */
+        double closestPointOnSegment(double px, double py, double qx, double qy,
+                                     double rx, double ry,
+                                     double& out_cx, double& out_cy, double& out_t) const;
+        void maybeTrimRouteToNearestForwardPoint();
 
         ros::Timer controlTimer;
         void navigationFsmRunner(const ros::TimerEvent&);

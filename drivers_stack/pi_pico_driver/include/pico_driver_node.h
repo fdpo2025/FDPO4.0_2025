@@ -41,7 +41,6 @@ namespace Communication {
             int final_node;
             int status;
             int wait_target;
-            std::string path_csv;
 
         };
 
@@ -110,11 +109,11 @@ class PiPicoDriver {
         void pubOdom();
 
         int robot_id_ = -1;
+        bool identity_logged_once_{false};
         bool wait_release_pending_ = false;
         std::vector<int> active_path_nodes_;
         size_t active_path_index_ = 0;
         void updateMotionStatus();
-        std::string buildPathCsv(const std::vector<int>& path) const;
         void tryReadBootIdentity();
         bool decodeIdentityLine(const std::string& line, int& out_id) const;
         bool tryParseEmbeddedRobotId(const std::string& msg, int& out_id) const;
@@ -123,5 +122,6 @@ class PiPicoDriver {
         tf::TransformBroadcaster tf_broadcaster;
 
         bool debug_identity_{false};
+        bool debug_radio_{false};
 
 };

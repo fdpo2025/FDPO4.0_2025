@@ -3,7 +3,8 @@
   <!-- Argumento para escolher o driver de LiDAR: "hlds" ou "ydlidar" -->
   <arg name="lidar_driver" default="ydlidar"/>
   <arg name="debug_pico_comm" default="false" doc="Enable Pi4-Pico communication debug logs"/>
-  <arg name="debug_pico_identity" default="true" doc="Extra logs e parsing , ID: em POS (handshake)"/>
+  <arg name="debug_pico_identity" default="true" doc="Logs /robot_identity (ID no POS)"/>
+  <arg name="debug_pico_radio" default="true" doc="Logs waits e /radio_wait_target"/>
 
   <!-- Driver do LiDAR (seleção automática HLS-LFCD2 ou YDLidar X4) -->
   <include file="$(find conf)/launch/hardware/lidar_selector.launch">
@@ -14,6 +15,7 @@
   <include file="$(find conf)/launch/hardware/pi_pico_driver.launch">
     <arg name="debug_comm" value="$(arg debug_pico_comm)"/>
     <arg name="debug_identity" value="$(arg debug_pico_identity)"/>
+    <arg name="debug_radio" value="$(arg debug_pico_radio)"/>
   </include>
   
 </launch>

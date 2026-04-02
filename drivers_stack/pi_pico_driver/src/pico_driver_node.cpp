@@ -12,8 +12,7 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   messageToSend.final_node = 0;
   messageToSend.status = 0;
   messageToSend.wait_target = -2;
-  messageToSend.path_csv = "";
-  
+
   messageToReceive.odom_pos.x = 0.0;
   messageToReceive.odom_pos.y = 0.0;
   messageToReceive.odom_pos.theta = 0.0;
@@ -39,11 +38,11 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   nh.param<std::string>("serial_port", serial_port, "/dev/ttyACM0");
   nh.param("debug_comm", debug_comm_, false);  // Por padrão, logs desativados
   nh.param("debug_identity", debug_identity_, false);
+  nh.param("debug_radio", debug_radio_, false);
 
   ROS_INFO("[PiPicoDriver] Usando porta serial: %s", serial_port.c_str());
-  ROS_INFO("[PiPicoDriver] Debug communication logs: %s", debug_comm_ ? "ENABLED" : "DISABLED");
-  ROS_INFO("[PiPicoDriver] Debug identity (handshake /robot_identity): %s",
-           debug_identity_ ? "ENABLED" : "DISABLED");
+  ROS_INFO("[PiPicoDriver] debug_comm=%s debug_identity=%s debug_radio=%s",
+           debug_comm_ ? "on" : "off", debug_identity_ ? "on" : "off", debug_radio_ ? "on" : "off");
   
   serial_fd_ = -1;
   startSerial(serial_port);
@@ -119,7 +118,6 @@ void PiPicoDriver::plannedPathCallBack(const std_msgs::Int32MultiArray::ConstPtr
   active_path_index_ = 0;
   messageToSend.cp = active_path_nodes_.front();
   messageToSend.final_node = active_path_nodes_.back();
-  messageToSend.path_csv = buildPathCsv(active_path_nodes_);
 }
 
 void PiPicoDriver::navFeedbackCallBack(const plan_handler::CompletionFeedback::ConstPtr&) {
@@ -134,8 +132,23 @@ void PiPicoDriver::navFeedbackCallBack(const plan_handler::CompletionFeedback::C
 }
 
 void PiPicoDriver::radioWaitTargetCallBack(const std_msgs::Int32::ConstPtr& msg) {
-  messageToSend.wait_target = msg->data;
+  const int waiter = msg->data;
+  /* waiter = robô que está em espera; ele não envia o seu próprio wake no rádio. */
+  if (waiter >= 0 && waiter == robot_id_) {
+    if (debug_radio_) {
+      ROS_INFO_THROTTLE(2.0, "[PiPicoDriver] /radio_wait_target=%d (waiter): este nó não transmite", waiter);
+    }
+    return;
+  }
+  if (waiter < -1) {
+    ROS_WARN_THROTTLE(5.0, "[PiPicoDriver] /radio_wait_target inválido: %d", waiter);
+    return;
+  }
+  messageToSend.wait_target = waiter;
   wait_release_pending_ = true;
+  if (debug_radio_) {
+    ROS_INFO("[PiPicoDriver] /radio_wait_target=%d (meu id=%d) -> WAITTO na série", waiter, robot_id_);
+  }
 }
 
 void PiPicoDriver::pubOdom() {
@@ -217,9 +230,6 @@ std::string PiPicoDriver::syncCall(const std::string& cmd, int timeout_ms) {
 void PiPicoDriver::decodeMsg(const std::string& msg) {
   int parsed_id = -1;
   if (decodeIdentityLine(msg, parsed_id)) {
-    if (debug_identity_) {
-      ROS_INFO("[PiPicoDriver] decodeMsg: linha dedicada ID: -> %d", parsed_id);
-    }
     applyRobotIdentity(parsed_id);
     return;
   }
@@ -235,21 +245,21 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
     int wait_release = 0;
     int n = std::sscanf(
       pos_part.c_str(),
-      "POS: %lf, %lf, %lf, V: %lf, W: %lf, WAIT: %d",
-      &x, &y, &theta, &v, &w, &wait_release
+      "POS: %lf, %lf, %lf, V: %lf, W: %lf",
+      &x, &y, &theta, &v, &w
     );
+    size_t wait_key = msg.find(", WAIT:");
+    if (wait_key != std::string::npos) {
+      std::sscanf(msg.c_str() + wait_key, ", WAIT: %d", &wait_release);
+    }
 
     if (n >= 5) {
       int emb_id = -1;
       if (tryParseEmbeddedRobotId(msg, emb_id)) {
-        if (debug_identity_) {
-          ROS_INFO_THROTTLE(2.0, "[PiPicoDriver] POS line includes embedded , ID: %d", emb_id);
-        }
         applyRobotIdentity(emb_id);
       } else if (robot_id_ < 0 && debug_identity_) {
-        ROS_WARN_THROTTLE(5.0,
-                          "[PiPicoDriver] POS sem campo ', ID:' e robot_id ainda < 0 "
-                          "(atualiza firmware com ID no POS ou verifica boot ID:). Msg: %.120s",
+        ROS_WARN_THROTTLE(10.0,
+                          "[PiPicoDriver] POS sem ', ID:' e id desconhecido (msg truncada): %.80s",
                           msg.c_str());
       }
 
@@ -257,7 +267,10 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
       messageToReceive.v_linear = v;
       messageToReceive.w_angular = w;
       pubOdom();
-      if (n == 6 && wait_release != 0) {
+      if (wait_release != 0) {
+        if (debug_radio_) {
+          ROS_INFO("[PiPicoDriver] POS WAIT:%d -> /radio_wait_release", wait_release);
+        }
         std_msgs::Bool wait_msg;
         wait_msg.data = true;
         radioWaitReleasePub.publish(wait_msg);
@@ -293,12 +306,14 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
                     " CP:" + std::to_string(messageToSend.cp) +
                     " FINAL:" + std::to_string(messageToSend.final_node) +
                     " STATUS:" + std::to_string(messageToSend.status) +
-                    " WAITTO:" + std::to_string(wait_release_pending_ ? messageToSend.wait_target : -2) +
-                    " PATH:" + messageToSend.path_csv;
+                    " WAITTO:" + std::to_string(wait_release_pending_ ? messageToSend.wait_target : -2);
 
   // 2) Send and Wait for response
   if (debug_comm_) {
     ROS_INFO("[PiPicoDriver] Pi4 -> Pico CMD: %s", cmd.c_str());
+  }
+  if (debug_radio_ && wait_release_pending_) {
+    ROS_INFO_THROTTLE(0.5, "[PiPicoDriver] enviando CMD com WAITTO=%d", messageToSend.wait_target);
   }
 
   std::string resp = syncCall(cmd, 50);
@@ -307,7 +322,7 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
     ROS_INFO("[PiPicoDriver] Pico -> Pi4 linha (primeira): %s", resp.c_str());
     ROS_INFO("[PiPicoDriver] --- fim tick ---");
   }
-  
+
   if (resp.empty()) {
     con_state.missed++;
     if (con_state.missed >= 2) {
@@ -327,17 +342,6 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
 void PiPicoDriver::updateMotionStatus() {
   const bool moving = (std::abs(messageToSend.v_d) > 1e-4) || (std::abs(messageToSend.w_d) > 1e-4);
   messageToSend.status = moving ? 1 : 0;
-}
-
-std::string PiPicoDriver::buildPathCsv(const std::vector<int>& path) const {
-  std::ostringstream ss;
-  for (size_t i = 0; i < path.size(); ++i) {
-    if (i != 0) {
-      ss << ",";
-    }
-    ss << path[i];
-  }
-  return ss.str();
 }
 
 void PiPicoDriver::tryReadBootIdentity() {
@@ -364,7 +368,6 @@ void PiPicoDriver::tryReadBootIdentity() {
       int id = -1;
       if (decodeIdentityLine(line, id)) {
         applyRobotIdentity(id);
-        ROS_INFO("[PiPicoDriver] Boot window: handshake ID: capturado = %d", robot_id_);
         return;
       }
       response.erase(0, newline_pos + 1);
@@ -372,8 +375,7 @@ void PiPicoDriver::tryReadBootIdentity() {
     }
   }
   if (robot_id_ < 0) {
-    ROS_WARN("[PiPicoDriver] tryReadBootIdentity: nenhuma linha \"ID:n\" nos primeiros 2s. "
-             "O ID virá do campo \", ID: n\" na resposta POS (firmware atualizado) ou repõe o Pico.");
+    ROS_WARN_THROTTLE(30.0, "[PiPicoDriver] sem ID: no boot (usa-se , ID: na POS).");
   }
 }
 
@@ -424,14 +426,12 @@ void PiPicoDriver::applyRobotIdentity(int id) {
   if (id < 0) {
     return;
   }
-  const bool changed = (robot_id_ != id);
   robot_id_ = id;
   std_msgs::Int32 id_msg;
   id_msg.data = robot_id_;
   robotIdPub.publish(id_msg);
-  if (changed) {
-    ROS_INFO("[PiPicoDriver] /robot_identity publicado: %d", robot_id_);
-  } else if (debug_identity_) {
-    ROS_DEBUG_THROTTLE(5.0, "[PiPicoDriver] ID reconfirmado: %d", robot_id_);
+  if (!identity_logged_once_) {
+    ROS_INFO("[PiPicoDriver] robot_identity=%d (publicado em /robot_identity)", robot_id_);
+    identity_logged_once_ = true;
   }
 }

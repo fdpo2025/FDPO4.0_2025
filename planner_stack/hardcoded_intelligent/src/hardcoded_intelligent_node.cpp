@@ -39,9 +39,6 @@ HardcodedIntelligentNode::HardcodedIntelligentNode(ros::NodeHandle& nh)
 
   setState(STATE_IDLE);
   ROS_INFO("hardcoded_intelligent initialized. Waiting for /robot_identity and /color_sequence");
-  HI_DBG("[hardcoded_intelligent] subs: /color_sequence, /robot_identity, /nav_completion_feedback, "
-         "/radio_wait_release; pubs: /planned_paths, /hardcoded_intelligent/state, "
-         "/radio_wait_target, /hardcoded_intelligent/spawn_pose");
 }
 
 void HardcodedIntelligentNode::loadValidNodeIds()
@@ -73,7 +70,6 @@ bool HardcodedIntelligentNode::loadMissions()
   }
 
   ROS_INFO("Missions loaded (manga_1 / manga_2 / manga_3).");
-  HI_DBG("[hardcoded_intelligent] loadMissions: ok (robot_spawns opcional em missions.*)");
   return true;
 }
 
@@ -137,8 +133,6 @@ void HardcodedIntelligentNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& 
     std::lock_guard<std::mutex> lock(mtx_);
     robot_id_ = msg->data;
     ROS_INFO("Received robot identity: %d", robot_id_);
-    HI_DBG("[hardcoded_intelligent] onRobotIdentity: aplicado robot_id_=%d", robot_id_);
-    publishSpawnPoseForRobot();
     replay = pending_color_sequence_;
     pending_color_sequence_.clear();
   }
@@ -153,6 +147,9 @@ void HardcodedIntelligentNode::onNavigationFeedback(const plan_handler::Completi
 {
   std::lock_guard<std::mutex> lock(mtx_);
   if (state_ != STATE_NAVIGATING || active_segment_nodes_.size() < 2) {
+    ROS_INFO_THROTTLE(3.0,
+                      "[hardcoded_intelligent] nav_feedback ignorado: state=%d segment_nodes=%zu",
+                      static_cast<int>(state_), active_segment_nodes_.size());
     return;
   }
 
@@ -170,7 +167,9 @@ void HardcodedIntelligentNode::onNavigationFeedback(const plan_handler::Completi
 void HardcodedIntelligentNode::onWaitRelease(const std_msgs::Bool::ConstPtr& msg)
 {
   std::lock_guard<std::mutex> lock(mtx_);
-  HI_DBG("[hardcoded_intelligent] onWaitRelease: data=%d state=%d", msg->data ? 1 : 0, static_cast<int>(state_));
+  ROS_INFO_THROTTLE(0.5, "[hardcoded_intelligent] /radio_wait_release data=%d state=%s",
+                    msg->data ? 1 : 0,
+                    state_ == STATE_IDLE ? "IDLE" : (state_ == STATE_NAVIGATING ? "NAV" : "WAIT"));
   if (state_ != STATE_WAITING || !msg->data) {
     return;
   }
@@ -194,8 +193,11 @@ void HardcodedIntelligentNode::startMission(const std::string& color_sequence)
   }
   pending_color_sequence_.clear();
   last_color_sequence_ = color_sequence;
-  HI_DBG("[hardcoded_intelligent] startMission: robot_%d sequence=\"%s\"", robot_id_, color_sequence.c_str());
-  std::vector<MissionSegment> segments = buildMissionSegments(color_sequence);
+  const std::string manga_key = selectMangaKey(color_sequence);
+  publishSpawnPose(manga_key);
+  HI_DBG("[hardcoded_intelligent] startMission: robot_%d sequence=\"%s\" manga=%s", robot_id_,
+         color_sequence.c_str(), manga_key.c_str());
+  std::vector<MissionSegment> segments = buildMissionSegments(color_sequence, manga_key);
   if (segments.empty()) {
     ROS_WARN("No mission segments built for robot_%d.", robot_id_);
     setState(STATE_IDLE);
@@ -219,6 +221,12 @@ void HardcodedIntelligentNode::publishCurrentSegment()
 
   const MissionSegment current = pending_segments_.front();
   pending_segments_.pop_front();
+
+  if (current.nodes.empty() && current.wait_after) {
+    setState(STATE_WAITING);
+    publishRadioWakeRequest(robot_id_);
+    return;
+  }
 
   if (!validatePath(current.nodes)) {
     ROS_ERROR("Mission segment has invalid nodes. Segment skipped.");
@@ -245,10 +253,10 @@ void HardcodedIntelligentNode::publishCurrentSegment()
   }
 
   if (current.notify_robot_id != -2) {
-    std_msgs::Int32 msg;
-    msg.data = current.notify_robot_id;
-    radio_wait_target_pub_.publish(msg);
-    ROS_INFO("Published wait-release message target: %d", current.notify_robot_id);
+    const int topic_val = (current.notify_robot_id == -1) ? -1 : robot_id_;
+    publishRadioWakeRequest(topic_val);
+    HI_DBG("[hardcoded_intelligent] MSG no segmento (YAML id=%d) -> tópico %d", current.notify_robot_id,
+           topic_val);
   }
 
   ROS_INFO("Published mission segment with %zu nodes.", active_segment_nodes_.size());
@@ -261,6 +269,7 @@ void HardcodedIntelligentNode::advanceStateMachineAfterSegment()
   if (!pending_segments_.empty() && pending_segments_.front().nodes.empty() && pending_segments_.front().wait_after) {
     pending_segments_.pop_front();
     setState(STATE_WAITING);
+    publishRadioWakeRequest(robot_id_);
     HI_DBG("[hardcoded_intelligent] -> STATE_WAITING (marcador wait)");
     return;
   }
@@ -289,14 +298,14 @@ void HardcodedIntelligentNode::setState(MissionState new_state)
   HI_DBG("[hardcoded_intelligent] setState -> %s", msg.data.c_str());
 }
 
-std::vector<HardcodedIntelligentNode::MissionSegment> HardcodedIntelligentNode::buildMissionSegments(const std::string& color_sequence) const
+std::vector<HardcodedIntelligentNode::MissionSegment> HardcodedIntelligentNode::buildMissionSegments(
+    const std::string& color_sequence, const std::string& manga_key) const
 {
   std::vector<MissionSegment> result;
   if (!missions_root_.valid()) {
     return result;
   }
 
-  const std::string manga_key = selectMangaKey(color_sequence);
   ROS_INFO("Mission manga selected: %s (color_sequence=%s)", manga_key.c_str(), color_sequence.c_str());
   HI_DBG("[hardcoded_intelligent] buildMissionSegments: manga=%s robot_%d", manga_key.c_str(), robot_id_);
 
@@ -338,6 +347,10 @@ std::vector<HardcodedIntelligentNode::MissionSegment> HardcodedIntelligentNode::
           segment.wait_after = true;
           result.push_back(segment);
           segment = MissionSegment();
+        } else {
+          MissionSegment lead_wait;
+          lead_wait.wait_after = true;
+          result.push_back(lead_wait);
         }
       } else if (leg_nodes[idx] <= -1000) {
         if (!segment.nodes.empty()) {
@@ -666,31 +679,39 @@ bool HardcodedIntelligentNode::tryReadDouble(const XmlRpc::XmlRpcValue& v, doubl
   return false;
 }
 
-void HardcodedIntelligentNode::publishSpawnPoseForRobot()
+void HardcodedIntelligentNode::publishRadioWakeRequest(int wait_topic_value)
 {
-  if (robot_id_ < 0) {
-    HI_DBG("[hardcoded_intelligent] publishSpawnPoseForRobot: skip (robot_id_ < 0)");
-    return;
-  }
-  if (!missions_root_.hasMember("robot_spawns")) {
-    HI_DBG("[hardcoded_intelligent] publishSpawnPoseForRobot: sem robot_spawns no YAML");
+  std_msgs::Int32 m;
+  m.data = wait_topic_value;
+  radio_wait_target_pub_.publish(m);
+  ROS_INFO("[hardcoded_intelligent] /radio_wait_target %d (este nó robot_id=%d)", wait_topic_value, robot_id_);
+}
+
+void HardcodedIntelligentNode::publishSpawnPose(const std::string& manga_key)
+{
+  if (robot_id_ < 0 || !missions_root_.valid() || !missions_root_.hasMember(manga_key)) {
     return;
   }
 
-  const XmlRpc::XmlRpcValue& spawns = missions_root_["robot_spawns"];
+  const XmlRpc::XmlRpcValue& manga_cfg = missions_root_[manga_key];
+  if (!manga_cfg.hasMember("robot_spawns")) {
+    return;
+  }
+
+  const XmlRpc::XmlRpcValue& spawns = manga_cfg["robot_spawns"];
   if (spawns.getType() != XmlRpc::XmlRpcValue::TypeStruct) {
     return;
   }
 
   const std::string key = "robot_" + std::to_string(robot_id_);
   if (!spawns.hasMember(key)) {
-    ROS_WARN_ONCE("missions.yaml has no robot_spawns entry for %s; skipping spawn pose publish.", key.c_str());
+    ROS_WARN_ONCE("missions: %s.robot_spawns sem %s", manga_key.c_str(), key.c_str());
     return;
   }
 
   const XmlRpc::XmlRpcValue& entry = spawns[key];
   if (entry.getType() != XmlRpc::XmlRpcValue::TypeStruct) {
-    ROS_WARN("robot_spawns.%s must be a map with x, y, theta.", key.c_str());
+    ROS_WARN("%s.robot_spawns.%s: esperado mapa x,y,theta.", manga_key.c_str(), key.c_str());
     return;
   }
 
@@ -698,15 +719,15 @@ void HardcodedIntelligentNode::publishSpawnPoseForRobot()
   double y = 0.0;
   double theta = 0.0;
   if (!entry.hasMember("x") || !tryReadDouble(entry["x"], x)) {
-    ROS_WARN("robot_spawns.%s: missing or invalid x.", key.c_str());
+    ROS_WARN("%s.robot_spawns.%s: x inválido.", manga_key.c_str(), key.c_str());
     return;
   }
   if (!entry.hasMember("y") || !tryReadDouble(entry["y"], y)) {
-    ROS_WARN("robot_spawns.%s: missing or invalid y.", key.c_str());
+    ROS_WARN("%s.robot_spawns.%s: y inválido.", manga_key.c_str(), key.c_str());
     return;
   }
   if (!entry.hasMember("theta") || !tryReadDouble(entry["theta"], theta)) {
-    ROS_WARN("robot_spawns.%s: missing or invalid theta.", key.c_str());
+    ROS_WARN("%s.robot_spawns.%s: theta inválido.", manga_key.c_str(), key.c_str());
     return;
   }
 
@@ -723,6 +744,6 @@ void HardcodedIntelligentNode::publishSpawnPoseForRobot()
   ps.pose.orientation.w = std::cos(half);
 
   spawn_pose_pub_.publish(ps);
-  ROS_INFO("Published spawn pose for %s: x=%.4f y=%.4f theta=%.4f (frame map)", key.c_str(), x, y, theta);
-  HI_DBG("[hardcoded_intelligent] spawn_pose topic=/hardcoded_intelligent/spawn_pose frame=map");
+  ROS_INFO("[hardcoded_intelligent] spawn_pose %s %s: x=%.3f y=%.3f th=%.3f rad", manga_key.c_str(),
+           key.c_str(), x, y, theta);
 }

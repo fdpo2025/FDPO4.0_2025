@@ -3,13 +3,15 @@
     <arg name="serial_port" default="/dev/ttyACM0"/>
     <arg name="baud_rate"  default="115200"/>
     <arg name="debug_comm" default="true" doc="Enable/disable communication debug logs"/>
-    <arg name="debug_identity" default="true" doc="Logs extra para handshake /robot_identity (ID no POS)"/>
+    <arg name="debug_identity" default="true" doc="Logs extra para /robot_identity (ID no POS)"/>
+    <arg name="debug_radio" default="true" doc="Logs WAIT/radio_wait_target na série"/>
 
     <node pkg="pi_pico_driver" type="pico_driver_node" name="pico_driver_node" output="screen">
         <param name="serial_port" value="$(arg serial_port)"/>
         <param name="baud_rate"   value="$(arg baud_rate)"/>
         <param name="debug_comm"  value="$(arg debug_comm)"/>
         <param name="debug_identity" value="$(arg debug_identity)"/>
+        <param name="debug_radio" value="$(arg debug_radio)"/>
     </node>
 
 </launch>
