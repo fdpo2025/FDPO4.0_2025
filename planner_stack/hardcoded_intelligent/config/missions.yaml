@@ -1,31 +1,21 @@
-# Manga escolhida automaticamente a partir de /color_sequence:
-#   manga_3 : aparecem R, G e B
-#   manga_2 : aparecem B e G (e nao manga_3)
-#   manga_1 : apenas B em todas as posicoes
-#
-# Cores no armazem: R/G/B ou R_W/G_W/B_W (wait no pick antes de voltar ao no de aproximacao).
-#
-# robot_spawns: pose inicial em map (metros, theta em radianos) por robot_id (0 ou 1).
-# Publicado em /hardcoded_intelligent/spawn_pose quando chega /robot_identity.
-# O EKF continua a ler ekf_params/initial_pose no arranque do localizer; mantém estes
-# valores alinhados com conf/launch/navigation/localizer/ekf_params.yaml por robô.
+# manga: robot_spawns por robô (map frame, metros, theta rad) + targets
+# Cores: R/G/B ou R_W/G_W/B_W (espera no pick). W / MSG_* conforme missão.
 
 missions:
-  robot_spawns:
-    robot_0:
-      x: -0.695
-      y: -0.355
-      theta: 1.5708
-    robot_1:
-      x: -0.52
-      y: -0.355
-      theta: 0.0
-#    robot_2:
-#      x: -0.695
-#      y: -0.355
-#      theta: 1.5708
-
   manga_1:
+    robot_spawns:
+      robot_0:
+        x: -0.775
+        y: -0.305
+        theta: 1.5708
+      robot_1:
+        x: -0.63
+        y: -0.405
+        theta: 1.5708
+      #robot_2:
+      #  x: -0.49
+      #  y: -0.500
+      #  theta: 1.5708
     robot_0:
       targets:
         - [31, 16, "MSG_1", "B", 11, "MSG_1", 27, 28, 36]
@@ -38,6 +28,19 @@ missions:
         - [13, 12, 4, 7, 15, 14, "W", 15, 30, 38]
 
   manga_2:
+    robot_spawns:
+      robot_0:
+        x: -0.775
+        y: -0.305
+        theta: 1.5708
+      robot_1:
+        x: -0.63
+        y: -0.405
+        theta: 1.5708
+      #robot_2:
+      #  x: -0.49
+      #  y: -0.500
+      #  theta: 1.5708
     robot_0:
       targets:
         - [31, 16, "MSG_1", "B", 11, "MSG_1", 27, 28, 36]
@@ -50,6 +53,19 @@ missions:
         - [13, 12, 4, 7, 15, 14, "W", 15, 30, 38]
 
   manga_3:
+    robot_spawns:
+      robot_0:
+        x: -0.695
+        y: -0.355
+        theta: 1.5708
+      robot_1:
+        x: -0.488
+        y: -0.355
+        theta: 0.0
+      #robot_2:
+      #  x: -0.488
+      #  y: -0.5
+      #  theta: 0.0
     robot_0:
       targets:
         - [31, 16, "MSG_1", "B", 11, "MSG_1", 27, 28, 36]
