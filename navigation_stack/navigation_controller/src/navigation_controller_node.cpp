@@ -700,7 +700,10 @@ void NavigationController::followLine() {
     double k1_eff = k1_virtual;
     double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
 
-    publishVirtualLineMarker(line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y);
+    if (++virtual_marker_tick_ >= 6) {
+        virtual_marker_tick_ = 0;
+        publishVirtualLineMarker(line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y);
+    }
 
     followLineFsm.update_tis();
     
@@ -798,7 +801,7 @@ void NavigationController::followLine() {
 
     const char* state_str = (followLineFsm.state == navigation::followLineStates::Follow_Line) ? "Follow_Line" :
                            (followLineFsm.state == navigation::followLineStates::Approaching) ? "Approaching" : "Approaching_PickDrop";
-    ROS_INFO("[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s | dist_da=%.3f", 
+    ROS_INFO_THROTTLE(1.0, "[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s | dist_da=%.3f", 
              line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y, 
              line_progress * 100, error_dist, state_str, param.dist_da);
 
@@ -940,7 +943,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         double elapsed_time = (ros::Time::now() - pick_box_forward_start_time).toSec();
-        ROS_WARN("pickboxforward state: elapsed time = %.2f seconds", elapsed_time);
+        ROS_WARN_THROTTLE(1.0, "pickboxforward state: elapsed time = %.2f seconds", elapsed_time);
         if (elapsed_time >= 0.7) {
             in_pick_box_forward = false;
             if (!route.empty()) {

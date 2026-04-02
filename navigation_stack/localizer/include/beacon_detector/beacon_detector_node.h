@@ -67,6 +67,10 @@ class BeaconDetector {
 		tf2_ros::TransformListener *tf_listener;
         sensor_msgs::PointCloud2 pointCloud;
 
+        double dbscan_eps_;
+        int dbscan_min_points_;
+        laser_geometry::LaserProjection laser_projector_;
+
         ros::Subscriber sensorDataSub;
         ros::Subscriber pointCloudSub;
         

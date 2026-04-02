@@ -28,7 +28,6 @@ private:
     double w {0.0};
 
     ros::Subscriber cloud_sub;
-    sensor_msgs::PointCloud point_cloud_distorted;
     void getLaserScan(const sensor_msgs::PointCloud::ConstPtr& msg);
 
     ros::Subscriber scan_freq_sub;

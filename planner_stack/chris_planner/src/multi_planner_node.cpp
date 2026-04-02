@@ -151,7 +151,9 @@ void MultiPlannerNode::robot2NodeCb(const std_msgs::UInt32::ConstPtr& msg)
 State MultiPlannerNode::buildState(const std::string& robot_id) const
 {
     const auto& r = robots_.at(robot_id);
-    return {r.node, r.box, boxes_};
+    State s{r.node, r.box, boxes_};
+    s.recomputeHash();
+    return s;
 }
 
 // =====================================================================
@@ -405,7 +407,8 @@ void MultiPlannerNode::goalReached(const std::string& robot_id)
     ROS_INFO("%s reached goal %d with task_type=%s", robot_id.c_str(), goal, task_type.c_str());
 
     if (task_type == "pickup" || task_type == "dropoff") {
-        State state = {r.node, r.box, boxes_};
+        State state{r.node, r.box, boxes_};
+        state.recomputeHash();
         publishStateSnapshot(robot_id, "before " + task_type + " update", state);
         ROS_WARN("[%s] BEFORE %s update: goal=%d", robot_id.c_str(), task_type.c_str(), goal);
 
@@ -503,9 +506,7 @@ std::vector<int> MultiPlannerNode::compactExistingPath(const std::vector<int>& p
         return std::abs(ax * by - ay * bx) / denom < 0.001;
     };
 
-    std::unordered_set<int> special_set(
-        planner_->factory.special_nodes.begin(),
-        planner_->factory.special_nodes.end());
+    const auto& special_set = planner_->factory.special_set;
 
     std::vector<int> compact = {path[0]};
     int i = 1;
@@ -535,12 +536,8 @@ double MultiPlannerNode::pathCost(const std::vector<int>& path) const
 {
     if (path.size() < 2) return 0.0;
     double total = 0.0;
-    for (int i = 0; i < static_cast<int>(path.size()) - 1; ++i) {
-        int u = path[i], v = path[i + 1];
-        for (auto& [neigh, w] : planner_->factory.graph.neighbors(u)) {
-            if (neigh == v) { total += w; break; }
-        }
-    }
+    for (int i = 0; i < static_cast<int>(path.size()) - 1; ++i)
+        total += planner_->factory.graph.distance(path[i], path[i + 1]);
     return total;
 }
 

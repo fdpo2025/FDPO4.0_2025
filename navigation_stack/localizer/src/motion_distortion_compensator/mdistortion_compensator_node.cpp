@@ -41,15 +41,11 @@ void Distortion_Compensator_Node::updateScanFrequency(
 void Distortion_Compensator_Node::getLaserScan(
     const sensor_msgs::PointCloud::ConstPtr& msg) {
 
-    point_cloud_distorted = *msg;
-    point_cloud_compensated = *msg;
-
-    const std::size_t n_points = point_cloud_distorted.points.size();
+    const std::size_t n_points = msg->points.size();
     if (n_points == 0) {
-        cloud_pub.publish(point_cloud_compensated);
+        cloud_pub.publish(*msg);
         return;
     }
-    // dt between two consecutive points: T_scan/N (equally spaced samples in one rotation)
     const double dt_point = (scan_freq_hz_ > 0.0)
         ? (1.0 / scan_freq_hz_) / static_cast<double>(n_points)
         : 0.0;
@@ -58,18 +54,18 @@ void Distortion_Compensator_Node::getLaserScan(
         return;
     }
 
+    point_cloud_compensated = *msg;
+
     const double w_tol = 1e-6;
 
     for (std::size_t i = 0; i < n_points; ++i) {
         const double ti = dt_point * static_cast<double>(i);
 
-        // assuming w and v static during one scan
         double theta_i;
         double x_i;
         double y_i;
 
         if (std::fabs(w) < w_tol) {
-            // w~0: movement almost straight
             theta_i = 0.0;
             x_i = v * ti;
             y_i = 0.0;
@@ -79,13 +75,12 @@ void Distortion_Compensator_Node::getLaserScan(
             y_i = (v / w) * (1.0 - std::cos(theta_i));
         }
 
-        const double x_Li_i = point_cloud_distorted.points[i].x;
-        const double y_Li_i = point_cloud_distorted.points[i].y;
+        const double x_Li_i = msg->points[i].x;
+        const double y_Li_i = msg->points[i].y;
 
         const double cos_th = std::cos(theta_i);
         const double sin_th = std::sin(theta_i);
 
-        // Transform point from frame_ti to frame_0: P_0 = R(theta_i)*P_ti + T_i
         const double x_Lo_i = cos_th * x_Li_i - sin_th * y_Li_i + x_i;
         const double y_Lo_i = sin_th * x_Li_i + cos_th * y_Li_i + y_i;
 

@@ -158,6 +158,7 @@ class NavigationController {
         ros::Publisher virtualLineMarkerPub;
         void publishLineMarkers();
         void publishVirtualLineMarker(double pi_x, double pi_y, double pf_x, double pf_y);
+        int virtual_marker_tick_ = 0;
         
         ros::Publisher navCompletionFeedbackPub;
         bool completion_feedback_sent;  // Para enviar feedback apenas uma vez por linha

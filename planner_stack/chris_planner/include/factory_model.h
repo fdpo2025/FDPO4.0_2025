@@ -29,21 +29,26 @@ struct State {
     int robot_node;
     int robot_box_type;
     std::vector<int> boxes;
+    size_t cached_hash = 0;
 
     bool operator==(const State& o) const {
         return robot_node == o.robot_node &&
                robot_box_type == o.robot_box_type &&
                boxes == o.boxes;
     }
+
+    void recomputeHash() {
+        size_t h = std::hash<int>()(robot_node);
+        h ^= std::hash<int>()(robot_box_type) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        for (int b : boxes)
+            h ^= std::hash<int>()(b) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        cached_hash = h;
+    }
 };
 
 struct StateHash {
     size_t operator()(const State& s) const {
-        size_t h = std::hash<int>()(s.robot_node);
-        h ^= std::hash<int>()(s.robot_box_type) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        for (int b : s.boxes)
-            h ^= std::hash<int>()(b) + 0x9e3779b9 + (h << 6) + (h >> 2);
-        return h;
+        return s.cached_hash;
     }
 };
 
@@ -59,7 +64,7 @@ public:
     State initialState(const std::vector<int>& boxtypes, int robot_node_id = -1) const;
 
     std::vector<int> shortestPath(int node_from, int node_to) const;
-    std::vector<int> shortestPathCompact(int node_from, int node_to) const;
+    std::vector<int> shortestPathCompact(int node_from, int node_to, const std::vector<int>& precomputed_path = {}) const;
     double cost(const State& state, int node_to) const;
 
     Graph graph;
@@ -75,6 +80,13 @@ public:
 
     std::vector<int> special_nodes;
     std::unordered_map<int, int> index_of;
+
+    std::unordered_set<int> machine_inputs_set;
+    std::unordered_set<int> input_set;
+    std::unordered_set<int> machA_out_set;
+    std::unordered_set<int> machB_out_set;
+    std::unordered_set<int> output_set;
+    std::unordered_set<int> special_set;
 
 private:
     static bool colinear(

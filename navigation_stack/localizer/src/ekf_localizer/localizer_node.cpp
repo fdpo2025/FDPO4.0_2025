@@ -248,14 +248,17 @@ void LocalizerNode::publishMapToOdomTF_() {
 
     geometry_msgs::TransformStamped T_odom_base_msg;
     try {
-        T_odom_base_msg = tf_buffer.lookupTransform("odom", "base_link", stamp, ros::Duration(0.05));
-    } catch (const tf2::TransformException& ex) {
-        try {
-            T_odom_base_msg = tf_buffer.lookupTransform("odom", "base_link", ros::Time(0), ros::Duration(0.05));
-        } catch (const tf2::TransformException& ex2) {
-            ROS_WARN_THROTTLE(1.0, "TF lookup odom->base_link falhou: %s | fallback: %s", ex.what(), ex2.what());
+        if (tf_buffer.canTransform("odom", "base_link", stamp, ros::Duration(0.0))) {
+            T_odom_base_msg = tf_buffer.lookupTransform("odom", "base_link", stamp, ros::Duration(0.0));
+        } else if (tf_buffer.canTransform("odom", "base_link", ros::Time(0), ros::Duration(0.0))) {
+            T_odom_base_msg = tf_buffer.lookupTransform("odom", "base_link", ros::Time(0), ros::Duration(0.0));
+        } else {
+            ROS_WARN_THROTTLE(1.0, "TF odom->base_link not available yet");
             return;
         }
+    } catch (const tf2::TransformException& ex) {
+        ROS_WARN_THROTTLE(1.0, "TF lookup odom->base_link falhou: %s", ex.what());
+        return;
     }
 
     tf2::Transform t_odom_base;

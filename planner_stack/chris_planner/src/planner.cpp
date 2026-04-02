@@ -40,8 +40,9 @@ PlanResult Planner::plan(const State& state)
             break;
         }
         result.high_level_path.push_back(node_to);
-        result.low_level_paths.push_back(factory.shortestPath(current.robot_node, node_to));
-        result.low_level_paths_compact.push_back(factory.shortestPathCompact(current.robot_node, node_to));
+        auto sp = factory.shortestPath(current.robot_node, node_to);
+        result.low_level_paths_compact.push_back(factory.shortestPathCompact(current.robot_node, node_to, sp));
+        result.low_level_paths.push_back(std::move(sp));
 
         result.total_cost += factory.graph.distance(current.robot_node, node_to);
         current = factory.updateState(current, node_to);
@@ -85,10 +86,8 @@ int Planner::policyOneByOne(const State& state)
     if (valid.empty()) return -1;
 
     if (state.robot_box_type == EMPTY) {
-        std::unordered_set<int> machA_out(factory.machineA_outputs.begin(), factory.machineA_outputs.end());
-        std::unordered_set<int> machB_out(factory.machineB_outputs.begin(), factory.machineB_outputs.end());
         for (int node : valid)
-            if (machA_out.count(node) || machB_out.count(node))
+            if (factory.machA_out_set.count(node) || factory.machB_out_set.count(node))
                 return node;
     }
 
@@ -279,8 +278,9 @@ PlanResult Planner::planAstar(const State& initial_state)
 
     for (int i = 0; i < static_cast<int>(hlp.size()) - 1; ++i) {
         int a = hlp[i], b = hlp[i + 1];
-        result.low_level_paths.push_back(factory.shortestPath(a, b));
-        result.low_level_paths_compact.push_back(factory.shortestPathCompact(a, b));
+        auto sp = factory.shortestPath(a, b);
+        result.low_level_paths_compact.push_back(factory.shortestPathCompact(a, b, sp));
+        result.low_level_paths.push_back(std::move(sp));
         result.total_cost += factory.graph.distance(a, b);
     }
 

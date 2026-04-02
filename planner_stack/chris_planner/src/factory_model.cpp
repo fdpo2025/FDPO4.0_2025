@@ -49,6 +49,14 @@ FactoryModel::FactoryModel(const YAML::Node& graph_dict,
 
     for (int i = 0; i < static_cast<int>(special_nodes.size()); ++i)
         index_of[special_nodes[i]] = i;
+
+    machine_inputs_set.insert(machineA_inputs.begin(), machineA_inputs.end());
+    machine_inputs_set.insert(machineB_inputs.begin(), machineB_inputs.end());
+    input_set.insert(input_warehouse.begin(), input_warehouse.end());
+    machA_out_set.insert(machineA_outputs.begin(), machineA_outputs.end());
+    machB_out_set.insert(machineB_outputs.begin(), machineB_outputs.end());
+    output_set.insert(output_warehouse.begin(), output_warehouse.end());
+    special_set.insert(special_nodes.begin(), special_nodes.end());
 }
 
 void FactoryModel::validateState(const State& state) const
@@ -76,20 +84,12 @@ void FactoryModel::validateState(const State& state) const
                                      " but actual box is " + boxTypeName(box));
     }
 
-    std::unordered_set<int> machine_inputs_set(machineA_inputs.begin(), machineA_inputs.end());
-    machine_inputs_set.insert(machineB_inputs.begin(), machineB_inputs.end());
-
     for (int i = 0; i < static_cast<int>(state.boxes.size()); ++i) {
         int b = state.boxes[i];
         int node = special_nodes[i];
         if (b != EMPTY && machine_inputs_set.count(node))
             throw std::runtime_error("Box " + boxTypeName(b) + " at machine input node " + std::to_string(node));
     }
-
-    std::unordered_set<int> input_set(input_warehouse.begin(), input_warehouse.end());
-    std::unordered_set<int> machA_out_set(machineA_outputs.begin(), machineA_outputs.end());
-    std::unordered_set<int> machB_out_set(machineB_outputs.begin(), machineB_outputs.end());
-    std::unordered_set<int> output_set(output_warehouse.begin(), output_warehouse.end());
 
     for (int i = 0; i < static_cast<int>(state.boxes.size()); ++i) {
         int b = state.boxes[i];
@@ -159,7 +159,6 @@ std::vector<int> FactoryModel::validDestinations(const State& state) const
             }
         }
 
-        std::unordered_set<int> output_set(output_warehouse.begin(), output_warehouse.end());
         std::unordered_set<int> valid_bt_set(valid_boxtypes.begin(), valid_boxtypes.end());
 
         for (int i = 0; i < static_cast<int>(special_nodes.size()); ++i) {
@@ -217,12 +216,12 @@ State FactoryModel::updateState(const State& state, int node_to) const
         new_state.robot_box_type = EMPTY;
     }
 
+    new_state.recomputeHash();
     return new_state;
 }
 
 bool FactoryModel::terminalState(const State& state) const
 {
-    std::unordered_set<int> output_set(output_warehouse.begin(), output_warehouse.end());
     for (int i = 0; i < static_cast<int>(state.boxes.size()); ++i) {
         int b = state.boxes[i];
         if (b == TYPE_A || b == TYPE_B) return false;
@@ -256,6 +255,7 @@ State FactoryModel::initialState(const std::vector<int>& boxtypes, int robot_nod
         s.boxes[idx] = boxtypes[i];
     }
 
+    s.recomputeHash();
     return s;
 }
 
@@ -280,12 +280,12 @@ bool FactoryModel::colinear(
     return dist_to_line < eps;
 }
 
-std::vector<int> FactoryModel::shortestPathCompact(int node_from, int node_to) const
+std::vector<int> FactoryModel::shortestPathCompact(int node_from, int node_to, const std::vector<int>& precomputed_path) const
 {
-    auto path = shortestPath(node_from, node_to);
+    std::vector<int> owned_path;
+    if (precomputed_path.empty()) owned_path = shortestPath(node_from, node_to);
+    const auto& path = precomputed_path.empty() ? owned_path : precomputed_path;
     if (path.empty()) return {};
-
-    std::unordered_set<int> special_set(special_nodes.begin(), special_nodes.end());
 
     std::vector<int> compact;
     compact.push_back(path[0]);

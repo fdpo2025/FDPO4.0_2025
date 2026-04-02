@@ -16,8 +16,8 @@
 #include <string.h>
 #include <iostream>
 #include <string>
-#include <sstream>
 #include <cstdio>
+#include <cstdlib>
 #include <std_msgs/Int32MultiArray.h>
 #include <vector>
 #include <std_msgs/UInt32.h>
@@ -109,10 +109,13 @@ class PiPicoDriver {
         void pathSendCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg);
 
         void pubExtraMsgs();
-        std::vector<int32_t> parsePathList(const std::string& s);
-        std::string pathToString(const std::vector<int32_t>& path);
+        std::vector<int32_t> parsePathList(const char* s, size_t len);
+        int pathToBuffer(const std::vector<int32_t>& path, char* buf, size_t buf_size);
+
+        char cmd_buf_[512];
 
         std::vector<int32_t> path_to_send_;
+        const std::vector<int32_t> path_empty_;
         int path_send_retries_ = 0;
 
         uint32_t cp_to_send_ = 0;

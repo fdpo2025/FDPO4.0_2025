@@ -15,6 +15,9 @@ BeaconDetector::BeaconDetector(ros::NodeHandle& nh, ros::NodeHandle& nh_priv) : 
     nh_priv.param("max_match_dist", maxMatchDist, 0.2);
     nh_priv.param<std::string>("input_topic_type", input_topic_type, "laser_scan");
 
+    nh.param<double>("eps", dbscan_eps_, 0.07);
+    nh.param<int>("minPoints", dbscan_min_points_, 3);
+
     ROS_INFO("BeaconDetector input_topic_type parameter: '%s'", input_topic_type.c_str());
 
     // Subscribe usando NodeHandle público (tópicos globais com "/" para absoluto)
@@ -76,13 +79,7 @@ void BeaconDetector::dataClustering(std::vector<Point>& dataPoints) {
 
     clusters.clear();
 
-    double eps;
-    nh.param<double>("eps", eps, 0.07);
-    
-    int minPoints;
-    nh.param<int>("minPoints", minPoints, 3);
-
-    DBSCAN dbscan(dataPoints, eps, minPoints);
+    DBSCAN dbscan(dataPoints, dbscan_eps_, dbscan_min_points_);
     dbscan.clusteringAlgorithm();
 
     clustersCentroids_robotFrame.clear();
@@ -348,9 +345,7 @@ void BeaconDetector::publishBeaconsEstimation(const std_msgs::Header& header) {
 
 void BeaconDetector::processSensorData(const sensor_msgs::LaserScan::ConstPtr& scan) {
 
-    laser_geometry::LaserProjection projector;
-
-    projector.projectLaser(*scan, pointCloud, -1.0);
+    laser_projector_.projectLaser(*scan, pointCloud, -1.0);
 
     try {
 
