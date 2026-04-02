@@ -29,8 +29,8 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   posePub = nh.advertise<nav_msgs::Odometry>("/odom", 10);
   cpRcvPub = nh.advertise<std_msgs::UInt32>("/cp_rcv", 10);
   pathRcvPub = nh.advertise<std_msgs::Int32MultiArray>("/path_rcv", 10);
-  // -> Timer (25 Hz -- matches Pico control loop rate)
-  commTimer = nh.createTimer(ros::Duration(0.04), &PiPicoDriver::commTick, this);
+  // -> Timer (50 Hz)
+  commTimer = nh.createTimer(ros::Duration(0.02), &PiPicoDriver::commTick, this);
 
   // ---------------------- Serial init ---------------------
   std::string serial_port;
