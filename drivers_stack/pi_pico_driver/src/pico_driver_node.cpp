@@ -271,13 +271,6 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
 
 void PiPicoDriver::commTick(const ros::TimerEvent&) {
 
-  // Decide que CP enviar nesta iteração
-  uint32_t cp_once = 0;
-  if (cp_send_retries_ > 0) {
-    cp_once = cp_to_send_;
-    cp_send_retries_--;
-  }
-
   // Decide que PATH enviar nesta iteração (const ref, sem copia)
   const std::vector<int32_t>& path_ref = (path_send_retries_ > 0) ? path_to_send_ : path_empty_;
   if (path_send_retries_ > 0) path_send_retries_--;
@@ -287,7 +280,7 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
                           "CMD:%.4f,%.4f,%c CP:%u PATH:",
                           messageToSend.v_d, messageToSend.w_d,
                           messageToSend.pick_box ? '1' : '0',
-                          cp_once);
+                          messageToSend.cp_send);
   off += pathToBuffer(path_ref, cmd_buf_ + off, sizeof(cmd_buf_) - off);
   std::string cmd(cmd_buf_, off);
 
@@ -320,8 +313,6 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
 
 void PiPicoDriver::cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
   messageToSend.cp_send = msg->data;
-  cp_to_send_ = msg->data;
-  cp_send_retries_ = 3;
 }
 
 void PiPicoDriver::pathSendCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg) {
