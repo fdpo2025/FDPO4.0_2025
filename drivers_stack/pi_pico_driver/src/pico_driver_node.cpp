@@ -68,8 +68,8 @@ void PiPicoDriver::startSerial(const std::string& port) {
     return;
   }
 
-  cfsetospeed(&tty, B230400);
-  cfsetispeed(&tty, B230400);
+  cfsetospeed(&tty, B115200);
+  cfsetispeed(&tty, B115200);
 
   tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
   tty.c_iflag = 0;
@@ -276,10 +276,10 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
                           "CMD:%.4f,%.4f,%c",
                           messageToSend.v_d, messageToSend.w_d,
                           messageToSend.pick_box ? '1' : '0');
-  if (cp_dirty_) {
+  if (cp_send_retries_ > 0) {
     off += std::snprintf(cmd_buf_ + off, sizeof(cmd_buf_) - off,
                          " CP:%u", messageToSend.cp_send);
-    cp_dirty_ = false;
+    cp_send_retries_--;
   }
   if (path_send_retries_ > 0) {
     off += std::snprintf(cmd_buf_ + off, sizeof(cmd_buf_) - off, " PATH:");
@@ -317,7 +317,7 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
 
 void PiPicoDriver::cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
   messageToSend.cp_send = msg->data;
-  cp_dirty_ = true;
+  cp_send_retries_ = 3;
 }
 
 void PiPicoDriver::pathSendCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg) {
