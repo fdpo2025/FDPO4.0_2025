@@ -17,6 +17,7 @@
 	<arg name="planning_method" default="astar" doc="Planning method for chris_planner: closest, onebyone, greedy_h, or astar"/>
 	<arg name="use_wifi" default="true" />
 	<arg name="planner_type" default="chris" doc="chris ou multi"/>
+	<arg name="robot_id" default="1" doc="ID do robo para comunicacoes (1 ou 2)"/>
 
 	<!-- HAL: Hardware Abstraction Layer (LiDAR, etc) -->
 	<include if="$(arg use_hal)" file="$(find conf)/system/hal.xml">
@@ -30,6 +31,7 @@
 		<arg name="use_ekf" value="$(arg use_ekf)"/>
 		<arg name="use_raw_odom" value="$(arg use_raw_odom)"/>
 		<arg name="use_ss_controller" value="$(arg use_ss_controller)"/>
+		<arg name="robot_id" value="$(arg robot_id)" />
 	</include>
     
 	<!-- HMI: Interface Humano-Máquina (Mapa, RViz, etc) -->
@@ -42,7 +44,8 @@
 	<include if="$(arg use_planner)" file="$(find conf)/system/planner.xml">
 		<arg name="node_name" value="$(eval 'chris_planner_node' if arg('planner_type') == 'chris' else 'multi_planner_node')" />
 		<arg name="planning_method" value="$(arg planning_method)" />
-		<arg name="planner_script" value="$(eval 'chris_planner_node.py' if arg('planner_type') == 'chris' else 'multi_planner_node.py')" />
+		<arg name="planner_executable" value="$(eval 'chris_planner_node' if arg('planner_type') == 'chris' else 'multi_planner_node')" />
+		<arg name="robot_id" value="$(arg robot_id)" />
 	</include>
 		
 	<include file="$(find conf)/system/wifi.xml">

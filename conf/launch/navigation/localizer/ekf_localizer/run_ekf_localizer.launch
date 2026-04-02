@@ -1,6 +1,9 @@
 <launch>
-  <!-- Load EKF parameters -->
-  <rosparam file="$(find conf)/launch/navigation/localizer/ekf_params.yaml" command="load"/>
+  <arg name="robot_id" default="1" />
+
+  <!-- Load EKF parameters based on robot ID -->
+  <rosparam if="$(eval arg('robot_id') == 1)" file="$(find conf)/launch/navigation/localizer/ekf_params.yaml" command="load"/>
+  <rosparam unless="$(eval arg('robot_id') == 1)" file="$(find conf)/launch/navigation/localizer/ekf_params_robot2.yaml" command="load"/>
   
   <node name="localizer_node" pkg="localizer" type="localizer_node" output="screen"/>
 </launch>

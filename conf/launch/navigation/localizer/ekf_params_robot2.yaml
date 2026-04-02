@@ -1,0 +1,20 @@
+# EKF Localizer Parameters - Robot 2
+# Configuration of covariance matrices for the Extended Kalman Filter
+
+ekf_params:
+  # Initial pose in map frame
+  initial_pose:
+    x: -0.595
+    y: -0.455
+    theta: 1.5708        # 90° 
+  
+  # Initial state covariance matrix P
+  initial_covariance:
+    position_x: 0.5      # Initial covariance for X position (m²)
+    position_y: 0.5      # Initial covariance for Y position (m²)  
+    orientation: 0.5     # Initial covariance for orientation (rad²)
+  
+  # Process covariance matrix Q (model noise for [v, w] inputs)
+  process_covariance:
+    velocity_linear: 0.0005   # Process covariance for linear velocity (m²/s²)
+    velocity_angular: 0.0005  # Process covariance for angular velocity (rad²/s²)

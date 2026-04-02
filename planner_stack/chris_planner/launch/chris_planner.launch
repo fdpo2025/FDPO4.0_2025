@@ -3,12 +3,12 @@
   <arg name="node_name" default="chris_planner_node" />
   <arg name="planning_method" default="closest" />
   <arg name="robot_id" default="1" />
-  <arg name="planner_script" default="chris_planner_node.py" />
+  <arg name="planner_executable" default="chris_planner_node" />
 
   <!-- Planner -->
   <node name="$(arg node_name)"
         pkg="chris_planner"
-        type="$(arg planner_script)"
+        type="$(arg planner_executable)"
         output="screen">
     <param name="planning_method" value="$(arg planning_method)" />
   </node>
@@ -16,7 +16,7 @@
   <!-- Communications -->
   <node name="comunicacoes_planner"
         pkg="chris_planner"
-        type="comunicacoes_node.py"
+        type="comunicacoes_node"
         output="screen">
     <param name="robot_id" value="$(arg robot_id)" />
   </node>

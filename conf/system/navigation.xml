@@ -6,6 +6,7 @@
 
   <arg name="use_ss_controller" default="false" doc="Use state space controller (true) or original controller (false)"/>
   <arg name="use_raw_odom" default="false" doc="Use raw odometry (/odom) instead of filtered (/odometry/filtered). Only effective when use_ekf=false"/>
+  <arg name="robot_id" default="1" />
 
   <!-- Navigation Controller: 
        - Se use_raw_odom=true: usa /odom (odometria pura)
@@ -25,7 +26,9 @@
   </include>
 
   <!-- EKF Localizer -->
-  <include if="$(arg use_ekf)" file="$(find conf)/launch/navigation/localizer/ekf_localizer/run_ekf_localizer.launch"/>
+  <include if="$(arg use_ekf)" file="$(find conf)/launch/navigation/localizer/ekf_localizer/run_ekf_localizer.launch">
+    <arg name="robot_id" value="$(arg robot_id)" />
+  </include>
 
   <!-- without EKF: transformações estáticas -->
   <!-- map->odom: identidade (map=odom quando não há EKF) -->
