@@ -70,19 +70,12 @@ void ComunicacoesNode::cpRcvCb(const std_msgs::UInt32::ConstPtr& msg)
 
 void ComunicacoesNode::thisCurrentPoseRobot2Cb(const std_msgs::UInt32::ConstPtr& msg)
 {
-    if (r2_destination_ >= 0 && static_cast<int32_t>(msg->data) == r2_destination_) {
-        ROS_INFO("[R2] Arrived at destination %d, sending CP", r2_destination_);
-        pub_cp_send_.publish(*msg);
-        r2_destination_ = -1;
-    }
+    ROS_INFO("[R2] Local position to send: %u", msg->data);
+    pub_cp_send_.publish(*msg);
 }
 
 void ComunicacoesNode::pathRcvCb(const std_msgs::Int32MultiArray::ConstPtr& msg)
 {
     ROS_INFO("[R2] Path received");
-    if (!msg->data.empty()) {
-        r2_destination_ = msg->data.back();
-        ROS_INFO("[R2] Destination set to node %d", r2_destination_);
-    }
     pub_planned_paths_.publish(*msg);
 }

@@ -34,5 +34,4 @@ private:
     ros::Subscriber sub_cp_rcv_;
     ros::Subscriber sub_path_rcv_;
 
-    int32_t r2_destination_ = -1;
 };
