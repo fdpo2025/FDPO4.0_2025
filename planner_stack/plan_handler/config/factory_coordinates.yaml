@@ -41,20 +41,30 @@ factory_coords:
   "37":  [ 0.55,  -0.470]
   "38":  [ 0.7,   -0.463]
 
-  # Warehouse mirror nodes (+100) -- mesmas coords por agora
-  "100": [-0.690,  0.461]
-  "101": [-0.55,   0.466]
-  "102": [-0.397,  0.468]
-  "103": [-0.24,   0.468]
-  "113": [ 0.24,   0.155]
-  "114": [ 0.46,   0.154]
-  "117": [-0.463,  0.0]
-  "118": [-0.24,   0.0]
-  "120": [ 0.243,  0.0]
-  "121": [ 0.463,  0.0]
-  "124": [-0.463, -0.15]
-  "125": [-0.24,  -0.15]
-  "135": [ 0.24,  -0.471]
-  "136": [ 0.398, -0.471]
-  "137": [ 0.55,  -0.470]
-  "138": [ 0.7,   -0.463]
+  # Warehouse mirror nodes (+100) -- offset 3cm à direita do robot
+  # Input warehouses: approach upward (+y), right = +x
+  "100": [-0.660,  0.461]
+  "101": [-0.52,   0.466]
+  "102": [-0.367,  0.468]
+  "103": [-0.21,   0.468]
+  # Machine B inputs: approach rightward (+x), right = -y
+  "113": [ 0.24,   0.125]
+  # Machine B outputs: approach leftward (-x), right = +y
+  "114": [ 0.46,   0.184]
+  # Machine A inputs: approach rightward (+x), right = -y
+  "117": [-0.463, -0.030]
+  # Machine A outputs: approach leftward (-x), right = +y
+  "118": [-0.24,   0.030]
+  # Machine B inputs: approach rightward (+x), right = -y
+  "120": [ 0.243, -0.030]
+  # Machine B outputs: approach leftward (-x), right = +y
+  "121": [ 0.463,  0.030]
+  # Machine A inputs: approach rightward (+x), right = -y
+  "124": [-0.463, -0.180]
+  # Machine A outputs: approach leftward (-x), right = +y
+  "125": [-0.24,  -0.120]
+  # Output warehouses: approach downward (-y), right = -x
+  "135": [ 0.210, -0.471]
+  "136": [ 0.368, -0.471]
+  "137": [ 0.520, -0.470]
+  "138": [ 0.670, -0.463]
