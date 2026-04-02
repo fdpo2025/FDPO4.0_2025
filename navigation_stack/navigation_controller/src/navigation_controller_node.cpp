@@ -792,7 +792,7 @@ void NavigationController::followLine() {
 
     if (error_ang_deg > 93.0) {
         v_d = 0.0;
-        ROS_INFO_THROTTLE(1.0, "NavigationController: Angular error %.1f° > 93°, setting linear velocity to 0", error_ang_deg);
+        ROS_WARN_THROTTLE(1.0, "NavigationController: v=0 due to angular error %.1f° > 93°", error_ang_deg);
     }
     
     if (isBackwards() && v_d > 0.0) {
@@ -1000,7 +1000,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         cmd.angular.y = 0.0;
         cmd.angular.z = 0.0;
         velPub.publish(cmd);
-        ROS_INFO_THROTTLE(1.0, "NavigationController: Route empty, publishing stop command");
+        ROS_DEBUG("NavigationController: Route empty, publishing stop command");
     } else {
         publishVel();
     }
