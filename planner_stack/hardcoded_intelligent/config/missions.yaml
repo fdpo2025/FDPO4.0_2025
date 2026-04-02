@@ -4,8 +4,27 @@
 #   manga_1 : apenas B em todas as posicoes
 #
 # Cores no armazem: R/G/B ou R_W/G_W/B_W (wait no pick antes de voltar ao no de aproximacao).
+#
+# robot_spawns: pose inicial em map (metros, theta em radianos) por robot_id (0 ou 1).
+# Publicado em /hardcoded_intelligent/spawn_pose quando chega /robot_identity.
+# O EKF continua a ler ekf_params/initial_pose no arranque do localizer; mantém estes
+# valores alinhados com conf/launch/navigation/localizer/ekf_params.yaml por robô.
 
 missions:
+  robot_spawns:
+    robot_0:
+      x: -0.695
+      y: -0.355
+      theta: 1.5708
+    robot_1:
+      x: -0.52
+      y: -0.355
+      theta: 0.0
+#    robot_2:
+#      x: -0.695
+#      y: -0.355
+#      theta: 1.5708
+
   manga_1:
     robot_0:
       targets:

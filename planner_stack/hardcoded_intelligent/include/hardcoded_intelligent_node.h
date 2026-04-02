@@ -6,6 +6,7 @@
 #include <std_msgs/Bool.h>
 #include <std_msgs/String.h>
 #include <plan_handler/CompletionFeedback.h>
+#include <geometry_msgs/PoseStamped.h>
 #include <xmlrpcpp/XmlRpcValue.h>
 
 #include <deque>
@@ -61,6 +62,8 @@ private:
 
   bool validatePath(const std::vector<int>& path) const;
   void loadValidNodeIds();
+  void publishSpawnPoseForRobot();
+  bool tryReadDouble(const XmlRpc::XmlRpcValue& v, double& out) const;
 
   ros::NodeHandle nh_;
   ros::Subscriber color_seq_sub_;
@@ -70,6 +73,7 @@ private:
   ros::Publisher planned_paths_pub_;
   ros::Publisher mission_state_pub_;
   ros::Publisher radio_wait_target_pub_;
+  ros::Publisher spawn_pose_pub_;
 
   XmlRpc::XmlRpcValue missions_root_;
   std::vector<int> valid_node_ids_;

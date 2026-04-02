@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <sstream>
 #include <unordered_set>
 #include <std_msgs/Int32.h>
@@ -24,6 +25,7 @@ HardcodedIntelligentNode::HardcodedIntelligentNode(ros::NodeHandle& nh)
   planned_paths_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/planned_paths", 100, true);
   mission_state_pub_ = nh_.advertise<std_msgs::String>("/hardcoded_intelligent/state", 10, true);
   radio_wait_target_pub_ = nh_.advertise<std_msgs::Int32>("/radio_wait_target", 10, false);
+  spawn_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/hardcoded_intelligent/spawn_pose", 1, true);
 
   setState(STATE_IDLE);
   ROS_INFO("hardcoded_intelligent initialized. Waiting for /robot_identity and /color_sequence");
@@ -118,6 +120,7 @@ void HardcodedIntelligentNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& 
   std::lock_guard<std::mutex> lock(mtx_);
   robot_id_ = msg->data;
   ROS_INFO("Received robot identity: %d", robot_id_);
+  publishSpawnPoseForRobot();
 }
 
 void HardcodedIntelligentNode::onNavigationFeedback(const plan_handler::CompletionFeedback::ConstPtr&)
@@ -598,4 +601,83 @@ bool HardcodedIntelligentNode::validatePath(const std::vector<int>& path) const
   return std::all_of(path.begin(), path.end(), [&](int node_id) {
     return valid.count(node_id) > 0;
   });
+}
+
+bool HardcodedIntelligentNode::tryReadDouble(const XmlRpc::XmlRpcValue& v, double& out) const
+{
+  if (v.getType() == XmlRpc::XmlRpcValue::TypeDouble) {
+    out = static_cast<double>(v);
+    return true;
+  }
+  if (v.getType() == XmlRpc::XmlRpcValue::TypeInt) {
+    out = static_cast<double>(static_cast<int>(v));
+    return true;
+  }
+  if (v.getType() == XmlRpc::XmlRpcValue::TypeString) {
+    try {
+      out = std::stod(static_cast<std::string>(v));
+      return true;
+    } catch (...) {
+      return false;
+    }
+  }
+  return false;
+}
+
+void HardcodedIntelligentNode::publishSpawnPoseForRobot()
+{
+  if (robot_id_ < 0) {
+    return;
+  }
+  if (!missions_root_.hasMember("robot_spawns")) {
+    return;
+  }
+
+  const XmlRpc::XmlRpcValue& spawns = missions_root_["robot_spawns"];
+  if (spawns.getType() != XmlRpc::XmlRpcValue::TypeStruct) {
+    return;
+  }
+
+  const std::string key = "robot_" + std::to_string(robot_id_);
+  if (!spawns.hasMember(key)) {
+    ROS_WARN_ONCE("missions.yaml has no robot_spawns entry for %s; skipping spawn pose publish.", key.c_str());
+    return;
+  }
+
+  const XmlRpc::XmlRpcValue& entry = spawns[key];
+  if (entry.getType() != XmlRpc::XmlRpcValue::TypeStruct) {
+    ROS_WARN("robot_spawns.%s must be a map with x, y, theta.", key.c_str());
+    return;
+  }
+
+  double x = 0.0;
+  double y = 0.0;
+  double theta = 0.0;
+  if (!entry.hasMember("x") || !tryReadDouble(entry["x"], x)) {
+    ROS_WARN("robot_spawns.%s: missing or invalid x.", key.c_str());
+    return;
+  }
+  if (!entry.hasMember("y") || !tryReadDouble(entry["y"], y)) {
+    ROS_WARN("robot_spawns.%s: missing or invalid y.", key.c_str());
+    return;
+  }
+  if (!entry.hasMember("theta") || !tryReadDouble(entry["theta"], theta)) {
+    ROS_WARN("robot_spawns.%s: missing or invalid theta.", key.c_str());
+    return;
+  }
+
+  geometry_msgs::PoseStamped ps;
+  ps.header.stamp = ros::Time::now();
+  ps.header.frame_id = "map";
+  ps.pose.position.x = x;
+  ps.pose.position.y = y;
+  ps.pose.position.z = 0.0;
+  const double half = 0.5 * theta;
+  ps.pose.orientation.x = 0.0;
+  ps.pose.orientation.y = 0.0;
+  ps.pose.orientation.z = std::sin(half);
+  ps.pose.orientation.w = std::cos(half);
+
+  spawn_pose_pub_.publish(ps);
+  ROS_INFO("Published spawn pose for %s: x=%.4f y=%.4f theta=%.4f (frame map)", key.c_str(), x, y, theta);
 }

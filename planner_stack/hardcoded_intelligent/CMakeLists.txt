@@ -7,11 +7,12 @@ find_package(catkin REQUIRED COMPONENTS
   plan_handler
   roscpp
   std_msgs
+  geometry_msgs
 )
 
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS plan_handler roscpp std_msgs
+  CATKIN_DEPENDS plan_handler roscpp std_msgs geometry_msgs
 )
 
 include_directories(
