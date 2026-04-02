@@ -6,8 +6,30 @@
 
 #include <cctype>
 #include <fstream>
+#include <vector>
 
 namespace {
+
+// Copia todos os pares de um mapa para um vector ANTES de processar. Evita SIGSEGV no
+// yaml-cpp ao chamar YAML::Dump ou outras operações durante operator++ do iterador.
+std::vector<std::pair<YAML::Node, YAML::Node>> snapshotMap(const YAML::Node& map)
+{
+    std::vector<std::pair<YAML::Node, YAML::Node>> rows;
+    if (!map.IsDefined() || !map.IsMap()) return rows;
+    for (YAML::const_iterator it = map.begin(); it != map.end(); ++it)
+        rows.emplace_back(it->first, it->second);
+    return rows;
+}
+
+std::string trimWhitespace(std::string s)
+{
+    while (!s.empty() && (s.back() == ' ' || s.back() == '\t' || s.back() == '\r' || s.back() == '\n'))
+        s.pop_back();
+    size_t i = 0;
+    while (i < s.size() && (s[i] == ' ' || s[i] == '\t' || s[i] == '\r' || s[i] == '\n'))
+        ++i;
+    return s.substr(i);
+}
 
 bool tryYamlKeyToInt(const YAML::Node& key, int* out)
 {
@@ -20,7 +42,8 @@ bool tryYamlKeyToInt(const YAML::Node& key, int* out)
     }
 
     try {
-        *out = std::stoi(key.as<std::string>());
+        std::string s = trimWhitespace(key.as<std::string>());
+        *out = std::stoi(s);
         return true;
     } catch (const YAML::Exception&) {
     } catch (const std::invalid_argument&) {
@@ -29,18 +52,42 @@ bool tryYamlKeyToInt(const YAML::Node& key, int* out)
     return false;
 }
 
-std::string yamlNodeSnippet(const YAML::Node& n)
+// Descricao de chave sem iterar mapas pais; evita YAML::Dump salvo como ultimo recurso.
+std::string describeKey(const YAML::Node& key)
 {
+    if (!key.IsDefined()) return "(undefined)";
     try {
-        return YAML::Dump(n);
+        return std::to_string(key.as<int>());
+    } catch (const YAML::Exception&) {
+    }
+    try {
+        return trimWhitespace(key.as<std::string>());
+    } catch (const YAML::Exception&) {
+    }
+    try {
+        return YAML::Dump(key);
     } catch (...) {
-        return "(dump failed)";
+        return "(unprintable)";
+    }
+}
+
+std::string describeValue(const YAML::Node& val)
+{
+    if (!val.IsDefined()) return "(undefined)";
+    try {
+        return trimWhitespace(val.as<std::string>());
+    } catch (const YAML::Exception&) {
+    }
+    try {
+        return YAML::Dump(val);
+    } catch (...) {
+        return "(unprintable)";
     }
 }
 
 bool parseSideString(const std::string& raw, bool* right_out)
 {
-    std::string s = raw;
+    std::string s = trimWhitespace(raw);
     for (char& c : s)
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     if (s == "right" || s == "direita" || s == "d") {
@@ -60,7 +107,7 @@ bool yamlValueToRight(const YAML::Node& val, bool* right_out)
 
     try {
         std::string s = val.as<std::string>();
-        return parseSideString(s, right_out);
+        if (parseSideString(s, right_out)) return true;
     } catch (const YAML::Exception&) {
     }
 
@@ -72,8 +119,8 @@ bool yamlValueToRight(const YAML::Node& val, bool* right_out)
     } catch (const YAML::Exception&) {
     }
 
-    ROS_WARN_STREAM("warehouse_approach_topology: invalid side value, expected left/right: "
-                    << yamlNodeSnippet(val));
+    ROS_WARN("warehouse_approach_topology: invalid side value (expected left/right): %s",
+             describeValue(val).c_str());
     return false;
 }
 
@@ -97,52 +144,49 @@ void WarehouseApproachTopology::loadFromFile(const std::string& yaml_path)
             return;
         }
 
-        for (auto wit = root.begin(); wit != root.end(); ++wit) {
-            const YAML::Node& nmap = wit->second;
+        for (const auto& wrow : snapshotMap(root)) {
+            const YAML::Node& nmap = wrow.second;
             if (!nmap.IsMap()) {
-                ROS_WARN_STREAM("warehouse_approach_topology: skip root entry (not a map), key="
-                                << yamlNodeSnippet(wit->first));
+                ROS_WARN("warehouse_approach_topology: skip root entry (not a map), key=%s",
+                         describeKey(wrow.first).c_str());
                 continue;
             }
 
             int w = 0;
-            if (!tryYamlKeyToInt(wit->first, &w)) {
-                ROS_WARN_STREAM("warehouse_approach_topology: skip root key (not int id): "
-                                << yamlNodeSnippet(wit->first));
+            if (!tryYamlKeyToInt(wrow.first, &w)) {
+                ROS_WARN("warehouse_approach_topology: skip root key (not int id): %s",
+                         describeKey(wrow.first).c_str());
                 continue;
             }
 
-            for (auto nit = nmap.begin(); nit != nmap.end(); ++nit) {
-                const YAML::Node& pmap = nit->second;
+            for (const auto& nrow : snapshotMap(nmap)) {
+                const YAML::Node& pmap = nrow.second;
                 if (!pmap.IsMap()) {
-                    ROS_WARN_STREAM("warehouse_approach_topology: skip W=" << w
-                                                                          << " neighbor entry (not a map) key="
-                                                                          << yamlNodeSnippet(nit->first));
+                    ROS_WARN("warehouse_approach_topology: skip W=%d neighbor (not a map), key=%s",
+                             w, describeKey(nrow.first).c_str());
                     continue;
                 }
 
                 int n = 0;
-                if (!tryYamlKeyToInt(nit->first, &n)) {
-                    ROS_WARN_STREAM("warehouse_approach_topology: skip neighbor key under W=" << w << ": "
-                                                                                            << yamlNodeSnippet(
-                                                                                                   nit->first));
+                if (!tryYamlKeyToInt(nrow.first, &n)) {
+                    ROS_WARN("warehouse_approach_topology: skip neighbor key under W=%d: %s",
+                             w, describeKey(nrow.first).c_str());
                     continue;
                 }
 
-                for (auto pit = pmap.begin(); pit != pmap.end(); ++pit) {
+                for (const auto& prow : snapshotMap(pmap)) {
                     int p = 0;
-                    if (!tryYamlKeyToInt(pit->first, &p)) {
-                        ROS_WARN_STREAM("warehouse_approach_topology: skip predecessor key W=" << w << " N=" << n
-                                                                                             << ": "
-                                                                                             << yamlNodeSnippet(
-                                                                                                    pit->first));
+                    if (!tryYamlKeyToInt(prow.first, &p)) {
+                        ROS_WARN(
+                            "warehouse_approach_topology: skip predecessor key W=%d N=%d: %s",
+                            w, n, describeKey(prow.first).c_str());
                         continue;
                     }
 
                     bool right = false;
-                    if (!yamlValueToRight(pit->second, &right)) {
-                        ROS_WARN_STREAM("warehouse_approach_topology: skip W=" << w << " N=" << n << " P=" << p
-                                                                                             << " bad value");
+                    if (!yamlValueToRight(prow.second, &right)) {
+                        ROS_WARN("warehouse_approach_topology: skip W=%d N=%d P=%d bad value",
+                                 w, n, p);
                         continue;
                     }
                     table_[w][n][p] = right;
@@ -168,7 +212,7 @@ bool WarehouseApproachTopology::isRightApproach(
     if (pit == nit->second.end()) {
         ROS_WARN_THROTTLE(
             30.0,
-            "warehouse_approach_topology: no entry for W=%d N=%d P=%d — assuming left (+100)",
+            "warehouse_approach_topology: no entry for W=%d N=%d P=%d - assuming left (+100)",
             warehouse, neighbor, predecessor);
         return false;
     }
