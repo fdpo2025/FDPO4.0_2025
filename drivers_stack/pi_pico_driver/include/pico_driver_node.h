@@ -117,7 +117,11 @@ class PiPicoDriver {
         std::string buildPathCsv(const std::vector<int>& path) const;
         void tryReadBootIdentity();
         bool decodeIdentityLine(const std::string& line, int& out_id) const;
+        bool tryParseEmbeddedRobotId(const std::string& msg, int& out_id) const;
+        void applyRobotIdentity(int id);
 
         tf::TransformBroadcaster tf_broadcaster;
+
+        bool debug_identity_{false};
 
 };

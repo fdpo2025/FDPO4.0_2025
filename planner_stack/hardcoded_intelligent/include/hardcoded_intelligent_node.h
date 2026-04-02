@@ -81,8 +81,11 @@ private:
   std::deque<MissionSegment> pending_segments_;
   std::vector<int> active_segment_nodes_;
   std::string last_color_sequence_;
+  /// Se /color_sequence chegar antes de /robot_identity, guarda aqui e inicia missão ao receber ID.
+  std::string pending_color_sequence_;
   int active_segment_feedback_count_ = 0;
   int robot_id_ = -1;
   MissionState state_ = STATE_IDLE;
   mutable std::mutex mtx_;
+  bool debug_verbose_ = false;
 };

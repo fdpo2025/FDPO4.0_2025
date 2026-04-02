@@ -1,5 +1,6 @@
 #include "pico_driver_node.h"
 #include <cmath>
+#include <cctype>
 
 PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
 
@@ -37,9 +38,12 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   std::string serial_port;
   nh.param<std::string>("serial_port", serial_port, "/dev/ttyACM0");
   nh.param("debug_comm", debug_comm_, false);  // Por padrão, logs desativados
-  
+  nh.param("debug_identity", debug_identity_, false);
+
   ROS_INFO("[PiPicoDriver] Usando porta serial: %s", serial_port.c_str());
   ROS_INFO("[PiPicoDriver] Debug communication logs: %s", debug_comm_ ? "ENABLED" : "DISABLED");
+  ROS_INFO("[PiPicoDriver] Debug identity (handshake /robot_identity): %s",
+           debug_identity_ ? "ENABLED" : "DISABLED");
   
   serial_fd_ = -1;
   startSerial(serial_port);
@@ -213,22 +217,20 @@ std::string PiPicoDriver::syncCall(const std::string& cmd, int timeout_ms) {
 void PiPicoDriver::decodeMsg(const std::string& msg) {
   int parsed_id = -1;
   if (decodeIdentityLine(msg, parsed_id)) {
-    robot_id_ = parsed_id;
-    std_msgs::Int32 id_msg;
-    id_msg.data = robot_id_;
-    robotIdPub.publish(id_msg);
-    ROS_INFO_THROTTLE(5.0, "[PiPicoDriver] Robot identity detected: %d", robot_id_);
+    if (debug_identity_) {
+      ROS_INFO("[PiPicoDriver] decodeMsg: linha dedicada ID: -> %d", parsed_id);
+    }
+    applyRobotIdentity(parsed_id);
     return;
   }
 
   // Procurar por "POS:" em qualquer posição da mensagem (não só no início)
   size_t pos_idx = msg.find("POS:");
   if (pos_idx != std::string::npos) {
-    // Extrair a substring a partir de "POS:"
     std::string pos_part = msg.substr(pos_idx);
-    
-    double x=0, y=0, theta=0;
-    double v=0.0, w=0.0;
+
+    double x = 0, y = 0, theta = 0;
+    double v = 0.0, w = 0.0;
 
     int wait_release = 0;
     int n = std::sscanf(
@@ -238,6 +240,19 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
     );
 
     if (n >= 5) {
+      int emb_id = -1;
+      if (tryParseEmbeddedRobotId(msg, emb_id)) {
+        if (debug_identity_) {
+          ROS_INFO_THROTTLE(2.0, "[PiPicoDriver] POS line includes embedded , ID: %d", emb_id);
+        }
+        applyRobotIdentity(emb_id);
+      } else if (robot_id_ < 0 && debug_identity_) {
+        ROS_WARN_THROTTLE(5.0,
+                          "[PiPicoDriver] POS sem campo ', ID:' e robot_id ainda < 0 "
+                          "(atualiza firmware com ID no POS ou verifica boot ID:). Msg: %.120s",
+                          msg.c_str());
+      }
+
       messageToReceive.odom_pos = {x, y, theta};
       messageToReceive.v_linear = v;
       messageToReceive.w_angular = w;
@@ -261,7 +276,11 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
   // Mensagens de debug do Pico (longas) - ignorar silenciosamente se não em modo debug
   if (!debug_comm_ && msg.find("dbg") != std::string::npos) return;
 
-  ROS_WARN_THROTTLE(10.0, "Mensagem desconhecida (mostrando 1 a cada 10s): %s", msg.substr(0, 80).c_str());
+  if (debug_identity_) {
+    ROS_WARN_THROTTLE(10.0, "[PiPicoDriver] Mensagem desconhecida: %.200s", msg.c_str());
+  } else {
+    ROS_WARN_THROTTLE(10.0, "Mensagem desconhecida (mostrando 1 a cada 10s): %s", msg.substr(0, 80).c_str());
+  }
 }
 
 void PiPicoDriver::commTick(const ros::TimerEvent&) {
@@ -279,14 +298,14 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
 
   // 2) Send and Wait for response
   if (debug_comm_) {
-    ROS_INFO("Pi4 Message: %s", cmd.c_str());
+    ROS_INFO("[PiPicoDriver] Pi4 -> Pico CMD: %s", cmd.c_str());
   }
-  
+
   std::string resp = syncCall(cmd, 50);
-  
+
   if (debug_comm_) {
-    ROS_INFO("PiPico Message: %s", resp.c_str());
-    ROS_INFO("-------------------");
+    ROS_INFO("[PiPicoDriver] Pico -> Pi4 linha (primeira): %s", resp.c_str());
+    ROS_INFO("[PiPicoDriver] --- fim tick ---");
   }
   
   if (resp.empty()) {
@@ -344,29 +363,75 @@ void PiPicoDriver::tryReadBootIdentity() {
       std::string line = response.substr(0, newline_pos);
       int id = -1;
       if (decodeIdentityLine(line, id)) {
-        robot_id_ = id;
-        std_msgs::Int32 id_msg;
-        id_msg.data = robot_id_;
-        robotIdPub.publish(id_msg);
-        ROS_INFO("[PiPicoDriver] Handshake ID captured: %d", robot_id_);
+        applyRobotIdentity(id);
+        ROS_INFO("[PiPicoDriver] Boot window: handshake ID: capturado = %d", robot_id_);
         return;
       }
       response.erase(0, newline_pos + 1);
       newline_pos = response.find('\n');
     }
   }
+  if (robot_id_ < 0) {
+    ROS_WARN("[PiPicoDriver] tryReadBootIdentity: nenhuma linha \"ID:n\" nos primeiros 2s. "
+             "O ID virá do campo \", ID: n\" na resposta POS (firmware atualizado) ou repõe o Pico.");
+  }
 }
 
 bool PiPicoDriver::decodeIdentityLine(const std::string& line, int& out_id) const {
+  std::string s = line;
+  while (!s.empty() && (s.back() == '\r' || s.back() == '\n')) {
+    s.pop_back();
+  }
   const std::string prefix = "ID:";
-  if (line.rfind(prefix, 0) != 0) {
+  if (s.rfind(prefix, 0) != 0) {
     return false;
   }
 
   try {
-    out_id = std::stoi(line.substr(prefix.size()));
+    out_id = std::stoi(s.substr(prefix.size()));
     return true;
   } catch (...) {
     return false;
+  }
+}
+
+bool PiPicoDriver::tryParseEmbeddedRobotId(const std::string& msg, int& out_id) const {
+  const std::string key = ", ID:";
+  const size_t p = msg.rfind(key);
+  if (p == std::string::npos) {
+    return false;
+  }
+  size_t start = p + key.size();
+  while (start < msg.size() && (msg[start] == ' ' || msg[start] == '\t')) {
+    ++start;
+  }
+  size_t end = start;
+  while (end < msg.size() && (std::isdigit(static_cast<unsigned char>(msg[end])) || msg[end] == '-')) {
+    ++end;
+  }
+  if (end == start) {
+    return false;
+  }
+  try {
+    out_id = std::stoi(msg.substr(start, end - start));
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+void PiPicoDriver::applyRobotIdentity(int id) {
+  if (id < 0) {
+    return;
+  }
+  const bool changed = (robot_id_ != id);
+  robot_id_ = id;
+  std_msgs::Int32 id_msg;
+  id_msg.data = robot_id_;
+  robotIdPub.publish(id_msg);
+  if (changed) {
+    ROS_INFO("[PiPicoDriver] /robot_identity publicado: %d", robot_id_);
+  } else if (debug_identity_) {
+    ROS_DEBUG_THROTTLE(5.0, "[PiPicoDriver] ID reconfirmado: %d", robot_id_);
   }
 }
