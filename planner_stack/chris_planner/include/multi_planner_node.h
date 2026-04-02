@@ -75,6 +75,11 @@ private:
     std::vector<std::vector<int>> splitPickupCandidatesByPriority(
         const std::string& robot_id, const std::vector<int>& valid_nodes) const;
 
+    // Warehouse approach-side (+100) helpers
+    static int resolveWarehouseId(int id) { return id >= 100 ? id - 100 : id; }
+    bool isWarehouseNode(int id) const { return warehouse_nodes_.count(id) != 0; }
+    int determineApproachSideNode(const std::vector<int>& full_path, int warehouse_node) const;
+
     // Output warehouse rule
     std::vector<int> applyOutputWarehouseRule(const std::vector<int>& valid_nodes) const;
 
@@ -117,6 +122,9 @@ private:
 
     // Output warehouse nodes
     std::unordered_set<int> output_nodes_;
+
+    // All warehouse nodes (input + process + output)
+    std::unordered_set<int> warehouse_nodes_;
 
     // Pickup plan counter
     int pickup_plan_count_;

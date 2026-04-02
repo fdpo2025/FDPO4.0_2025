@@ -9,6 +9,7 @@
 
 #include <string>
 #include <memory>
+#include <unordered_set>
 
 class ChrisPlannerNode {
 public:
@@ -17,6 +18,7 @@ public:
 private:
     void colorSequenceCallback(const std_msgs::String::ConstPtr& msg);
     std::vector<int> colorSequenceToBoxtypes(const std::string& seq) const;
+    std::vector<int> resolveApproachSides(const std::vector<int>& path) const;
 
     ros::NodeHandle& nh_;
     ros::Subscriber color_seq_sub_;
@@ -24,4 +26,5 @@ private:
 
     std::unique_ptr<Planner> planner_;
     bool running_;
+    std::unordered_set<int> warehouse_nodes_;
 };

@@ -24,6 +24,14 @@ ChrisPlannerNode::ChrisPlannerNode(ros::NodeHandle& nh)
     planner_ = std::make_unique<Planner>(graph_dict, factory_dict, planning_method);
     ROS_INFO("Chris planner initialized successfully");
 
+    const auto& f = planner_->factory;
+    for (int n : f.input_warehouse)   warehouse_nodes_.insert(n);
+    for (int n : f.machineA_inputs)   warehouse_nodes_.insert(n);
+    for (int n : f.machineA_outputs)  warehouse_nodes_.insert(n);
+    for (int n : f.machineB_inputs)   warehouse_nodes_.insert(n);
+    for (int n : f.machineB_outputs)  warehouse_nodes_.insert(n);
+    for (int n : f.output_warehouse)  warehouse_nodes_.insert(n);
+
     color_seq_sub_ = nh_.subscribe("/color_sequence", 1,
                                    &ChrisPlannerNode::colorSequenceCallback, this);
     planned_paths_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/planned_paths", 100, true);
@@ -74,7 +82,8 @@ void ChrisPlannerNode::colorSequenceCallback(const std_msgs::String::ConstPtr& m
         ROS_INFO("Planning completed. High-level path length: %zu", result.high_level_path.size());
         ROS_INFO("Total cost: %.3f", result.total_cost);
 
-        auto final_path = planner_->convertPaths2Path(result.low_level_paths_compact);
+        auto final_path = resolveApproachSides(
+            planner_->convertPaths2Path(result.low_level_paths_compact));
 
         ROS_INFO("Final path length: %zu", final_path.size());
 
@@ -89,4 +98,30 @@ void ChrisPlannerNode::colorSequenceCallback(const std_msgs::String::ConstPtr& m
     }
 
     running_ = false;
+}
+
+std::vector<int> ChrisPlannerNode::resolveApproachSides(const std::vector<int>& path) const
+{
+    const auto& pm = planner_->factory.points_map;
+    constexpr double eps = 0.01;
+
+    auto result = path;
+    for (int idx = 0; idx < static_cast<int>(result.size()); ++idx) {
+        if (!warehouse_nodes_.count(result[idx])) continue;
+
+        int wh = result[idx];
+        double wh_x = pm.at(wh).first;
+        bool found = false;
+
+        for (int i = idx - 1; i >= 0; --i) {
+            double node_x = pm.at(result[i]).first;
+            if (std::abs(node_x - wh_x) > eps) {
+                result[idx] = (node_x > wh_x) ? wh : wh + 100;
+                found = true;
+                break;
+            }
+        }
+        if (!found) result[idx] = wh + 100;
+    }
+    return result;
 }

@@ -7,97 +7,40 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_): nh(nh_)
     nh.param("planned_paths_topic", planned_paths_topic, std::string("/planned_paths"));
     nh.param("queue_size", queue_size, 100); 
 
-    // Inicializar vetores
-    factory_coordinates.resize(39);
-    warehouse_coordinates.resize(16);
-    is_warehouse_coordinate.resize(39, false);
-    is_process_warehouse.resize(39, false);
-    is_input_warehouse.resize(39, false);
-    is_output_warehouse.resize(39, false);
-
     // ========================================================================
-    // EXTRAIR COORDENADAS DO YAML
+    // EXTRAIR COORDENADAS DO YAML (formato mapa: id -> [x, y])
     // ========================================================================
-    XmlRpc::XmlRpcValue coords_list;
-    if (nh.getParam("factory_coords", coords_list)) {
-        if (coords_list.getType() == XmlRpc::XmlRpcValue::TypeArray) {
-            for (int i = 0; i < coords_list.size() && i < 39; ++i) {
-                factory_coordinates[i].x = static_cast<double>(coords_list[i][0]);
-                factory_coordinates[i].y = static_cast<double>(coords_list[i][1]);
+    XmlRpc::XmlRpcValue coords_map;
+    if (nh.getParam("factory_coords", coords_map)) {
+        if (coords_map.getType() == XmlRpc::XmlRpcValue::TypeStruct) {
+            for (auto it = coords_map.begin(); it != coords_map.end(); ++it) {
+                int id = std::stoi(it->first);
+                Pose p;
+                p.x = static_cast<double>(it->second[0]);
+                p.y = static_cast<double>(it->second[1]);
+                factory_coordinates[id] = p;
             }
-            ROS_INFO("PlanHandlerNode: Successfully loaded %d coordinates from YAML", coords_list.size());
+            ROS_INFO("PlanHandlerNode: Loaded %zu coordinates from YAML", factory_coordinates.size());
         }
     } else {
         ROS_ERROR("PlanHandlerNode: Failed to get 'factory_coords' from parameter server!");
     }
 
     // ========================================================================
-    // WAREHOUSE COORDINATES: hardcoded (dps mudar para extrair de parametrois)
+    // WAREHOUSE FLAGS
     // ========================================================================
-    // Input 
-    warehouse_coordinates[0] = factory_coordinates[0];  // -0.695, 0.46
-    warehouse_coordinates[1] = factory_coordinates[1];  // -0.545, 0.46
-    warehouse_coordinates[2] = factory_coordinates[2];  // -0.395, 0.46
-    warehouse_coordinates[3] = factory_coordinates[3];  // -0.245, 0.46
-    
-    // Process
-    warehouse_coordinates[4] = factory_coordinates[13];  // 0.227, 0.15
-    warehouse_coordinates[5] = factory_coordinates[14];  // 0.468, 0.15
-    warehouse_coordinates[6] = factory_coordinates[17];  // -0.468, 0.0
-    warehouse_coordinates[7] = factory_coordinates[18];  // -0.227, 0.0
-    warehouse_coordinates[8] = factory_coordinates[20];  // 0.227, 0.0
-    warehouse_coordinates[9] = factory_coordinates[21];  // 0.468, 0.0
-    warehouse_coordinates[10] = factory_coordinates[24]; // -0.468, -0.15
-    warehouse_coordinates[11] = factory_coordinates[25]; // -0.227, -0.15
-    
-    // Output
-    warehouse_coordinates[12] = factory_coordinates[35]; // 0.245, -0.46
-    warehouse_coordinates[13] = factory_coordinates[36]; // 0.395, -0.46
-    warehouse_coordinates[14] = factory_coordinates[37]; // 0.545, -0.46
-    warehouse_coordinates[15] = factory_coordinates[38]; // 0.695, -0.46
-
-    // ========================================================================
-    // IS_WAREHOUSE_COORDINATE
-    // ========================================================================
-    // Input warehouses (IDs 0-3) - SEMPRE pick
-    is_warehouse_coordinate[0] = true;
-    is_warehouse_coordinate[1] = true;
-    is_warehouse_coordinate[2] = true;
-    is_warehouse_coordinate[3] = true;
-    is_input_warehouse[0] = true;
-    is_input_warehouse[1] = true;
-    is_input_warehouse[2] = true;
-    is_input_warehouse[3] = true;
-    
-    // Process warehouses (IDs 13,14,17,18,20,21,24,25)
-    is_warehouse_coordinate[13] = true;
-    is_warehouse_coordinate[14] = true;
-    is_warehouse_coordinate[17] = true;
-    is_warehouse_coordinate[18] = true;
-    is_warehouse_coordinate[20] = true;
-    is_warehouse_coordinate[21] = true;
-    is_warehouse_coordinate[24] = true;
-    is_warehouse_coordinate[25] = true;
-    
-    // Marcar warehouses de process
-    is_process_warehouse[13] = true;
-    is_process_warehouse[14] = true;
-    is_process_warehouse[17] = true;
-    is_process_warehouse[18] = true;
-    is_process_warehouse[20] = true;
-    is_process_warehouse[21] = true;
-    is_process_warehouse[24] = true;
-    is_process_warehouse[25] = true;
-    
-    // Output warehouses (IDs 35-38) - SEMPRE drop
-    is_warehouse_coordinate[35] = true;
-    is_warehouse_coordinate[36] = true;
-    is_warehouse_coordinate[37] = true;
-    is_warehouse_coordinate[38] = true;
-    is_output_warehouse[35] = true;
-    is_output_warehouse[36] = true;
-    is_output_warehouse[37] = true;
-    is_output_warehouse[38] = true;
+    for (int id : {0, 1, 2, 3}) {
+        is_warehouse_coordinate.insert(id);
+        is_input_warehouse.insert(id);
+    }
+    for (int id : {13, 14, 17, 18, 20, 21, 24, 25}) {
+        is_warehouse_coordinate.insert(id);
+        is_process_warehouse.insert(id);
+    }
+    for (int id : {35, 36, 37, 38}) {
+        is_warehouse_coordinate.insert(id);
+        is_output_warehouse.insert(id);
+    }
 
     // State variables
     fe_warehouse_coordinate = has_box = is_last_warehouse = is_current_warehouse = false;
@@ -122,56 +65,48 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
     bool is_first_node = true;  // Flag para identificar o primeiro nó do caminho
 
     for (const auto& value : msg->data) {
-    
-        if (value < 0 || value >= static_cast<int>(factory_coordinates.size())) {
-            ROS_WARN("PlanHandlerNode: Invalid node ID %d (valid range: 0-%zu), skipping", value, factory_coordinates.size() - 1);
+
+        auto coord_it = factory_coordinates.find(value);
+        if (coord_it == factory_coordinates.end()) {
+            ROS_WARN("PlanHandlerNode: Unknown node ID %d, skipping", value);
             continue;
         }
 
+        int resolved_id = (value >= 100) ? value - 100 : value;
+
         ControllerPoint point;
 
-        // =========================
-        // NODE_ID
-        // =========================
         point.node_id = value;
-
-        point.x = factory_coordinates[value].x;
-        point.y = factory_coordinates[value].y;
+        point.x = coord_it->second.x;
+        point.y = coord_it->second.y;
 
         is_last_warehouse = is_current_warehouse;
-        is_current_warehouse = is_warehouse_coordinate[value];
+        is_current_warehouse = is_warehouse_coordinate.count(resolved_id);
         fe_warehouse_coordinate = is_last_warehouse && !is_current_warehouse;
 
-        // DEBUG: Mostrar info de cada nó
-        ROS_INFO("PlanHandlerNode: Processing node %d - is_first=%d, is_warehouse=%d, is_input=%d, is_output=%d, has_box=%d",
-                value, is_first_node ? 1 : 0, is_current_warehouse ? 1 : 0, 
-                is_input_warehouse[value] ? 1 : 0, is_output_warehouse[value] ? 1 : 0, has_box ? 1 : 0);
+        ROS_INFO("PlanHandlerNode: Processing node %d (resolved %d) - is_first=%d, is_warehouse=%d, is_input=%d, is_output=%d, has_box=%d",
+                value, resolved_id, is_first_node ? 1 : 0, is_current_warehouse ? 1 : 0, 
+                is_input_warehouse.count(resolved_id) ? 1 : 0, is_output_warehouse.count(resolved_id) ? 1 : 0, has_box ? 1 : 0);
 
         if(is_current_warehouse) {
             point.is_warehouse = true;
-            was_last_warehouse_process = is_process_warehouse[value];
+            was_last_warehouse_process = is_process_warehouse.count(resolved_id);
             point.line_switch_ratio = 1.0;
             point.backwards = false;
-            // Velocidade nominal: 0.03 m/s para warehouses de process, 0.05 m/s para outras
-            point.vel_lin_nom = is_process_warehouse[value] ? 0.025 : 0.06;
+            point.vel_lin_nom = is_process_warehouse.count(resolved_id) ? 0.025 : 0.06;
 
-            // Se é o primeiro nó do caminho E é uma warehouse, NÃO fazer toggle do has_box
-            // (o robô já está nessa posição, é apenas o ponto de partida)
-            // IMPORTANTE: Também não adicionar ao plan_stack para evitar conflitos com caminhos futuros
             if (is_first_node) {
                 ROS_INFO("PlanHandlerNode: First node is warehouse (ID %d), skipping entirely (not added to plan_stack)", value);
                 is_first_node = false;
-                continue;  // Salta este ponto completamente - não adiciona a control_points nem plan_stack
+                continue;
             } 
-            // Input warehouses: SEMPRE pick (has_box = true)
-            else if (is_input_warehouse[value]) {
+            else if (is_input_warehouse.count(resolved_id)) {
                 point.pick_box = true;
                 has_box = true;
                 point.should_pub = true;
                 ROS_INFO("PlanHandlerNode: Input warehouse (ID %d) -> PICK", value);
             }
-            // Output warehouses: SEMPRE drop (has_box = false)
-            else if (is_output_warehouse[value]) {
+            else if (is_output_warehouse.count(resolved_id)) {
                 point.pick_box = false;
                 has_box = false;
                 point.should_pub = true;
@@ -200,12 +135,12 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                 // Se é warehouse de drop (pick_box = false)
                 // Para warehouses de process: usar line_switch_ratio = 0.95
                 // Para outras warehouses: usar line_switch_ratio = 0.60
-                double drop_switch_ratio = is_process_warehouse[value] ? 0.95 : 0.60;
+                double drop_switch_ratio = is_process_warehouse.count(resolved_id) ? 0.95 : 0.60;
                 
                 if (!control_points.empty()) {
                     control_points.back().line_switch_ratio = drop_switch_ratio;
                     ROS_INFO("PlanHandlerNode: Set line_switch_ratio=%.2f for previous point (before drop warehouse, process=%d)", 
-                            drop_switch_ratio, is_process_warehouse[value] ? 1 : 0);
+                            drop_switch_ratio, is_process_warehouse.count(resolved_id) ? 1 : 0);
                 }
                 // Também atualizar no plan_stack se não estiver vazio
                 if (!plan_stack.empty()) {

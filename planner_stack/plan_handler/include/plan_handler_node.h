@@ -7,6 +7,8 @@
 #include <plan_handler/ControllerPoint.h>
 #include <plan_handler/CompletionFeedback.h>
 #include <vector>
+#include <unordered_map>
+#include <unordered_set>
 
 struct Pose {
 
@@ -42,17 +44,15 @@ class PlanHandlerNode {
         void navCompletionFeedbackCallback(const plan_handler::CompletionFeedback::ConstPtr& msg);
 
         bool has_box;
-        bool last_pick_box_state;  // Estado anterior do pick_box para detectar mudanças
-        std::vector<Pose> factory_coordinates;
-        std::vector<Pose> warehouse_coordinates;
-        std::vector<bool> is_warehouse_coordinate; // works like a hashtable 
-        std::vector<bool> is_process_warehouse;     // Identifica warehouses de process
-        std::vector<bool> is_input_warehouse;       // Input warehouses (SEMPRE pick)
-        std::vector<bool> is_output_warehouse;      // Output warehouses (SEMPRE drop)
-        bool is_last_warehouse, is_current_warehouse, fe_warehouse_coordinate;   // falling edge
+        bool last_pick_box_state;
+        std::unordered_map<int, Pose> factory_coordinates;
+        std::unordered_set<int> is_warehouse_coordinate;
+        std::unordered_set<int> is_process_warehouse;
+        std::unordered_set<int> is_input_warehouse;
+        std::unordered_set<int> is_output_warehouse;
+        bool is_last_warehouse, is_current_warehouse, fe_warehouse_coordinate;
 
-
-	bool was_last_warehouse_process;
+        bool was_last_warehouse_process;
         std::vector<ControllerPoint> plan_stack;
         
         std::string planned_paths_topic;

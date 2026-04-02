@@ -45,6 +45,15 @@ MultiPlannerNode::MultiPlannerNode(ros::NodeHandle& nh)
 
     output_nodes_ = {35, 36, 37, 38};
 
+    // All warehouse nodes (input + machine I/O + output)
+    const auto& f = planner_->factory;
+    for (int n : f.input_warehouse)   warehouse_nodes_.insert(n);
+    for (int n : f.machineA_inputs)   warehouse_nodes_.insert(n);
+    for (int n : f.machineA_outputs)  warehouse_nodes_.insert(n);
+    for (int n : f.machineB_inputs)   warehouse_nodes_.insert(n);
+    for (int n : f.machineB_outputs)  warehouse_nodes_.insert(n);
+    for (int n : f.output_warehouse)  warehouse_nodes_.insert(n);
+
     // Initialize robots
     robots_["r1"] = RobotState();
     robots_["r2"] = RobotState();
@@ -299,6 +308,13 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
     auto full_path = extendPathWithPreviousNode(best_path);
     auto compact_path = extendPathWithPreviousNode(compactExistingPath(best_path));
 
+    if (isWarehouseNode(best_goal)) {
+        int side_node = determineApproachSideNode(best_path, best_goal);
+        compact_path[compact_path.size() - 2] = side_node;
+        ROS_INFO("[%s] Warehouse %d approach-side resolved to %d",
+                 robot_id.c_str(), best_goal, side_node);
+    }
+
     reservePath(robot_id, full_path, best_goal);
     publishPath(robot_id, compact_path);
 
@@ -375,19 +391,21 @@ bool MultiPlannerNode::releaseNode(const std::string& robot_id, int node)
 
 void MultiPlannerNode::updateRobotPosition(const std::string& robot_id, int node)
 {
+    int resolved = resolveWarehouseId(node);
+
     auto& r = robots_[robot_id];
-    if (node == r.current_node) return;
+    if (resolved == r.current_node) return;
 
     r.last_node = r.current_node;
-    r.current_node = node;
+    r.current_node = resolved;
 
-    bool released = releaseNodesBefore(robot_id, node);
+    bool released = releaseNodesBefore(robot_id, resolved);
     if (released) tryReplanWaitingRobot(robot_id);
 
     publishLogicalState(robot_id);
 
-    if (r.goal >= 0 && node == r.goal) {
-        ROS_WARN("[%s] GOAL DETECTED at node %d", robot_id.c_str(), node);
+    if (r.goal >= 0 && resolved == r.goal) {
+        ROS_WARN("[%s] GOAL DETECTED at node %d (raw CP=%d)", robot_id.c_str(), resolved, node);
         goalReached(robot_id);
     }
 }
@@ -548,6 +566,32 @@ std::vector<int> MultiPlannerNode::extendPathWithPreviousNode(
     auto extended = path;
     extended.push_back(path[path.size() - 2]);
     return extended;
+}
+
+// =====================================================================
+// Warehouse approach-side determination
+// =====================================================================
+
+int MultiPlannerNode::determineApproachSideNode(
+    const std::vector<int>& full_path, int warehouse_node) const
+{
+    const auto& pm = planner_->factory.points_map;
+    double wh_x = pm.at(warehouse_node).first;
+    constexpr double eps = 0.01;
+
+    int wh_idx = -1;
+    for (int i = static_cast<int>(full_path.size()) - 1; i >= 0; --i) {
+        if (full_path[i] == warehouse_node) { wh_idx = i; break; }
+    }
+    if (wh_idx < 0) return warehouse_node;
+
+    for (int i = wh_idx - 1; i >= 0; --i) {
+        double node_x = pm.at(full_path[i]).first;
+        if (std::abs(node_x - wh_x) > eps) {
+            return (node_x > wh_x) ? warehouse_node : warehouse_node + 100;
+        }
+    }
+    return warehouse_node + 100;
 }
 
 // =====================================================================
