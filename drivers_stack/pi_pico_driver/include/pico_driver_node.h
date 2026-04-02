@@ -115,8 +115,8 @@ class PiPicoDriver {
         char cmd_buf_[512];
 
         std::vector<int32_t> path_to_send_;
-        const std::vector<int32_t> path_empty_;
         int path_send_retries_ = 0;
+        bool cp_dirty_ = false;
 
         std::vector<int32_t> last_path_rcv_;
         bool has_last_path_rcv_ = false;

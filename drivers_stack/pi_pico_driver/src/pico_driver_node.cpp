@@ -29,8 +29,8 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   posePub = nh.advertise<nav_msgs::Odometry>("/odom", 10);
   cpRcvPub = nh.advertise<std_msgs::UInt32>("/cp_rcv", 10);
   pathRcvPub = nh.advertise<std_msgs::Int32MultiArray>("/path_rcv", 10);
-  // -> Timer (50 Hz -- aligned with syncCall timeout of 15 ms)
-  commTimer = nh.createTimer(ros::Duration(0.02), &PiPicoDriver::commTick, this);
+  // -> Timer (25 Hz -- matches Pico control loop rate)
+  commTimer = nh.createTimer(ros::Duration(0.04), &PiPicoDriver::commTick, this);
 
   // ---------------------- Serial init ---------------------
   std::string serial_port;
@@ -68,8 +68,8 @@ void PiPicoDriver::startSerial(const std::string& port) {
     return;
   }
 
-  cfsetospeed(&tty, B115200);
-  cfsetispeed(&tty, B115200);
+  cfsetospeed(&tty, B230400);
+  cfsetispeed(&tty, B230400);
 
   tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;
   tty.c_iflag = 0;
@@ -271,17 +271,21 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
 
 void PiPicoDriver::commTick(const ros::TimerEvent&) {
 
-  // Decide que PATH enviar nesta iteração (const ref, sem copia)
-  const std::vector<int32_t>& path_ref = (path_send_retries_ > 0) ? path_to_send_ : path_empty_;
-  if (path_send_retries_ > 0) path_send_retries_--;
-
-  // 1) Build the command with snprintf into pre-allocated buffer
+  // 1) Build the command -- only include CP/PATH when they have new data
   int off = std::snprintf(cmd_buf_, sizeof(cmd_buf_),
-                          "CMD:%.4f,%.4f,%c CP:%u PATH:",
+                          "CMD:%.4f,%.4f,%c",
                           messageToSend.v_d, messageToSend.w_d,
-                          messageToSend.pick_box ? '1' : '0',
-                          messageToSend.cp_send);
-  off += pathToBuffer(path_ref, cmd_buf_ + off, sizeof(cmd_buf_) - off);
+                          messageToSend.pick_box ? '1' : '0');
+  if (cp_dirty_) {
+    off += std::snprintf(cmd_buf_ + off, sizeof(cmd_buf_) - off,
+                         " CP:%u", messageToSend.cp_send);
+    cp_dirty_ = false;
+  }
+  if (path_send_retries_ > 0) {
+    off += std::snprintf(cmd_buf_ + off, sizeof(cmd_buf_) - off, " PATH:");
+    off += pathToBuffer(path_to_send_, cmd_buf_ + off, sizeof(cmd_buf_) - off);
+    path_send_retries_--;
+  }
   std::string cmd(cmd_buf_, off);
 
   if (debug_comm_) {
@@ -289,7 +293,7 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
   }
 
   // 2) Send and wait for response
-  std::string resp = syncCall(cmd, 15);
+  std::string resp = syncCall(cmd, 18);
 
   if (debug_comm_) {
     ROS_INFO("PiPico Message: %s", resp.c_str());
@@ -313,6 +317,7 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
 
 void PiPicoDriver::cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
   messageToSend.cp_send = msg->data;
+  cp_dirty_ = true;
 }
 
 void PiPicoDriver::pathSendCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg) {
