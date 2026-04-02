@@ -1,7 +1,7 @@
 # Coordenadas da fábrica: id -> [x, y]
 # IDs 100+ são os nós espelho dos warehouses (approach-side)
 factory_coords:
-  "0":   [-0.690,  0.461]
+  "0":   [-0.660,  0.461]
   "1":   [-0.55,   0.466]
   "2":   [-0.397,  0.468]
   "3":   [-0.24,   0.468]
@@ -43,7 +43,7 @@ factory_coords:
 
   # Warehouse mirror nodes (+100) -- offset 3cm à direita do robot
   # Input warehouses: approach upward (+y), right = +x
-  "100": [-0.660,  0.461]
+  "100": [-0.690,  0.461]
   "101": [-0.52,   0.466]
   "102": [-0.367,  0.468]
   "103": [-0.21,   0.468]
