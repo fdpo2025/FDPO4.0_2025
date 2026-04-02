@@ -11,83 +11,82 @@
 
 "0":
   "8":
-    "9": right
-    "16": left
+    "9": "right"
+    "16": "left"
 "1":
   "9":
-    "10": right
-    "8": left
-    "16": left
+    "10": "right"
+    "8": "left"
+    "16": "left"
 "2":
   "10":
-    "11": right
-    "9": left
+    "11": "right"
+    "9": "left"
 "3":
   "11":
-    "4": right
-    "12": right
-    "10": left
-    "19": right
-    "27": right
+    "4": "right"
+    "12": "right"
+    "10": "left"
+    "19": "right"
+    "27": "right"
 "13":
   "12":
-    "11": left
-    "4": left
-    "19": right
+    "11": "left"
+    "4": "left"
+    "19": "right"
 "14":
   "15":
-    "7": right
-    "22": left
+    "7": "right"
+    "22": "left"
 "17":
   "16":
-    "8": left
-    "9": left
-    "23": right
+    "8": "left"
+    "9": "left"
+    "23": "right"
 "18":
   "19":
-    "20": right
-    "27": left
-    "12": right
-    "26": left
+    "20": "right"
+    "27": "left"
+    "12": "right"
+    "26": "left"
 "20":
   "19":
-    "18": right
-    "27": right
-    "12": left
-    "26": right
-    "12": left
-    "11": left
+    "18": "right"
+    "27": "right"
+    "12": "left"
+    "26": "right"
+    "11": "left"
 "21":
   "22":
-    "30": left
-    "29": left
-    "15": right
+    "30": "left"
+    "29": "left"
+    "15": "right"
 "24":
   "23":
-    "16": left
-    "31": right
+    "16": "left"
+    "31": "right"
 "25":
   "26":
-    "27": left
-    "19": right
-    "34": left
+    "27": "left"
+    "19": "right"
+    "34": "left"
 "35":
   "27":
-    "28": left
-    "26": right
-    "34": right
-    "19": right
-    "11": right
+    "28": "left"
+    "26": "right"
+    "34": "right"
+    "19": "right"
+    "11": "right"
 "36":
   "28":
-    "29": left
-    "27": right
+    "29": "left"
+    "27": "right"
 "37":
   "29":
-    "30": left
-    "22": left
-    "28": right
+    "30": "left"
+    "22": "left"
+    "28": "right"
 "38":
   "30":
-    "22": left
-    "29": right
+    "22": "left"
+    "29": "right"

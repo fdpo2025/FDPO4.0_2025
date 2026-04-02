@@ -7,7 +7,10 @@
 // predecessor -> neighbor -> warehouse: "right" = ID base, "left" = ID + 100.
 class WarehouseApproachTopology {
 public:
-    explicit WarehouseApproachTopology(const std::string& yaml_path);
+    WarehouseApproachTopology() = default;
+
+    // Carrega o YAML; em falha deixa tabela vazia e regista erro (não aborta).
+    void loadFromFile(const std::string& yaml_path);
 
     // true = direita (usar warehouse_node), false = esquerda (warehouse_node + 100)
     bool isRightApproach(int warehouse, int neighbor, int predecessor) const;

@@ -4,6 +4,7 @@
 #include <queue>
 #include <algorithm>
 #include <sstream>
+#include <stdexcept>
 
 // =====================================================================
 // Constructor
@@ -12,10 +13,14 @@
 MultiPlannerNode::MultiPlannerNode(ros::NodeHandle& nh)
     : nh_(nh)
     , pickup_plan_count_(0)
-    , approach_topology_(ros::package::getPath("chris_planner") +
-                         "/files/inputs/warehouse_approach_topology.yaml")
 {
     std::string package_path = ros::package::getPath("chris_planner");
+    if (package_path.empty()) {
+        ROS_FATAL("chris_planner: ros::package::getPath retornou vazio (ROS_PACKAGE_PATH?)");
+        throw std::runtime_error("chris_planner: package path empty");
+    }
+    approach_topology_.loadFromFile(package_path +
+                                    "/files/inputs/warehouse_approach_topology.yaml");
 
     std::string graph_file = package_path + "/files/inputs/graph.yaml";
     std::string factory_file = package_path + "/files/inputs/factory_components.yaml";
