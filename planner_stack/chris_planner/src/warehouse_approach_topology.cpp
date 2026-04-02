@@ -6,30 +6,75 @@
 
 #include <cctype>
 #include <fstream>
-#include <stdexcept>
 
 namespace {
 
-int yamlKeyToInt(const YAML::Node& key)
+bool tryYamlKeyToInt(const YAML::Node& key, int* out)
 {
-    if (!key.IsScalar())
-        throw std::runtime_error("chave não escalar no warehouse_approach_topology");
+    if (!key.IsDefined() || out == nullptr) return false;
+
     try {
-        return key.as<int>();
+        *out = key.as<int>();
+        return true;
     } catch (const YAML::Exception&) {
-        return std::stoi(key.as<std::string>());
+    }
+
+    try {
+        *out = std::stoi(key.as<std::string>());
+        return true;
+    } catch (const YAML::Exception&) {
+    } catch (const std::invalid_argument&) {
+    } catch (const std::out_of_range&) {
+    }
+    return false;
+}
+
+std::string yamlNodeSnippet(const YAML::Node& n)
+{
+    try {
+        return YAML::Dump(n);
+    } catch (...) {
+        return "(dump failed)";
     }
 }
 
-std::string yamlValueToSideString(const YAML::Node& val)
+bool parseSideString(const std::string& raw, bool* right_out)
 {
-    if (!val.IsScalar()) {
-        throw std::runtime_error("valor de lado (left/right) inválido");
-    }
-    std::string s = val.as<std::string>();
+    std::string s = raw;
     for (char& c : s)
         c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return s;
+    if (s == "right" || s == "direita" || s == "d") {
+        *right_out = true;
+        return true;
+    }
+    if (s == "left" || s == "esquerda" || s == "e" || s == "l") {
+        *right_out = false;
+        return true;
+    }
+    return false;
+}
+
+bool yamlValueToRight(const YAML::Node& val, bool* right_out)
+{
+    if (!val.IsDefined() || right_out == nullptr) return false;
+
+    try {
+        std::string s = val.as<std::string>();
+        return parseSideString(s, right_out);
+    } catch (const YAML::Exception&) {
+    }
+
+    try {
+        if (val.as<bool>()) {
+            *right_out = true;
+            return true;
+        }
+    } catch (const YAML::Exception&) {
+    }
+
+    ROS_WARN_STREAM("warehouse_approach_topology: invalid side value, expected left/right: "
+                    << yamlNodeSnippet(val));
+    return false;
 }
 
 }  // namespace
@@ -40,8 +85,7 @@ void WarehouseApproachTopology::loadFromFile(const std::string& yaml_path)
 
     std::ifstream test(yaml_path.c_str());
     if (!test.good()) {
-        ROS_ERROR("warehouse_approach_topology: ficheiro inexistente ou ilegível: %s",
-                  yaml_path.c_str());
+        ROS_ERROR("warehouse_approach_topology: missing or unreadable file: %s", yaml_path.c_str());
         return;
     }
     test.close();
@@ -49,38 +93,65 @@ void WarehouseApproachTopology::loadFromFile(const std::string& yaml_path)
     try {
         YAML::Node root = YAML::LoadFile(yaml_path);
         if (!root.IsDefined() || !root.IsMap()) {
-            ROS_ERROR(
-                "warehouse_approach_topology: raiz inválida (esperado mapa): %s",
-                yaml_path.c_str());
+            ROS_ERROR("warehouse_approach_topology: root must be a map: %s", yaml_path.c_str());
             return;
         }
 
         for (auto wit = root.begin(); wit != root.end(); ++wit) {
-            int w = yamlKeyToInt(wit->first);
             const YAML::Node& nmap = wit->second;
             if (!nmap.IsMap()) {
-                ROS_WARN("warehouse_approach_topology: ignorar warehouse %d (não é mapa)", w);
+                ROS_WARN_STREAM("warehouse_approach_topology: skip root entry (not a map), key="
+                                << yamlNodeSnippet(wit->first));
                 continue;
             }
+
+            int w = 0;
+            if (!tryYamlKeyToInt(wit->first, &w)) {
+                ROS_WARN_STREAM("warehouse_approach_topology: skip root key (not int id): "
+                                << yamlNodeSnippet(wit->first));
+                continue;
+            }
+
             for (auto nit = nmap.begin(); nit != nmap.end(); ++nit) {
-                int n = yamlKeyToInt(nit->first);
                 const YAML::Node& pmap = nit->second;
                 if (!pmap.IsMap()) {
-                    ROS_WARN("warehouse_approach_topology: ignorar W=%d N=%d (não é mapa)", w, n);
+                    ROS_WARN_STREAM("warehouse_approach_topology: skip W=" << w
+                                                                          << " neighbor entry (not a map) key="
+                                                                          << yamlNodeSnippet(nit->first));
                     continue;
                 }
+
+                int n = 0;
+                if (!tryYamlKeyToInt(nit->first, &n)) {
+                    ROS_WARN_STREAM("warehouse_approach_topology: skip neighbor key under W=" << w << ": "
+                                                                                            << yamlNodeSnippet(
+                                                                                                   nit->first));
+                    continue;
+                }
+
                 for (auto pit = pmap.begin(); pit != pmap.end(); ++pit) {
-                    int p = yamlKeyToInt(pit->first);
-                    std::string side = yamlValueToSideString(pit->second);
-                    bool right = (side == "right" || side == "direita" || side == "d");
+                    int p = 0;
+                    if (!tryYamlKeyToInt(pit->first, &p)) {
+                        ROS_WARN_STREAM("warehouse_approach_topology: skip predecessor key W=" << w << " N=" << n
+                                                                                             << ": "
+                                                                                             << yamlNodeSnippet(
+                                                                                                    pit->first));
+                        continue;
+                    }
+
+                    bool right = false;
+                    if (!yamlValueToRight(pit->second, &right)) {
+                        ROS_WARN_STREAM("warehouse_approach_topology: skip W=" << w << " N=" << n << " P=" << p
+                                                                                             << " bad value");
+                        continue;
+                    }
                     table_[w][n][p] = right;
                 }
             }
         }
-        ROS_INFO("warehouse_approach_topology: carregado de %s", yaml_path.c_str());
+        ROS_INFO("warehouse_approach_topology: loaded from %s", yaml_path.c_str());
     } catch (const YAML::Exception& e) {
-        ROS_ERROR("warehouse_approach_topology: YAML error em %s: %s", yaml_path.c_str(),
-                  e.what());
+        ROS_ERROR("warehouse_approach_topology: YAML error in %s: %s", yaml_path.c_str(), e.what());
     } catch (const std::exception& e) {
         ROS_ERROR("warehouse_approach_topology: %s", e.what());
     }
@@ -97,7 +168,7 @@ bool WarehouseApproachTopology::isRightApproach(
     if (pit == nit->second.end()) {
         ROS_WARN_THROTTLE(
             30.0,
-            "warehouse_approach_topology: sem entrada para W=%d N=%d P=%d — a assumir esquerda (+100)",
+            "warehouse_approach_topology: no entry for W=%d N=%d P=%d — assuming left (+100)",
             warehouse, neighbor, predecessor);
         return false;
     }
