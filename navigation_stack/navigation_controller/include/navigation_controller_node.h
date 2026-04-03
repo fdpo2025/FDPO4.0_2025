@@ -155,7 +155,7 @@ class NavigationController {
         void hardStop();
         void setTheta();
         void goToXY();
-        /** Process warehouse go-to: 1) alinha v=0 até bearing_align_yaw_tol; 2) v constante (v_nom), w=kp*bearing. */
+        /** Process warehouse go-to: 1) alinha v=0 até bearing_align_yaw_tol; 2) v constante (v_nom), w=0. */
         void goToXYProcessWarehouse();
         void followLine();
 

@@ -665,9 +665,7 @@ void NavigationController::goToXYProcessWarehouse() {
         }
     }
 
-    w_d = param.kp_angular * yaw_error;
-    if (w_d > param.w_nom) w_d = param.w_nom;
-    else if (w_d < -param.w_nom) w_d = -param.w_nom;
+    w_d = 0.0;
 
     double v_target = std::min(param.v_nom, param.v_max);
     if (v_target < param.v_min)
