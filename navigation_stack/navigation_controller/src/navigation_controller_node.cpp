@@ -763,6 +763,24 @@ void NavigationController::followLine() {
                                    ? route.front().line_switch_ratio
                                    : param.line_switch_ratio;
 
+    auto considerProcessWarehousePrealign = [&]() {
+        if (!process_next || prealign_process_done_ || line_progress < switch_ratio_l1)
+            return;
+        const WayPoint& wh_p = route[1];
+        double dnx_p = wh_p.pose.x - line.pf.pose.x;
+        double dny_p = wh_p.pose.y - line.pf.pose.y;
+        double theta_next_p = std::atan2(dny_p, dnx_p);
+        if (wh_p.backwards) theta_next_p = normalizeAngle(theta_next_p + M_PI);
+        double yaw_err_pre = normalizeAngle(theta_next_p - poseCurr.theta);
+        if (std::fabs(yaw_err_pre) > param.prealign_process_yaw_tol) {
+            followLineFsm.new_state = navigation::followLineStates::Align_Before_Process;
+            ROS_WARN_THROTTLE(1.0, "Align_Before_Process at line_switch (after Approaching): yaw_err=%.3f rad",
+                              yaw_err_pre);
+        } else {
+            prealign_process_done_ = true;
+        }
+    };
+
     if (followLineFsm.state == navigation::followLineStates::Align_Before_Process) {
         if (route.size() >= 2) {
             const WayPoint& wh_a = route[1];
@@ -787,29 +805,20 @@ void NavigationController::followLine() {
                 followLineFsm.new_state = navigation::followLineStates::Approaching_PickDrop;
                 ROS_WARN("approaching pick/drop state");
             }
-        } else if (process_next && !skip_approaching_straight && !prealign_process_done_
-                   && line_progress >= switch_ratio_l1) {
-            const WayPoint& wh_p = route[1];
-            double dnx_p = wh_p.pose.x - line.pf.pose.x;
-            double dny_p = wh_p.pose.y - line.pf.pose.y;
-            double theta_next_p = std::atan2(dny_p, dnx_p);
-            if (wh_p.backwards) theta_next_p = normalizeAngle(theta_next_p + M_PI);
-            double yaw_err_pre = normalizeAngle(theta_next_p - poseCurr.theta);
-            if (std::fabs(yaw_err_pre) > param.prealign_process_yaw_tol) {
-                followLineFsm.new_state = navigation::followLineStates::Align_Before_Process;
-                ROS_WARN_THROTTLE(1.0, "Align_Before_Process after l1 line_switch: yaw_err=%.3f rad", yaw_err_pre);
-            } else {
-                prealign_process_done_ = true;
-            }
-        } else if (pf_is_line_before_warehouse && error_dist <= param.approaching_enter_dist_m && !skip_approaching_straight
-                   && (!route[1].is_process_warehouse || prealign_process_done_ || skip_approaching_straight)) {
+        } else if (skip_approaching_straight) {
+            considerProcessWarehousePrealign();
+        } else if (pf_is_line_before_warehouse && error_dist <= param.approaching_enter_dist_m
+                   && !skip_approaching_straight) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
             approaching_brake_ref_dist_ = std::max(error_dist, 1e-3);
             ROS_WARN("approaching normal state (dist_pf=%.3f m <= %.3f m, ref_dist=%.3f m)",
                      error_dist, param.approaching_enter_dist_m, approaching_brake_ref_dist_);
         }
+    } else if (followLineFsm.state == navigation::followLineStates::Approaching) {
+        if (!skip_approaching_straight)
+            considerProcessWarehousePrealign();
     }
-    
+
     followLineFsm.set_state();
     
     const double completion_threshold = 0.7;
