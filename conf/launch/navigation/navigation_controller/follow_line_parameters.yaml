@@ -32,8 +32,8 @@ navigation_controller:
   approaching_vel_pickdrop: 0.08
 
   # Approaching_process_PickDrop
-  k_approaching_process: 5.5
-  gain_approaching_fwd_process: 1.5
+  k_approaching_process: 8.5
+  gain_approaching_fwd_process: 1.4
   approaching_vel_process: 0.06
 
 plan_handler:
@@ -42,7 +42,7 @@ plan_handler:
 
   line_switch_before_pick: 1.0
   line_switch_plan_stack_before_pick: 1.0
-  line_switch_drop_process: 0.95
+  line_switch_drop_process: 1.0
   line_switch_drop_other: 0.60
   line_switch_after_warehouse_process: 1.0
   line_switch_after_warehouse: 0.7
