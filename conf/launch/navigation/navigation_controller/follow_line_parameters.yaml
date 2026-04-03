@@ -25,9 +25,6 @@ navigation_controller:
   # Antes do Approaching, se o próximo nó for warehouse de process: parar (v=0) e orientar ao segmento pf→warehouse
   kp_prealign_process: 2.0
   prealign_process_yaw_tol: 0.08
-  prealign_process_enter_dist_m: 0.25
-  # Só pre-align perto do vértice pf (fim da linha anterior); ~1 = só no fim do segmento pi→pf
-  prealign_process_min_line_progress: 0.88
   k_approaching: 8.5
   gain_approaching_fwd: 1.0
   approaching_vel_normal: 0.07
