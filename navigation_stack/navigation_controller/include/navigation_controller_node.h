@@ -113,7 +113,8 @@ class NavigationController {
             double approaching_enter_dist_m;   // Entrar em Approaching quando dist(robô, pf) <= isto (m)
             double kp_prealign_process;        // Ganho angular no estado Align_Before_Process (próxima linha process)
             double prealign_process_yaw_tol; // Tolerância de yaw para concluir pre-align (rad)
-            double prealign_process_enter_dist_m; // Dist ao pf para iniciar orientação à próxima linha (m)
+            double prealign_process_enter_dist_m; // Dist ao pf (vértice) para permitir pre-align (m)
+            double prealign_process_min_line_progress; // Fracção pi→pf: só pre-align perto do pf (vértice)
             double approaching_vel_normal;     // Piso de v_d no Approaching (antes de warehouse)
             double k_approaching;              // Ganhos estado Approaching (normal)
             double gain_approaching_fwd;
