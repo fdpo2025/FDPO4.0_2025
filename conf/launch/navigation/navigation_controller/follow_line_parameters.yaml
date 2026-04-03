@@ -22,7 +22,7 @@ navigation_controller:
 
   # Approaching normal (linha antes de warehouse, não pick/drop no pf): entra quando dist ao pf <= isto; v proporcional à dist até pf
   approaching_enter_dist_m: 0.10
-  # Process warehouse go-to fase 1: |bearing ao alvo| <= isto (rad) antes de avançar. Fase 2: só v, w=0.
+  # Process warehouse go-to fase 1: |bearing| <= isto (rad). Fase 2: v constante (v_nom global), w=kp*bearing.
   bearing_align_yaw_tol: 0.12
   k_approaching: 8.5
   gain_approaching_fwd: 1.0

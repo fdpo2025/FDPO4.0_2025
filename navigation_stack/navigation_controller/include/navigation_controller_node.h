@@ -155,7 +155,7 @@ class NavigationController {
         void hardStop();
         void setTheta();
         void goToXY();
-        /** Go-to puro ao process warehouse: 1) alinha (v=0) até bearing_align_yaw_tol; 2) só v, w=0 até chegar. */
+        /** Process warehouse go-to: 1) alinha v=0 até bearing_align_yaw_tol; 2) v constante (v_nom), w=kp*bearing. */
         void goToXYProcessWarehouse();
         void followLine();
 
@@ -179,7 +179,7 @@ class NavigationController {
 
         double last_vel_before_approaching_;  // Última |v_d| em Follow_Line; teto em Approaching
         double approaching_brake_ref_dist_;   // dist(robô,pf) ao entrar em Approaching (normaliza v proporcional)
-        bool process_warehouse_goto_align_done_;  // Fase 2 do go-to process: já passou alinhamento, só avança com w=0
+        bool process_warehouse_goto_align_done_;  // Fase 2 do go-to process: já passou alinhamento inicial (v=0)
 
         // Estado para pick box forward
         ros::Time pick_box_forward_start_time;

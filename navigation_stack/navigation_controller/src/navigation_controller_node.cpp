@@ -665,13 +665,13 @@ void NavigationController::goToXYProcessWarehouse() {
         }
     }
 
-    w_d = 0.0;
+    w_d = param.kp_angular * yaw_error;
+    if (w_d > param.w_nom) w_d = param.w_nom;
+    else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
-    double v_target = param.v_nom * std::min(1.0, param.kp_linear * position_error);
-    if (v_target > 0.0 && v_target < param.v_min)
+    double v_target = std::min(param.v_nom, param.v_max);
+    if (v_target < param.v_min)
         v_target = param.v_min;
-    if (v_target > param.v_max)
-        v_target = param.v_max;
 
     if (v_target > v_d) {
         v_d += param.a_max * dt;
