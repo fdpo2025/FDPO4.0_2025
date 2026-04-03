@@ -111,7 +111,7 @@ class NavigationController {
             double stanley_soft_v;          // Chão de |v| antes de somar eps (m/s)
             double stanley_eps;             // ε em atan2(k·e, max(|v_ref|,soft_v)+eps)
             double approaching_enter_dist_m;   // Entrar em Approaching quando dist(robô, pf) <= isto (m)
-            /** Yaw para dar por concluída a rotação inicial (go-to process warehouse); maior que yaw_tol → para antes e menos overshoot. */
+            /** Go-to process warehouse: só avança (v>0) quando |erro bearing| <= isto (rad). Maior → menos rotação em sitio, mais cedo avança. */
             double bearing_align_yaw_tol;
             double approaching_vel_normal;     // Piso de v_d no Approaching (antes de warehouse)
             double k_approaching;              // Ganhos estado Approaching (normal)
@@ -154,9 +154,9 @@ class NavigationController {
 
         void hardStop();
         void setTheta();
-        /** Roda em sitio com v=0 até o yaw apontar ao alvo (poseDesired), como goToXY fase 1. */
-        void setThetaTowardGoal();
         void goToXY();
+        /** Go-to ao process warehouse: v=0 enquanto |bearing| > bearing_align_yaw_tol; depois goToXY(). */
+        void goToXYProcessWarehouse();
         void followLine();
 
         std::deque<WayPoint> route;
@@ -221,8 +221,7 @@ namespace navigation {
             idle = 0,
             driveToGoal,
             turnToFinalYaw,
-            /** Warehouse de processo (!align): orientar para o ponto e ir em linha reta (goToXY), sem follow-line. */
-            processWarehouseAlignYaw,
+            /** Warehouse de processo (!align): go-to XY com fase inicial só rotação (bearing_align_yaw_tol). */
             processWarehouseGoToXY,
             pickBoxForward,  // Estado para andar para frente após chegar a warehouse de pick
             done

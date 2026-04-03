@@ -22,7 +22,7 @@ navigation_controller:
 
   # Approaching normal (linha antes de warehouse, não pick/drop no pf): entra quando dist ao pf <= isto; v proporcional à dist até pf
   approaching_enter_dist_m: 0.10
-  # Após line_switch na l1 (próximo = process warehouse !align): go-to ao ponto do warehouse — fase 1 só rodação (rad, maior → corta w mais cedo).
+  # Process warehouse go-to: v=0 enquanto |bearing| > isto (rad); depois avança. Maior → menos rotação em sitio, avança mais cedo.
   bearing_align_yaw_tol: 0.12
   k_approaching: 8.5
   gain_approaching_fwd: 1.0

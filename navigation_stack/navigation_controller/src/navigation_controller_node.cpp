@@ -180,6 +180,8 @@ void NavigationController::loadNavigationParams() {
         const double bearing_default = std::max(param.yaw_tol * 1.5, 0.10);
         nh_fl.param("bearing_align_yaw_tol", param.bearing_align_yaw_tol, bearing_default);
     }
+    ROS_INFO("NavigationController: bearing_align_yaw_tol=%.4f rad (process warehouse go-to, fase rodação em sitio)",
+             param.bearing_align_yaw_tol);
     nh_fl.param("k_approaching", param.k_approaching, 10.0);
     nh_fl.param("gain_approaching_fwd", param.gain_approaching_fwd, 2.0);
     nh_fl.param("approaching_vel_normal", param.approaching_vel_normal, param.v_min);
@@ -632,25 +634,32 @@ void NavigationController::setTheta() {
 
 }
 
-void NavigationController::setThetaTowardGoal() {
-
-    v_d = 0.0;
+void NavigationController::goToXYProcessWarehouse() {
 
     if (route.empty()) {
+        v_d = 0.0;
         w_d = 0.0;
         return;
     }
 
+    double position_error = getPositionError();
     double yaw_error = getAlignYawError();
-    if (std::fabs(yaw_error) <= param.bearing_align_yaw_tol) {
+
+    if (position_error <= param.arrive_radius) {
+        v_d = 0.0;
         w_d = 0.0;
         return;
     }
 
-    w_d = param.kp_angular * yaw_error;
+    if (std::fabs(yaw_error) > param.bearing_align_yaw_tol) {
+        v_d = 0.0;
+        w_d = param.kp_angular * yaw_error;
+        if (w_d > param.w_nom) w_d = param.w_nom;
+        else if (w_d < -param.w_nom) w_d = -param.w_nom;
+        return;
+    }
 
-    if (w_d > param.w_nom) w_d = param.w_nom;
-    else if (w_d < -param.w_nom) w_d = -param.w_nom;
+    goToXY();
 }
 
 void NavigationController::goToXY() {
@@ -982,13 +991,6 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         }
     }
 
-    else if (navigationFsm.state == navigation::states::processWarehouseAlignYaw && enable) {
-        if (std::fabs(getAlignYawError()) <= param.bearing_align_yaw_tol) {
-            navigationFsm.new_state = navigation::states::processWarehouseGoToXY;
-            ROS_INFO("NavigationController: Process warehouse target bearing OK, driving go-to-XY");
-        }
-    }
-
     else if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable && isPositionArrived()) {
 
         previousWaypoint = route.front();
@@ -1102,14 +1104,13 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     if (navigationFsm.new_state == navigation::states::driveToGoal && enable && !route.empty()
         && route.front().is_warehouse && route.front().is_process_warehouse && !route.front().align) {
-        navigationFsm.new_state = navigation::states::processWarehouseAlignYaw;
+        navigationFsm.new_state = navigation::states::processWarehouseGoToXY;
     }
 
     navigationFsm.set_state();
 
     if (navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
-    else if (navigationFsm.state == navigation::states::processWarehouseAlignYaw && enable) setThetaTowardGoal();
-    else if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable) goToXY();
+    else if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable) goToXYProcessWarehouse();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         v_d = previousWaypoint.backwards ? -0.1 : 0.1;
