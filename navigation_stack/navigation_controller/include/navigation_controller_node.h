@@ -111,8 +111,6 @@ class NavigationController {
             double stanley_soft_v;          // Chão de |v| antes de somar eps (m/s)
             double stanley_eps;             // ε em atan2(k·e, max(|v_ref|,soft_v)+eps)
             double approaching_enter_dist_m;   // Entrar em Approaching quando dist(robô, pf) <= isto (m)
-            double kp_prealign_process;        // Ganho angular no estado Align_Before_Process (próxima linha process)
-            double prealign_process_yaw_tol; // Tolerância de yaw para concluir pre-align (rad)
             /** Yaw para dar por concluída a rotação inicial (go-to process warehouse); maior que yaw_tol → para antes e menos overshoot. */
             double bearing_align_yaw_tol;
             double approaching_vel_normal;     // Piso de v_d no Approaching (antes de warehouse)
@@ -139,7 +137,6 @@ class NavigationController {
         bool isBackwards();
         // Align to reach the desired position
         double getAlignYawError();
-        bool checkAlignYaw();
         // Go to desired position
         double getPositionError();
         bool isPositionArrived();
@@ -161,7 +158,6 @@ class NavigationController {
         void setThetaTowardGoal();
         void goToXY();
         void followLine();
-        void resetPrealignProcessDone();
 
         std::deque<WayPoint> route;
         void updateDesiredPose();
@@ -183,8 +179,6 @@ class NavigationController {
 
         double last_vel_before_approaching_;  // Última |v_d| em Follow_Line; teto em Approaching
         double approaching_brake_ref_dist_;   // dist(robô,pf) ao entrar em Approaching (normaliza v proporcional)
-        bool prealign_process_done_;          // Já orientado à próxima linha (warehouse process)
-        bool skip_approaching_straight_last_; // Último skip colinear (para adiar pop até pre-align)
 
         // Estado para pick box forward
         ros::Time pick_box_forward_start_time;
@@ -240,7 +234,6 @@ namespace navigation {
 
         enum {
             Follow_Line = 0,
-            Align_Before_Process,  // Orientar ao yaw da linha pf→warehouse process antes de Approaching
             Approaching,        // Linhas normais: v proporcional a error_dist
             Approaching_PickDrop,  // Pick/drop (warehouse não-process): v quadrática em |w_d|/w_nom
             Approaching_process_PickDrop  // Pick/drop warehouse process: mesma lei, parâmetros dedicados
