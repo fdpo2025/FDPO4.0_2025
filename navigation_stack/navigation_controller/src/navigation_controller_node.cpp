@@ -4,7 +4,8 @@
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0),
 navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line),
 k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false, false, false, -1}), tfBuffer(), tfListener(tfBuffer),
-in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake_ref_dist_(0.1) {
+in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake_ref_dist_(0.1),
+    process_warehouse_goto_align_done_(false) {
 
     mode = "idle";
 
@@ -644,6 +645,7 @@ void NavigationController::goToXYProcessWarehouse() {
 
     double position_error = getPositionError();
     double yaw_error = getAlignYawError();
+    double dt = 1.0 / param.loop_rate_hz;
 
     if (position_error <= param.arrive_radius) {
         v_d = 0.0;
@@ -651,15 +653,41 @@ void NavigationController::goToXYProcessWarehouse() {
         return;
     }
 
-    if (std::fabs(yaw_error) > param.bearing_align_yaw_tol) {
-        v_d = 0.0;
-        w_d = param.kp_angular * yaw_error;
-        if (w_d > param.w_nom) w_d = param.w_nom;
-        else if (w_d < -param.w_nom) w_d = -param.w_nom;
-        return;
+    if (!process_warehouse_goto_align_done_) {
+        if (std::fabs(yaw_error) <= param.bearing_align_yaw_tol) {
+            process_warehouse_goto_align_done_ = true;
+        } else {
+            v_d = 0.0;
+            w_d = param.kp_angular * yaw_error;
+            if (w_d > param.w_nom) w_d = param.w_nom;
+            else if (w_d < -param.w_nom) w_d = -param.w_nom;
+            return;
+        }
     }
 
-    goToXY();
+    w_d = 0.0;
+
+    double v_target = param.v_nom * std::min(1.0, param.kp_linear * position_error);
+    if (v_target > 0.0 && v_target < param.v_min)
+        v_target = param.v_min;
+    if (v_target > param.v_max)
+        v_target = param.v_max;
+
+    if (v_target > v_d) {
+        v_d += param.a_max * dt;
+        if (v_d > v_target) v_d = v_target;
+    } else {
+        v_d -= param.d_max * dt;
+        if (v_d < v_target) v_d = v_target;
+    }
+
+    if (v_d > param.v_max)
+        v_d = param.v_max;
+    if (v_d < -param.v_max)
+        v_d = -param.v_max;
+
+    if (isBackwards())
+        v_d = -v_d;
 }
 
 void NavigationController::goToXY() {
@@ -914,6 +942,7 @@ void NavigationController::followLine() {
 void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     navigationFsm.update_tis();
+    const int nav_state_at_tick_start = navigationFsm.state;
     bool enable = !(mode == "stop" || mode == "pause") && !route.empty();
 
     if(navigationFsm.state == navigation::states::idle && enable) {
@@ -1108,6 +1137,11 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     }
 
     navigationFsm.set_state();
+
+    if (navigationFsm.state == navigation::states::processWarehouseGoToXY
+        && nav_state_at_tick_start != navigation::states::processWarehouseGoToXY) {
+        process_warehouse_goto_align_done_ = false;
+    }
 
     if (navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
     else if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable) goToXYProcessWarehouse();
