@@ -22,6 +22,10 @@ navigation_controller:
 
   # Approaching normal (linha antes de warehouse, não pick/drop no pf): entra quando dist ao pf <= isto; v proporcional à dist até pf
   approaching_enter_dist_m: 0.10
+  # Antes do Approaching, se o próximo nó for warehouse de process: parar (v=0) e orientar ao segmento pf→warehouse
+  kp_prealign_process: 2.0
+  prealign_process_yaw_tol: 0.08
+  prealign_process_enter_dist_m: 0.25
   k_approaching: 8.5
   gain_approaching_fwd: 1.0
   approaching_vel_normal: 0.07
