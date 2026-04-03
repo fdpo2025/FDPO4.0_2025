@@ -113,6 +113,8 @@ class NavigationController {
             double approaching_enter_dist_m;   // Entrar em Approaching quando dist(robô, pf) <= isto (m)
             double kp_prealign_process;        // Ganho angular no estado Align_Before_Process (próxima linha process)
             double prealign_process_yaw_tol; // Tolerância de yaw para concluir pre-align (rad)
+            /** Yaw para dar por concluída a rotação inicial (go-to process warehouse); maior que yaw_tol → para antes e menos overshoot. */
+            double bearing_align_yaw_tol;
             double approaching_vel_normal;     // Piso de v_d no Approaching (antes de warehouse)
             double k_approaching;              // Ganhos estado Approaching (normal)
             double gain_approaching_fwd;
@@ -155,6 +157,8 @@ class NavigationController {
 
         void hardStop();
         void setTheta();
+        /** Roda em sitio com v=0 até o yaw apontar ao alvo (poseDesired), como goToXY fase 1. */
+        void setThetaTowardGoal();
         void goToXY();
         void followLine();
         void resetPrealignProcessDone();
@@ -223,6 +227,9 @@ namespace navigation {
             idle = 0,
             driveToGoal,
             turnToFinalYaw,
+            /** Warehouse de processo (!align): orientar para o ponto e ir em linha reta (goToXY), sem follow-line. */
+            processWarehouseAlignYaw,
+            processWarehouseGoToXY,
             pickBoxForward,  // Estado para andar para frente após chegar a warehouse de pick
             done
 

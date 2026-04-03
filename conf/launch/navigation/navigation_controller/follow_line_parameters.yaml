@@ -24,7 +24,10 @@ navigation_controller:
   approaching_enter_dist_m: 0.10
   # Antes do Approaching, se o próximo nó for warehouse de process: parar (v=0) e orientar ao segmento pf→warehouse
   kp_prealign_process: 2.0
-  prealign_process_yaw_tol: 0.08
+  # Pre-align l1→l2: |erro yaw| <= isto (rad) para concluir. Aumentar (~0.10–0.14) se o robô “passar” do alinhamento.
+  prealign_process_yaw_tol: 0.10
+  # Go-to process warehouse, fase 1 (rodar para o ponto): deve ser >= yaw_tol global; maior → declara “alinhado” mais cedo (menos overshoot).
+  bearing_align_yaw_tol: 0.12
   k_approaching: 8.5
   gain_approaching_fwd: 1.0
   approaching_vel_normal: 0.07
