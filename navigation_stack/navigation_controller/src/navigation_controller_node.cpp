@@ -4,7 +4,7 @@
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0),
 navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line),
 k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false, false, false, -1}), tfBuffer(), tfListener(tfBuffer),
-in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_start_progress_(0.0) {
+in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake_ref_dist_(0.1) {
 
     mode = "idle";
 
@@ -175,7 +175,7 @@ void NavigationController::loadNavigationParams() {
     nh_fl.param("stanley_k", param.stanley_k, 1.0);
     nh_fl.param("stanley_soft_v", param.stanley_soft_v, 0.05);
     nh_fl.param("stanley_eps", param.stanley_eps, 0.0);
-    nh_fl.param("approaching_line_progress", param.approaching_line_progress, 0.50);
+    nh_fl.param("approaching_enter_dist_m", param.approaching_enter_dist_m, 0.10);
     nh_fl.param("k_approaching", param.k_approaching, 10.0);
     nh_fl.param("gain_approaching_fwd", param.gain_approaching_fwd, 2.0);
     nh_fl.param("approaching_vel_normal", param.approaching_vel_normal, param.v_min);
@@ -754,10 +754,11 @@ void NavigationController::followLine() {
                 followLineFsm.new_state = navigation::followLineStates::Approaching_PickDrop;
                 ROS_WARN("approaching pick/drop state");
             }
-        } else if (pf_is_line_before_warehouse && line_progress > param.approaching_line_progress && !skip_approaching_straight) {
+        } else if (pf_is_line_before_warehouse && error_dist <= param.approaching_enter_dist_m && !skip_approaching_straight) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
-            approaching_start_progress_ = line_progress;
-            ROS_WARN("approaching normal state");
+            approaching_brake_ref_dist_ = std::max(error_dist, 1e-3);
+            ROS_WARN("approaching normal state (dist_pf=%.3f m <= %.3f m, ref_dist=%.3f m)",
+                     error_dist, param.approaching_enter_dist_m, approaching_brake_ref_dist_);
         }
     }
     
@@ -804,11 +805,11 @@ void NavigationController::followLine() {
 
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-        double denom = 1.0 - approaching_start_progress_;
-        double progress_ramp = (denom > 0.01) ? (line_progress - approaching_start_progress_) / denom : 1.0;
-        progress_ramp = std::max(0.0, std::min(1.0, progress_ramp));
-        double v_ref_approaching = std::max(last_vel_before_approaching_ * (1.0 - progress_ramp),
-                                              param.approaching_vel_normal);
+        double v_scale = error_dist / std::max(approaching_brake_ref_dist_, 1e-4);
+        if (v_scale > 1.0) v_scale = 1.0;
+        double v_prop = last_vel_before_approaching_ * v_scale;
+        if (v_prop > last_vel_before_approaching_) v_prop = last_vel_before_approaching_;
+        double v_ref_approaching = std::max(v_prop, param.approaching_vel_normal);
 
         if (param.use_stanley_approaching) {
             double v_nom_lin = std::max(std::abs(v_ref_approaching), param.stanley_soft_v) + param.stanley_eps;

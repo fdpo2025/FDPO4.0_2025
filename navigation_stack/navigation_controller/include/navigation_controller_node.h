@@ -110,8 +110,8 @@ class NavigationController {
             double stanley_k;               // Ganho lateral em Follow_Line (atan2)
             double stanley_soft_v;          // Chão de |v| antes de somar eps (m/s)
             double stanley_eps;             // ε em atan2(k·e, max(|v_ref|,soft_v)+eps)
-            double approaching_line_progress;  // Line progress threshold to enter Approaching state (0.60 = 60%)
-            double approaching_vel_normal;     // Piso da rampa linear no estado Approaching (antes de warehouse)
+            double approaching_enter_dist_m;   // Entrar em Approaching quando dist(robô, pf) <= isto (m)
+            double approaching_vel_normal;     // Piso de v_d no Approaching (antes de warehouse)
             double k_approaching;              // Ganhos estado Approaching (normal)
             double gain_approaching_fwd;
             double k_approaching_pickdrop;     // Ganhos estado Approaching_PickDrop
@@ -174,8 +174,8 @@ class NavigationController {
         ros::Publisher navCompletionFeedbackPub;
         bool completion_feedback_sent;  // Para enviar feedback apenas uma vez por linha
 
-        double last_vel_before_approaching_;  // Última v_d em Follow_Line; limite máximo em Approaching
-        double approaching_start_progress_;   // line_progress ao entrar em Approaching (para rampa \)
+        double last_vel_before_approaching_;  // Última |v_d| em Follow_Line; teto em Approaching
+        double approaching_brake_ref_dist_;   // dist(robô,pf) ao entrar em Approaching (normaliza v proporcional)
 
         // Estado para pick box forward
         ros::Time pick_box_forward_start_time;
