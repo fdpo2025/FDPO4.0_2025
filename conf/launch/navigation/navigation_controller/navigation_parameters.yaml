@@ -27,20 +27,6 @@ kp_linear: 5.0      # Ganho proporcional para controlo linear (~1/lambda, lambda
 kp_angular: 1.0     # Ganho proporcional para controlo angular
 
 # ============================================================================
-# PARÂMETROS followLine (seguir linha entre waypoints)
+# PARÂMETROS followLine → conf/launch/navigation/navigation_controller/follow_line_parameters.yaml
+# (namespace /follow_line/navigation_controller, carregado em navigation.xml)
 # ============================================================================
-k_line: 8.5              # Ganho para correção de linha (followLine)
-gain_fwd: 1.3            # GAIN_FWD - ganho forward para controlo de linha
-vel_lin_nom: 0.2         # VEL_LIN_NOM - velocidade linear nominal para seguir linha (m/s)
-dist_da: 0.20             # DIST_DA - distância para começar a desacelerar (m)
-tol_findist: 0.05        # TOL_FINDIST - tolerância de distância final (m)
-max_etf: 0.2             # MAX_ETF - máximo erro de orientação para transição GoTo_Init -> Follow_Line (rad)
-tol_init_line: 0.03      # Tolerância de distância à linha para transição GoTo_Init -> Follow_Line (m)
-line_switch_ratio: 0.85   # Ratio da linha para mudar para próxima (0.8 = 80%)
-
-k_approaching: 8.0       # Ganho para controle angular no estado Approaching
-gain_approaching_fwd: 1.0 # Ganho forward para controle no estado Approaching
-approaching_line_progress: 0.40  # Progresso da linha para entrar em Approaching (0.50 = 50%)
-approaching_vel: 0.085   # Velocidade máx no Approaching_PickDrop v(w³); antes 0.05 (muito lento)
-# Se o ângulo da linha atual (pi→pf) e da seguinte (pf→warehouse) difere menos que isto (rad), não entra em Approaching (reta)
-approaching_colinear_angle_rad: 0.087  # ~5°

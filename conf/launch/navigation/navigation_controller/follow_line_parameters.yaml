@@ -1,0 +1,54 @@
+# Parâmetros partilhados de seguimento de linha (follow line).
+# Carregados com: rosparam ... ns="/follow_line"
+#  /follow_line/navigation_controller/...
+#  /follow_line/plan_handler/...
+
+navigation_controller:
+  use_stanley_follow_line: false
+  use_stanley_approaching: false
+  stanley_k: 1.0
+  stanley_soft_v: 0.05
+  stanley_eps: 0.0
+
+  k_line: 8.5
+  gain_fwd: 1.3
+  vel_lin_nom: 0.3
+  dist_da: 0.20
+  tol_findist: 0.05
+  max_etf: 0.2
+  tol_init_line: 0.03
+  line_switch_ratio: 0.85
+  approaching_colinear_angle_rad: 0.087 # 5 graus (usado para ver se é preciso entrar no approaching, util em casos em que duas linhas são colineares e portanto não é preciso desacelerar)
+
+  # Approaching normal (linha antes de warehouse, não pick/drop no pf): entra quando dist ao pf <= isto; v proporcional à dist até pf
+  approaching_enter_dist_m: 0.10
+  # Process warehouse go-to fase 1: |bearing| <= isto (rad). Fase 2: v constante (v_nom), w=0.
+  bearing_align_yaw_tol: 0.12
+  k_approaching: 8.5
+  gain_approaching_fwd: 1.0
+  approaching_vel_normal: 0.07
+
+  # Approaching_PickDrop (warehouse não-process)
+  k_approaching_pickdrop: 8.5
+  gain_approaching_fwd_pickdrop: 1.3
+  approaching_vel_pickdrop: 0.08
+
+  # Approaching_process_PickDrop
+  k_approaching_process: 8.5
+  gain_approaching_fwd_process: 1.4
+  approaching_vel_process: 0.06
+
+plan_handler:
+  vel_lin_nom_warehouse_process: 0.025
+  vel_lin_nom_warehouse_other: 0.06
+
+  line_switch_before_pick: 1.0
+  line_switch_plan_stack_before_pick: 1.0
+  line_switch_drop_process: 1.0
+  line_switch_drop_other: 0.60
+  line_switch_after_warehouse_process: 1.0
+  line_switch_after_warehouse: 0.7
+  line_switch_normal: 0.75
+
+  vel_lin_nom_after_warehouse: 0.1
+  vel_lin_nom_normal: -1.0

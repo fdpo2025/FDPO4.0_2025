@@ -2,6 +2,9 @@
 
     <arg name="odom_topic" default="/odometry/filtered" doc="Tópico de odometria a subscrever"/>
     <arg name="ss" default="false" doc="Use state space controller (true) or original controller (false)"/>
+
+    <!-- Follow line (também em navigation.xml); necessário se este launch for usado isoladamente -->
+    <rosparam file="$(find conf)/launch/navigation/navigation_controller/follow_line_parameters.yaml" command="load" ns="/follow_line"/>
     
     <!-- Original Controller -->
     <node unless="$(arg ss)" pkg="navigation_controller" type="navigation_controller_node" name="navigation_controller_node" output="screen">

@@ -3,8 +3,9 @@
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0),
 navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line),
-k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false, false, -1}), tfBuffer(), tfListener(tfBuffer),
-in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_start_progress_(0.0) {
+k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false, false, false, -1}), tfBuffer(), tfListener(tfBuffer),
+in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake_ref_dist_(0.1),
+    process_warehouse_goto_align_done_(false) {
 
     mode = "idle";
 
@@ -88,6 +89,7 @@ void NavigationController::loadRouteFromParameters(){
     previousWaypoint.vel_lin_nom = -1.0;
     previousWaypoint.pick_box = false;  // route.yaml não tem pick_box, usar false
     previousWaypoint.is_warehouse = false;
+    previousWaypoint.is_process_warehouse = false;
     previousWaypoint.node_id = -1;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
@@ -102,6 +104,7 @@ void NavigationController::loadRouteFromParameters(){
         waypoint_temp.backwards = static_cast<bool>(waypoints[i]["backwards"]);
         waypoint_temp.pick_box = false;  // route.yaml não tem pick_box, usar false
         waypoint_temp.is_warehouse = false;  // route.yaml não tem is_warehouse, usar false
+        waypoint_temp.is_process_warehouse = false;
         waypoint_temp.node_id = -1;  // route.yaml não tem node_id
         
         // line_switch_ratio: se não definido, usar -1 (significa usar parâmetro global)
@@ -154,25 +157,48 @@ void NavigationController::loadNavigationParams() {
     nh.param("d_max", param.d_max, 0.5);
     nh.param("kp_linear", param.kp_linear, 5.0);
     nh.param("kp_angular", param.kp_angular, 2.0/M_PI * param.w_nom);
-    nh.param("k_line", param.k_line, 1.0);
     nh.param("arrive_radius",  param.arrive_radius, 0.05);
     nh.param("yaw_tol",param.yaw_tol, 0.08);
     nh.param("loop_rate_hz", param.loop_rate_hz, 30);
-    
-    nh.param("gain_fwd", param.gain_fwd, 1.0);
-    nh.param("vel_lin_nom", param.vel_lin_nom, 0.3);
-    nh.param("dist_da", param.dist_da, 0.3);
-    nh.param("tol_findist", param.tol_findist, 0.05);
-    nh.param("max_etf", param.max_etf, 0.2);
-    nh.param("tol_init_line", param.tol_init_line, 0.1);
-    nh.param("line_switch_ratio", param.line_switch_ratio, 0.9);
-    nh.param("approaching_line_progress", param.approaching_line_progress, 0.50);
-    nh.param("approaching_vel", param.approaching_vel, 0.05);
-    nh.param("k_approaching", param.k_approaching, 10.0);
-    nh.param("gain_approaching_fwd", param.gain_approaching_fwd, 2.0);
-    nh.param("approaching_colinear_angle_rad", param.approaching_colinear_angle_rad, 0.087);
 
-    ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f", 
+    // Follow line: /follow_line/navigation_controller (follow_line_parameters.yaml)
+    ros::NodeHandle nh_fl("follow_line/navigation_controller");
+    nh_fl.param("k_line", param.k_line, 1.0);
+    nh_fl.param("gain_fwd", param.gain_fwd, 1.0);
+    nh_fl.param("vel_lin_nom", param.vel_lin_nom, 0.3);
+    nh_fl.param("dist_da", param.dist_da, 0.3);
+    nh_fl.param("tol_findist", param.tol_findist, 0.05);
+    nh_fl.param("max_etf", param.max_etf, 0.2);
+    nh_fl.param("tol_init_line", param.tol_init_line, 0.1);
+    nh_fl.param("line_switch_ratio", param.line_switch_ratio, 0.9);
+    nh_fl.param("use_stanley_follow_line", param.use_stanley_follow_line, false);
+    nh_fl.param("use_stanley_approaching", param.use_stanley_approaching, false);
+    nh_fl.param("stanley_k", param.stanley_k, 1.0);
+    nh_fl.param("stanley_soft_v", param.stanley_soft_v, 0.05);
+    nh_fl.param("stanley_eps", param.stanley_eps, 0.0);
+    nh_fl.param("approaching_enter_dist_m", param.approaching_enter_dist_m, 0.10);
+    {
+        const double bearing_default = std::max(param.yaw_tol * 1.5, 0.10);
+        nh_fl.param("bearing_align_yaw_tol", param.bearing_align_yaw_tol, bearing_default);
+    }
+    ROS_INFO("NavigationController: bearing_align_yaw_tol=%.4f rad (process warehouse go-to, fase rodação em sitio)",
+             param.bearing_align_yaw_tol);
+    nh_fl.param("k_approaching", param.k_approaching, 10.0);
+    nh_fl.param("gain_approaching_fwd", param.gain_approaching_fwd, 2.0);
+    nh_fl.param("approaching_vel_normal", param.approaching_vel_normal, param.v_min);
+
+    double approaching_vel_legacy = 0.085;
+    nh_fl.param("approaching_vel", approaching_vel_legacy, approaching_vel_legacy);
+    nh_fl.param("k_approaching_pickdrop", param.k_approaching_pickdrop, param.k_approaching);
+    nh_fl.param("gain_approaching_fwd_pickdrop", param.gain_approaching_fwd_pickdrop, param.gain_approaching_fwd);
+    nh_fl.param("approaching_vel_pickdrop", param.approaching_vel_pickdrop, approaching_vel_legacy);
+
+    nh_fl.param("approaching_colinear_angle_rad", param.approaching_colinear_angle_rad, 0.087);
+    nh_fl.param("k_approaching_process", param.k_approaching_process, param.k_approaching_pickdrop);
+    nh_fl.param("gain_approaching_fwd_process", param.gain_approaching_fwd_process, param.gain_approaching_fwd_pickdrop);
+    nh_fl.param("approaching_vel_process", param.approaching_vel_process, param.approaching_vel_pickdrop);
+
+    ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f (follow_line from /follow_line/navigation_controller)", 
              param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
 
 }
@@ -201,15 +227,6 @@ double NavigationController::getAlignYawError() {
     }
 
     return normalizeAngle(theta_d - poseCurr.theta); 
-
-}
-
-bool NavigationController::checkAlignYaw() {
-
-    double yaw_error = getAlignYawError();
-
-    if(std::fabs(yaw_error) <= param.yaw_tol) return true;
-    return false;
 
 }
 
@@ -523,6 +540,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
         previousWaypoint.line_switch_ratio = -1.0;
         previousWaypoint.vel_lin_nom = -1.0;
         previousWaypoint.is_warehouse = false;
+        previousWaypoint.is_process_warehouse = false;
         previousWaypoint.node_id = -1;
         ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
     }
@@ -539,6 +557,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
     waypoint_temp.vel_lin_nom = -1.0;
     waypoint_temp.pick_box = false;
     waypoint_temp.is_warehouse = false;
+    waypoint_temp.is_process_warehouse = false;
     waypoint_temp.node_id = -1; // goal RViz não tem node_id
 
     route.push_back(waypoint_temp);
@@ -614,6 +633,59 @@ void NavigationController::setTheta() {
     if(w_d > param.w_nom) w_d = param.w_nom;
     else if(w_d < -param.w_nom) w_d = -param.w_nom;
 
+}
+
+void NavigationController::goToXYProcessWarehouse() {
+
+    if (route.empty()) {
+        v_d = 0.0;
+        w_d = 0.0;
+        return;
+    }
+
+    double position_error = getPositionError();
+    double yaw_error = getAlignYawError();
+    double dt = 1.0 / param.loop_rate_hz;
+
+    if (position_error <= param.arrive_radius) {
+        v_d = 0.0;
+        w_d = 0.0;
+        return;
+    }
+
+    if (!process_warehouse_goto_align_done_) {
+        if (std::fabs(yaw_error) <= param.bearing_align_yaw_tol) {
+            process_warehouse_goto_align_done_ = true;
+        } else {
+            v_d = 0.0;
+            w_d = param.kp_angular * yaw_error;
+            if (w_d > param.w_nom) w_d = param.w_nom;
+            else if (w_d < -param.w_nom) w_d = -param.w_nom;
+            return;
+        }
+    }
+
+    w_d = 0.0;
+
+    double v_target = std::min(param.v_nom, param.v_max);
+    if (v_target < param.v_min)
+        v_target = param.v_min;
+
+    if (v_target > v_d) {
+        v_d += param.a_max * dt;
+        if (v_d > v_target) v_d = v_target;
+    } else {
+        v_d -= param.d_max * dt;
+        if (v_d < v_target) v_d = v_target;
+    }
+
+    if (v_d > param.v_max)
+        v_d = param.v_max;
+    if (v_d < -param.v_max)
+        v_d = -param.v_max;
+
+    if (isBackwards())
+        v_d = -v_d;
 }
 
 void NavigationController::goToXY() {
@@ -700,10 +772,7 @@ void NavigationController::followLine() {
     double k1_eff = k1_virtual;
     double error_ang_deg = std::abs(error_ang) * 180.0 / M_PI;
 
-    if (++virtual_marker_tick_ >= 6) {
-        virtual_marker_tick_ = 0;
-        publishVirtualLineMarker(line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y);
-    }
+    publishVirtualLineMarker(line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y);
 
     followLineFsm.update_tis();
     
@@ -727,17 +796,25 @@ void NavigationController::followLine() {
             }
         }
     }
+
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
         if (line.pf.is_warehouse) {
-            followLineFsm.new_state = navigation::followLineStates::Approaching_PickDrop;
-            ROS_WARN("approaching pick/drop state");
-        } else if (pf_is_line_before_warehouse && line_progress > param.approaching_line_progress && !skip_approaching_straight) {
+            if (line.pf.is_process_warehouse) {
+                followLineFsm.new_state = navigation::followLineStates::Approaching_process_PickDrop;
+                ROS_WARN("approaching process pick/drop state");
+            } else {
+                followLineFsm.new_state = navigation::followLineStates::Approaching_PickDrop;
+                ROS_WARN("approaching pick/drop state");
+            }
+        } else if (pf_is_line_before_warehouse && error_dist <= param.approaching_enter_dist_m
+                   && !skip_approaching_straight) {
             followLineFsm.new_state = navigation::followLineStates::Approaching;
-            approaching_start_progress_ = line_progress;
-            ROS_WARN("approaching normal state");
+            approaching_brake_ref_dist_ = std::max(error_dist, 1e-3);
+            ROS_WARN("approaching normal state (dist_pf=%.3f m <= %.3f m, ref_dist=%.3f m)",
+                     error_dist, param.approaching_enter_dist_m, approaching_brake_ref_dist_);
         }
     }
-    
+
     followLineFsm.set_state();
     
     const double completion_threshold = 0.7;
@@ -754,9 +831,22 @@ void NavigationController::followLine() {
         completion_feedback_sent = false;
     }
 
+    auto stanleyDenomFromQuadraticW = [&](double v_nom_line, double w_probe) -> double {
+        double Aq = -v_nom_line / (param.w_nom * param.w_nom);
+        double v_quad = std::max(Aq * (w_probe - param.w_nom) * (w_probe + param.w_nom), 0.0);
+        return std::max(v_quad, param.stanley_soft_v) + param.stanley_eps;
+    };
+
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
 
-        w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
+        if (param.use_stanley_follow_line) {
+            double v_nom_lin = std::max(std::abs(vel_lin_nom_eff), param.stanley_soft_v) + param.stanley_eps;
+            double w_coarse = error_ang + std::atan2(param.stanley_k * k1_eff, v_nom_lin);
+            double v_den = stanleyDenomFromQuadraticW(vel_lin_nom_eff, w_coarse);
+            w_d = error_ang + std::atan2(param.stanley_k * k1_eff, v_den);
+        } else {
+            w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
+        }
 
         double A = -vel_lin_nom_eff/(param.w_nom*param.w_nom);
         v_d = std::max(A * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
@@ -768,22 +858,60 @@ void NavigationController::followLine() {
 
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {
-        w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
+        double v_scale = error_dist / std::max(approaching_brake_ref_dist_, 1e-4);
+        if (v_scale > 1.0) v_scale = 1.0;
+        double v_prop = last_vel_before_approaching_ * v_scale;
+        if (v_prop > last_vel_before_approaching_) v_prop = last_vel_before_approaching_;
+        double v_ref_approaching = std::max(v_prop, param.approaching_vel_normal);
 
-        double denom = 1.0 - approaching_start_progress_;
-        double progress_ramp = (denom > 0.01) ? (line_progress - approaching_start_progress_) / denom : 1.0;
-        progress_ramp = std::max(0.0, std::min(1.0, progress_ramp));
-        v_d = std::max(last_vel_before_approaching_ * (1.0 - progress_ramp), param.v_min);
+        if (param.use_stanley_approaching) {
+            double v_nom_lin = std::max(std::abs(v_ref_approaching), param.stanley_soft_v) + param.stanley_eps;
+            double w_coarse = error_ang + std::atan2(param.k_approaching * k1_eff, v_nom_lin);
+            double v_den = stanleyDenomFromQuadraticW(v_ref_approaching, w_coarse);
+            w_d = error_ang + std::atan2(param.k_approaching * k1_eff, v_den);
+        } else {
+            w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
+        }
+
+        v_d = v_ref_approaching;
 
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
 
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching_PickDrop) {
-        w_d = param.k_approaching * k1_eff + param.gain_approaching_fwd * error_ang;
+        if (param.use_stanley_approaching) {
+            double v_nom_lin = std::max(param.approaching_vel_pickdrop, param.stanley_soft_v) + param.stanley_eps;
+            double w_coarse = error_ang + std::atan2(param.k_approaching_pickdrop * k1_eff, v_nom_lin);
+            double w_ratio_c = (param.w_nom > 1e-6) ? std::min(std::abs(w_coarse) / param.w_nom, 1.0) : 1.0;
+            double v_quad = std::max(param.approaching_vel_pickdrop * (1.0 - w_ratio_c * w_ratio_c), 0.0);
+            double v_den = std::max(v_quad, param.stanley_soft_v) + param.stanley_eps;
+            w_d = error_ang + std::atan2(param.k_approaching_pickdrop * k1_eff, v_den);
+        } else {
+            w_d = param.k_approaching_pickdrop * k1_eff + param.gain_approaching_fwd_pickdrop * error_ang;
+        }
 
         double w_ratio = (param.w_nom > 1e-6) ? std::min(std::abs(w_d) / param.w_nom, 1.0) : 1.0;
-        v_d = std::max(param.approaching_vel * (1.0 - w_ratio * w_ratio), 0.0);
+        v_d = std::max(param.approaching_vel_pickdrop * (1.0 - w_ratio * w_ratio), 0.0);
+
+        if (w_d > param.w_nom)       w_d = param.w_nom;
+        else if (w_d < -param.w_nom) w_d = -param.w_nom;
+
+    }
+    else if (followLineFsm.state == navigation::followLineStates::Approaching_process_PickDrop) {
+        if (param.use_stanley_approaching) {
+            double v_nom_lin = std::max(param.approaching_vel_process, param.stanley_soft_v) + param.stanley_eps;
+            double w_coarse = error_ang + std::atan2(param.k_approaching_process * k1_eff, v_nom_lin);
+            double w_ratio_c = (param.w_nom > 1e-6) ? std::min(std::abs(w_coarse) / param.w_nom, 1.0) : 1.0;
+            double v_quad = std::max(param.approaching_vel_process * (1.0 - w_ratio_c * w_ratio_c), 0.0);
+            double v_den = std::max(v_quad, param.stanley_soft_v) + param.stanley_eps;
+            w_d = error_ang + std::atan2(param.k_approaching_process * k1_eff, v_den);
+        } else {
+            w_d = param.k_approaching_process * k1_eff + param.gain_approaching_fwd_process * error_ang;
+        }
+
+        double w_ratio = (param.w_nom > 1e-6) ? std::min(std::abs(w_d) / param.w_nom, 1.0) : 1.0;
+        v_d = std::max(param.approaching_vel_process * (1.0 - w_ratio * w_ratio), 0.0);
 
         if (w_d > param.w_nom)       w_d = param.w_nom;
         else if (w_d < -param.w_nom) w_d = -param.w_nom;
@@ -792,16 +920,18 @@ void NavigationController::followLine() {
 
     if (error_ang_deg > 93.0) {
         v_d = 0.0;
-        ROS_WARN_THROTTLE(1.0, "NavigationController: v=0 due to angular error %.1f° > 93°", error_ang_deg);
+        ROS_INFO_THROTTLE(1.0, "NavigationController: Angular error %.1f° > 93°, setting linear velocity to 0", error_ang_deg);
     }
     
     if (isBackwards() && v_d > 0.0) {
         v_d = -v_d;
     }
 
-    const char* state_str = (followLineFsm.state == navigation::followLineStates::Follow_Line) ? "Follow_Line" :
-                           (followLineFsm.state == navigation::followLineStates::Approaching) ? "Approaching" : "Approaching_PickDrop";
-    ROS_INFO_THROTTLE(1.0, "[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s | dist_da=%.3f", 
+    const char* state_str = "Follow_Line";
+    if (followLineFsm.state == navigation::followLineStates::Approaching) state_str = "Approaching";
+    else if (followLineFsm.state == navigation::followLineStates::Approaching_PickDrop) state_str = "Approaching_PickDrop";
+    else if (followLineFsm.state == navigation::followLineStates::Approaching_process_PickDrop) state_str = "Approaching_process_PickDrop";
+    ROS_INFO("[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s | dist_da=%.3f", 
              line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y, 
              line_progress * 100, error_dist, state_str, param.dist_da);
 
@@ -810,6 +940,7 @@ void NavigationController::followLine() {
 void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     navigationFsm.update_tis();
+    const int nav_state_at_tick_start = navigationFsm.state;
     bool enable = !(mode == "stop" || mode == "pause") && !route.empty();
 
     if(navigationFsm.state == navigation::states::idle && enable) {
@@ -840,45 +971,80 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     }
 
     else if(navigationFsm.state == navigation::states::driveToGoal && !route.front().align && enable) {
-        
-        double switch_ratio = (route.front().line_switch_ratio > 0) ? 
-                               route.front().line_switch_ratio : param.line_switch_ratio;
-        
-        if (line_progress >= switch_ratio) {
-            previousWaypoint = route.front();
 
-            // =========================
-            // PUBLICAR NÓ ATUAL
-            // =========================
-            publishCurrentNode(previousWaypoint.node_id);
+        bool process_warehouse_goto = route.front().is_warehouse && route.front().is_process_warehouse;
+        if (!process_warehouse_goto) {
+
+            double switch_ratio = (route.front().line_switch_ratio > 0) ? 
+                                   route.front().line_switch_ratio : param.line_switch_ratio;
             
-            bool is_pick_warehouse = route.front().pick_box;
+            if (line_progress >= switch_ratio) {
+                previousWaypoint = route.front();
+
+                // =========================
+                // PUBLICAR NÓ ATUAL
+                // =========================
+                publishCurrentNode(previousWaypoint.node_id);
+                
+                bool is_pick_warehouse = route.front().pick_box;
+                
+                ROS_INFO("Line switch at %.0f%% (threshold=%.0f%%): waypoint (id=%d, x=%.2f, y=%.2f, pick_box=%d, backwards=%d, node_id=%d). Remaining: %zu", 
+                         line_progress * 100, switch_ratio * 100,
+                         previousWaypoint.id, previousWaypoint.pose.x, previousWaypoint.pose.y, is_pick_warehouse ? 1 : 0, 
+                         previousWaypoint.backwards ? 1 : 0, previousWaypoint.node_id, route.size() - 1);
             
-            ROS_INFO("Line switch at %.0f%% (threshold=%.0f%%): waypoint (id=%d, x=%.2f, y=%.2f, pick_box=%d, backwards=%d, node_id=%d). Remaining: %zu", 
-                     line_progress * 100, switch_ratio * 100,
-                     previousWaypoint.id, previousWaypoint.pose.x, previousWaypoint.pose.y, is_pick_warehouse ? 1 : 0, 
-                     previousWaypoint.backwards ? 1 : 0, previousWaypoint.node_id, route.size() - 1);
-        
-            if (is_pick_warehouse) {
-                navigationFsm.new_state = navigation::states::pickBoxForward;
-                pick_box_forward_start_time = ros::Time::now();
-                in_pick_box_forward = true;
-                ROS_INFO("NavigationController: Completed line to pick warehouse, entering pickBoxForward state");
-            } else {
-                route.pop_front();
-                updateDesiredPose();
-                
-                followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-                ROS_WARN("followline 3");
-                followLineFsm.set_state();
-                
-                completion_feedback_sent = false;
-                
-                if(route.empty()) {
-                    navigationFsm.new_state = navigation::states::idle;
+                if (is_pick_warehouse) {
+                    navigationFsm.new_state = navigation::states::pickBoxForward;
+                    pick_box_forward_start_time = ros::Time::now();
+                    in_pick_box_forward = true;
+                    ROS_INFO("NavigationController: Completed line to pick warehouse, entering pickBoxForward state");
                 } else {
-                    navigationFsm.new_state = navigation::states::done;
+                    route.pop_front();
+                    updateDesiredPose();
+                    
+                    followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+                    ROS_WARN("followline 3");
+                    followLineFsm.set_state();
+                    
+                    completion_feedback_sent = false;
+                    
+                    if(route.empty()) {
+                        navigationFsm.new_state = navigation::states::idle;
+                    } else {
+                        navigationFsm.new_state = navigation::states::done;
+                    }
                 }
+            }
+        }
+    }
+
+    else if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable && isPositionArrived()) {
+
+        previousWaypoint = route.front();
+        publishCurrentNode(previousWaypoint.node_id);
+
+        bool is_pick_warehouse = route.front().pick_box;
+        ROS_INFO("NavigationController: Arrived at process warehouse (go-to-XY) id=%d node_id=%d pick_box=%d",
+                 previousWaypoint.id, previousWaypoint.node_id, is_pick_warehouse ? 1 : 0);
+
+        if (is_pick_warehouse) {
+            navigationFsm.new_state = navigation::states::pickBoxForward;
+            pick_box_forward_start_time = ros::Time::now();
+            in_pick_box_forward = true;
+        } else {
+            route.pop_front();
+            updateDesiredPose();
+
+            followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+            ROS_WARN("followline process goto pop");
+            followLineFsm.set_state();
+
+            completion_feedback_sent = false;
+
+            if (route.empty()) {
+                navigationFsm.new_state = navigation::states::idle;
+            } else {
+                navigationFsm.new_state = navigation::states::done;
             }
         }
     }
@@ -943,7 +1109,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         double elapsed_time = (ros::Time::now() - pick_box_forward_start_time).toSec();
-        ROS_WARN_THROTTLE(1.0, "pickboxforward state: elapsed time = %.2f seconds", elapsed_time);
+        ROS_WARN("pickboxforward state: elapsed time = %.2f seconds", elapsed_time);
         if (elapsed_time >= 0.7) {
             in_pick_box_forward = false;
             if (!route.empty()) {
@@ -963,9 +1129,20 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         }
     }
 
+    if (navigationFsm.new_state == navigation::states::driveToGoal && enable && !route.empty()
+        && route.front().is_warehouse && route.front().is_process_warehouse && !route.front().align) {
+        navigationFsm.new_state = navigation::states::processWarehouseGoToXY;
+    }
+
     navigationFsm.set_state();
 
-    if(navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
+    if (navigationFsm.state == navigation::states::processWarehouseGoToXY
+        && nav_state_at_tick_start != navigation::states::processWarehouseGoToXY) {
+        process_warehouse_goto_align_done_ = false;
+    }
+
+    if (navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
+    else if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable) goToXYProcessWarehouse();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
         v_d = previousWaypoint.backwards ? -0.1 : 0.1;
@@ -1000,7 +1177,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         cmd.angular.y = 0.0;
         cmd.angular.z = 0.0;
         velPub.publish(cmd);
-        ROS_DEBUG("NavigationController: Route empty, publishing stop command");
+        ROS_INFO_THROTTLE(1.0, "NavigationController: Route empty, publishing stop command");
     } else {
         publishVel();
     }
@@ -1110,6 +1287,7 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     previousWaypoint.vel_lin_nom = -1.0;
     previousWaypoint.pick_box = false;
     previousWaypoint.is_warehouse = false;
+    previousWaypoint.is_process_warehouse = false;
     previousWaypoint.node_id = -1;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
@@ -1144,6 +1322,7 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
         waypoint_temp.backwards = cp.backwards;
         waypoint_temp.pick_box = cp.pick_box;
         waypoint_temp.is_warehouse = cp.is_warehouse;
+        waypoint_temp.is_process_warehouse = cp.is_process_warehouse;
         
         waypoint_temp.line_switch_ratio = (cp.line_switch_ratio > 0) ? cp.line_switch_ratio : -1.0;
         waypoint_temp.vel_lin_nom = (cp.vel_lin_nom > 0) ? cp.vel_lin_nom : -1.0;
