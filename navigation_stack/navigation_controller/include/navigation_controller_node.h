@@ -47,6 +47,7 @@ struct WayPoint {
     double vel_lin_nom;        // Velocidade linear nominal para esta linha, -1 = usar global
     bool pick_box;             // Se é warehouse de pick (true) ou drop (false)
     bool is_warehouse;          // Se o ponto final é uma warehouse
+    bool is_process_warehouse;  // Warehouse de process (segmento final antes de pick/drop process)
     int node_id;
 };
 
@@ -104,11 +105,24 @@ class NavigationController {
             double max_etf;       // MAX_ETF
             double tol_init_line; // (m) tolerance to GoTo_Init -> Follow_Line
             double line_switch_ratio;  // Ratio of line to switch to next (0.9 = 90%)
-            double approaching_line_progress;  // Line progress threshold to enter Approaching state (0.60 = 60%)
-            double approaching_vel;            // Constant velocity in Approaching state (m/s)
-            double k_approaching;              // Gain for angular control in Approaching state
-            double gain_approaching_fwd;         // Forward gain for control in Approaching state
+            bool use_stanley_follow_line;   // Follow_Line: ψ + atan2(k·e, max(|v|,soft_v)+eps)
+            bool use_stanley_approaching;  // Approaching / PickDrop / process: mesma lei com k por estado
+            double stanley_k;               // Ganho lateral em Follow_Line (atan2)
+            double stanley_soft_v;          // Chão de |v| antes de somar eps (m/s)
+            double stanley_eps;             // ε em atan2(k·e, max(|v_ref|,soft_v)+eps)
+            double approaching_enter_dist_m;   // Entrar em Approaching quando dist(robô, pf) <= isto (m)
+            /** Go-to process warehouse: só avança (v>0) quando |erro bearing| <= isto (rad). Maior → menos rotação em sitio, mais cedo avança. */
+            double bearing_align_yaw_tol;
+            double approaching_vel_normal;     // Piso de v_d no Approaching (antes de warehouse)
+            double k_approaching;              // Ganhos estado Approaching (normal)
+            double gain_approaching_fwd;
+            double k_approaching_pickdrop;     // Ganhos estado Approaching_PickDrop
+            double gain_approaching_fwd_pickdrop;
+            double approaching_vel_pickdrop;   // Vel. ref. na lei quadrática em |w_d| (PickDrop)
             double approaching_colinear_angle_rad;  // Se |Δθ| entre linha atual e pf→warehouse < isto, não entra em Approaching
+            double k_approaching_process;
+            double gain_approaching_fwd_process;
+            double approaching_vel_process;
 
         };
 
@@ -123,7 +137,6 @@ class NavigationController {
         bool isBackwards();
         // Align to reach the desired position
         double getAlignYawError();
-        bool checkAlignYaw();
         // Go to desired position
         double getPositionError();
         bool isPositionArrived();
@@ -142,6 +155,8 @@ class NavigationController {
         void hardStop();
         void setTheta();
         void goToXY();
+        /** Process warehouse go-to: 1) alinha v=0 até bearing_align_yaw_tol; 2) v constante (v_nom), w=0. */
+        void goToXYProcessWarehouse();
         void followLine();
 
         std::deque<WayPoint> route;
@@ -158,13 +173,13 @@ class NavigationController {
         ros::Publisher virtualLineMarkerPub;
         void publishLineMarkers();
         void publishVirtualLineMarker(double pi_x, double pi_y, double pf_x, double pf_y);
-        int virtual_marker_tick_ = 0;
         
         ros::Publisher navCompletionFeedbackPub;
         bool completion_feedback_sent;  // Para enviar feedback apenas uma vez por linha
 
-        double last_vel_before_approaching_;  // Última v_d em Follow_Line; limite máximo em Approaching
-        double approaching_start_progress_;   // line_progress ao entrar em Approaching (para rampa \)
+        double last_vel_before_approaching_;  // Última |v_d| em Follow_Line; teto em Approaching
+        double approaching_brake_ref_dist_;   // dist(robô,pf) ao entrar em Approaching (normaliza v proporcional)
+        bool process_warehouse_goto_align_done_;  // Fase 2 do go-to process: já passou alinhamento inicial (v=0)
 
         // Estado para pick box forward
         ros::Time pick_box_forward_start_time;
@@ -207,6 +222,8 @@ namespace navigation {
             idle = 0,
             driveToGoal,
             turnToFinalYaw,
+            /** Warehouse de processo (!align): go-to XY com fase inicial só rotação (bearing_align_yaw_tol). */
+            processWarehouseGoToXY,
             pickBoxForward,  // Estado para andar para frente após chegar a warehouse de pick
             done
 
@@ -218,7 +235,8 @@ namespace navigation {
         enum {
             Follow_Line = 0,
             Approaching,        // Linhas normais: v proporcional a error_dist
-            Approaching_PickDrop  // Pick/drop (warehouse): v cúbica em w_d
+            Approaching_PickDrop,  // Pick/drop (warehouse não-process): v quadrática em |w_d|/w_nom
+            Approaching_process_PickDrop  // Pick/drop warehouse process: mesma lei, parâmetros dedicados
         };
     }
 
