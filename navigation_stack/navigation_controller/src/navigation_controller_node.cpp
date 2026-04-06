@@ -661,6 +661,9 @@ void NavigationController::goToXYProcessWarehouse() {
             w_d = param.kp_angular * yaw_error;
             if (w_d > param.w_nom) w_d = param.w_nom;
             else if (w_d < -param.w_nom) w_d = -param.w_nom;
+            if (param.w_min > 0.0 && std::abs(w_d) > 0.0 && std::abs(w_d) < param.w_min) {
+                w_d = std::copysign(std::min(param.w_min, param.w_nom), w_d);
+            }
             return;
         }
     }
