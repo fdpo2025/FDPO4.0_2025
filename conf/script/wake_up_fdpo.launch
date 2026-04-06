@@ -42,6 +42,7 @@
 	</include>
 
 	<include if="$(arg use_planner)" file="$(find conf)/system/planner.xml">
+		<arg name="planner_type" value="$(arg planner_type)" />
 		<arg name="node_name" value="$(eval 'chris_planner_node' if arg('planner_type') == 'chris' else 'multi_planner_node')" />
 		<arg name="planning_method" value="$(arg planning_method)" />
 		<arg name="planner_executable" value="$(eval 'chris_planner_node' if arg('planner_type') == 'chris' else 'multi_planner_node')" />

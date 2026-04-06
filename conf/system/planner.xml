@@ -1,13 +1,16 @@
 <launch>
+  <arg name="planner_type" default="chris" doc="chris ou multi"/>
   <arg name="node_name" default="chris_planner_node" />
   <arg name="planning_method" default="astar" />
   <arg name="planner_executable" default="chris_planner_node" />
   <arg name="robot_id" default="1" />
 
+  <!-- multi + robot_id:=2: só comunicacoes_node (sem multi_planner_node) -->
   <include file="$(find chris_planner)/launch/chris_planner.launch">
     <arg name="node_name" value="$(arg node_name)" />
     <arg name="planning_method" value="$(arg planning_method)" />
     <arg name="planner_executable" value="$(arg planner_executable)" />
     <arg name="robot_id" value="$(arg robot_id)" />
+    <arg name="launch_planner" value="$(eval 'false' if arg('planner_type') == 'multi' and arg('robot_id') == '2' else 'true')" />
   </include>
 </launch>

@@ -47,6 +47,8 @@
         args="0 0 0.15 0 0 3.14159 base_link laser 100"/>
 
   <!-- Plan Handler: Processa caminhos planeados e publica em /nav_plan -->
-  <include file="$(find conf)/launch/navigation/plan_handler/run_plan_handler.launch"/>
+  <include file="$(find conf)/launch/navigation/plan_handler/run_plan_handler.launch">
+    <arg name="robot_id" value="$(arg robot_id)"/>
+  </include>
 
 </launch>

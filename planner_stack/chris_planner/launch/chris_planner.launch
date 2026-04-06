@@ -4,9 +4,11 @@
   <arg name="planning_method" default="closest" />
   <arg name="robot_id" default="1" />
   <arg name="planner_executable" default="chris_planner_node" />
+  <arg name="launch_planner" default="true" doc="false: não arranca chris_planner_node / multi_planner_node"/>
 
   <!-- Planner -->
-  <node name="$(arg node_name)"
+  <node if="$(eval arg('launch_planner') == 'true')"
+        name="$(arg node_name)"
         pkg="chris_planner"
         type="$(arg planner_executable)"
         output="screen">
