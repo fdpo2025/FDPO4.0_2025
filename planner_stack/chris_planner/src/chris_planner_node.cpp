@@ -114,9 +114,14 @@ std::vector<int> ChrisPlannerNode::resolveApproachSides(const std::vector<int>& 
     auto result = path;
     for (int idx = 0; idx < static_cast<int>(result.size()); ++idx) {
         if (!warehouse_nodes_.count(result[idx])) continue;
-        if (idx < 2) continue;
 
         int wh = result[idx];
+        // Igual a MultiPlannerNode::determineApproachSideNode: sem pred+neighbor → lado +100
+        if (idx < 2) {
+            result[idx] = wh + 100;
+            continue;
+        }
+
         int neighbor = result[idx - 1];
         int pred = result[idx - 2];
         bool right = approach_topology_.isRightApproach(wh, neighbor, pred);
