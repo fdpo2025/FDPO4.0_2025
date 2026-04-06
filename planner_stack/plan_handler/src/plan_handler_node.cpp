@@ -285,19 +285,20 @@ void PlanHandlerNode::navCompletionFeedbackCallback(const plan_handler::Completi
             ControllerPoint removed_point = *it;
             plan_stack.erase(it);
 
-            if (removed_point.pick_box != last_pick_box_state && removed_point.should_pub) {
+            // Publicar sempre em /pick_box ao consumir um warehouse (pick ou drop), para o tópico
+            // acompanhar a ação corrente (ex.: drop process após pick input sem depender de "mudança" vs last).
+            if (removed_point.should_pub) {
                 std_msgs::Bool pick_box_msg;
                 pick_box_msg.data = removed_point.pick_box;
                 pickBoxPub.publish(pick_box_msg);
                 last_pick_box_state = removed_point.pick_box;
 
-                ROS_INFO("PlanHandlerNode: Removed point node_id=%d (%.3f, %.3f) from plan_stack. Published pick_box=%d (state changed). Remaining points: %zu",
+                ROS_INFO("PlanHandlerNode: Removed point node_id=%d (%.3f, %.3f) from plan_stack. Published pick_box=%d. Remaining points: %zu",
                          removed_point.node_id, removed_point.x, removed_point.y,
                          pick_box_msg.data ? 1 : 0, plan_stack.size());
             } else {
-                ROS_INFO("PlanHandlerNode: Removed point node_id=%d (%.3f, %.3f) from plan_stack. pick_box=%d (no state change). Remaining points: %zu",
-                         removed_point.node_id, removed_point.x, removed_point.y,
-                         removed_point.pick_box ? 1 : 0, plan_stack.size());
+                ROS_INFO("PlanHandlerNode: Removed point node_id=%d (%.3f, %.3f) from plan_stack (should_pub=0). Remaining points: %zu",
+                         removed_point.node_id, removed_point.x, removed_point.y, plan_stack.size());
             }
 
             found = true;

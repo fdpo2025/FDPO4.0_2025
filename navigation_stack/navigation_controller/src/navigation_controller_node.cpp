@@ -1024,6 +1024,16 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     else if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable && isPositionArrived()) {
 
+        // Se o feedback a ~70% não correu (ou não fez match no plan_handler), garantir remoção na stack
+        if (!process_warehouse_goto_completion_sent_ && !route.empty()) {
+            plan_handler::CompletionFeedback fb;
+            fb.x = route.front().pose.x;
+            fb.y = route.front().pose.y;
+            navCompletionFeedbackPub.publish(fb);
+            process_warehouse_goto_completion_sent_ = true;
+            ROS_INFO("NavigationController: process warehouse go-to-XY arrival completion feedback (%.3f, %.3f)", fb.x, fb.y);
+        }
+
         previousWaypoint = route.front();
         publishCurrentNode(previousWaypoint.node_id);
 
