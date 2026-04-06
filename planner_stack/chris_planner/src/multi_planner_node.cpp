@@ -317,7 +317,7 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
 
     if (isWarehouseNode(best_goal)) {
         int side_node = determineApproachSideNode(best_path, best_goal);
-        compact_path[compact_path.size() - 2] = side_node;
+        compact_path[compact_path.size() - 1] = side_node;
         ROS_INFO("[%s] Warehouse %d approach-side resolved to %d",
                  robot_id.c_str(), best_goal, side_node);
     }
