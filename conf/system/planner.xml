@@ -11,6 +11,6 @@
     <arg name="planning_method" value="$(arg planning_method)" />
     <arg name="planner_executable" value="$(arg planner_executable)" />
     <arg name="robot_id" value="$(arg robot_id)" />
-    <arg name="launch_planner" value="$(eval 'false' if arg('planner_type') == 'multi' and arg('robot_id') == '2' else 'true')" />
+    <arg name="launch_planner" value="$(eval 'false' if arg('planner_type') == 'multi' and int(str(arg('robot_id')).strip()) == 2 else 'true')" />
   </include>
 </launch>

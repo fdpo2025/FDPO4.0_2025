@@ -7,7 +7,8 @@
   <arg name="launch_planner" default="true" doc="false: não arranca chris_planner_node / multi_planner_node"/>
 
   <!-- Planner -->
-  <node if="$(eval arg('launch_planner') == 'true')"
+  <!-- arg('launch_planner') pode vir como bool True/False ou string 'true'/'false'; True == 'true' falha em Python -->
+  <node if="$(eval str(arg('launch_planner')).lower() in ('true', '1'))"
         name="$(arg node_name)"
         pkg="chris_planner"
         type="$(arg planner_executable)"
