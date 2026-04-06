@@ -472,6 +472,8 @@ std::vector<int> MultiPlannerNode::shortestPathAvoiding(
     blocked.erase(start);
     blocked.erase(goal);
 
+    const bool forbid_11_27 = isDirect11To27GloballyForbidden();
+
     std::unordered_map<int, double> dist;
     std::unordered_map<int, int> prev;
     dist[start] = 0.0;
@@ -490,6 +492,15 @@ std::vector<int> MultiPlannerNode::shortestPathAvoiding(
 
         for (auto& [v, w] : planner_->factory.graph.neighbors(u)) {
             if (blocked.count(v)) continue;
+
+            // Regra global:
+            // se 12 ou 26 estiverem reservados, proibir apenas a transição direta 11 <-> 27
+            if (forbid_11_27 &&
+                ((u == 11 && v == 27) || (u == 27 && v == 11))) {
+                ROS_INFO("Globally forbidding direct transition %d -> %d because 12/26 are reserved", u, v);
+                continue;
+            }
+
             double new_dist = curr_dist + w;
             auto vit = dist.find(v);
             if (vit == dist.end() || new_dist < vit->second) {
@@ -715,32 +726,14 @@ std::unordered_set<int> MultiPlannerNode::getExtraBlockedNodes(
         }
     }
 
-    if (reserved_by_other.count(12) || reserved_by_other.count(26))
-        blocked.insert(19);
-
-    std::string other_robot = (robot_id == "r1") ? "r2" : "r1";
-    const auto& other_path = robots_.at(other_robot).path;
-
-    bool has_11_27_transition = false;
-    for (int i = 0; i < static_cast<int>(other_path.size()) - 1; ++i) {
-        int a = other_path[i], b = other_path[i + 1];
-        if ((a == 11 && b == 27) || (a == 27 && b == 11)) {
-            has_11_27_transition = true;
-            break;
-        }
-    }
-
-    if (has_11_27_transition) {
-        auto it11 = reserved_nodes_.find(11);
-        auto it27 = reserved_nodes_.find(27);
-        bool both_reserved =
-            it11 != reserved_nodes_.end() && it11->second == other_robot &&
-            it27 != reserved_nodes_.end() && it27->second == other_robot;
-        if (both_reserved) {
-            blocked.insert(19);
-            ROS_INFO("[%s] blocking node 19 because %s has active transition 11<->27",
-                     robot_id.c_str(), other_robot.c_str());
-        }
+    // Regra global:
+    // se algum caminho reservado estiver a usar 11 <-> 27 consecutivamente,
+    // então 12 e 26 ficam bloqueados para qualquer novo planeamento.
+    if (isDirect11To27ReservedConsecutively()) {
+        blocked.insert(12);
+        blocked.insert(26);
+        ROS_INFO("[%s] global block: nodes 12 and 26 blocked because some reserved path uses 11<->27 consecutively",
+                 robot_id.c_str());
     }
 
     return blocked;
@@ -922,4 +915,31 @@ bool MultiPlannerNode::canPickupBoxForMachine(
              robot_id.c_str(), label.c_str(), pickup_node, available_lines, same_in_transit);
 
     return available_lines > same_in_transit;
+}
+
+bool MultiPlannerNode::isDirect11To27ReservedConsecutively() const
+{
+    for (const auto& [robot_id, r] : robots_) {
+        for (int i = 0; i < static_cast<int>(r.path.size()) - 1; ++i) {
+            int a = r.path[i];
+            int b = r.path[i + 1];
+
+            if ((a == 11 && b == 27) || (a == 27 && b == 11)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool MultiPlannerNode::isDirect11To27GloballyForbidden() const
+{
+    // Se 12 ou 26 estiverem reservados por qualquer robô,
+    // então o troço direto 11 <-> 27 fica proibido globalmente.
+    if (reserved_nodes_.count(12) || reserved_nodes_.count(26)) {
+        ROS_INFO("Global rule active: direct edge 11<->27 forbidden because 12 or 26 is reserved");
+        return true;
+    }
+
+    return false;
 }

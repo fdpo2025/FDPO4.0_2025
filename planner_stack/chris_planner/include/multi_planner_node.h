@@ -131,4 +131,8 @@ private:
     int pickup_plan_count_;
 
     WarehouseApproachTopology approach_topology_;
+
+   
+    bool isDirect11To27GloballyForbidden() const;
+    bool isDirect11To27ReservedConsecutively() const;
 };
