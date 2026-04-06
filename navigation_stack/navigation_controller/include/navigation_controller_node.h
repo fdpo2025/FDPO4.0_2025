@@ -180,6 +180,9 @@ class NavigationController {
         double last_vel_before_approaching_;  // Última |v_d| em Follow_Line; teto em Approaching
         double approaching_brake_ref_dist_;   // dist(robô,pf) ao entrar em Approaching (normaliza v proporcional)
         bool process_warehouse_goto_align_done_;  // Fase 2 do go-to process: já passou alinhamento inicial (v=0)
+        /** Distância ao alvo ao entrar em processWarehouseGoToXY (progresso 0–1 vs follow_line 70%). */
+        double process_warehouse_goto_start_dist_;
+        bool process_warehouse_goto_completion_sent_;
 
         // Estado para pick box forward
         ros::Time pick_box_forward_start_time;

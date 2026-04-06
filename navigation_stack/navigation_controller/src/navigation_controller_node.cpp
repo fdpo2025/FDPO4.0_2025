@@ -5,7 +5,8 @@ NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(
 navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line),
 k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false, false, false, -1}), tfBuffer(), tfListener(tfBuffer),
 in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake_ref_dist_(0.1),
-    process_warehouse_goto_align_done_(false) {
+    process_warehouse_goto_align_done_(false), process_warehouse_goto_start_dist_(0.0),
+    process_warehouse_goto_completion_sent_(false) {
 
     mode = "idle";
 
@@ -1142,6 +1143,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     if (navigationFsm.state == navigation::states::processWarehouseGoToXY
         && nav_state_at_tick_start != navigation::states::processWarehouseGoToXY) {
         process_warehouse_goto_align_done_ = false;
+        process_warehouse_goto_completion_sent_ = false;
+        process_warehouse_goto_start_dist_ = std::max(getPositionError(), 1e-3);
     }
 
     if (navigationFsm.state == navigation::states::driveToGoal && enable) followLine();
@@ -1156,6 +1159,28 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     else {
         v_d = 0.0;
         w_d = 0.0;
+    }
+
+    // Mesmo critério que followLine (line_progress > 0.7): feedback para plan_handler /pick_box
+    if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable && !route.empty()
+        && route.front().is_warehouse && route.front().is_process_warehouse) {
+        const double completion_threshold = 0.7;
+        const double pe = getPositionError();
+        const double start = process_warehouse_goto_start_dist_;
+        const double progress = (start > 1e-6) ? (1.0 - pe / start) : 1.0;
+        if (progress > completion_threshold && !process_warehouse_goto_completion_sent_) {
+            plan_handler::CompletionFeedback feedback;
+            feedback.x = poseDesired.x;
+            feedback.y = poseDesired.y;
+            navCompletionFeedbackPub.publish(feedback);
+            process_warehouse_goto_completion_sent_ = true;
+            ROS_INFO(
+                "NavigationController: process warehouse go-to-XY completion feedback at %.1f%% (dist=%.3f m, ref=%.3f m)",
+                progress * 100.0, pe, start);
+        }
+        if (progress < completion_threshold) {
+            process_warehouse_goto_completion_sent_ = false;
+        }
     }
 
     // =========================
