@@ -317,7 +317,7 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
 
     if (isWarehouseNode(best_goal)) {
         int side_node = determineApproachSideNode(best_path, best_goal);
-        compact_path[compact_path.size() - 1] = side_node;
+        compact_path[compact_path.size() - 2] = side_node;
         ROS_INFO("[%s] Warehouse %d approach-side resolved to %d",
                  robot_id.c_str(), best_goal, side_node);
     }
@@ -569,13 +569,10 @@ double MultiPlannerNode::pathCost(const std::vector<int>& path) const
 std::vector<int> MultiPlannerNode::extendPathWithPreviousNode(
     const std::vector<int>& path) const
 {
-    /*
     if (path.size() < 2) return path;
     auto extended = path;
     extended.push_back(path[path.size() - 2]);
     return extended;
-    */
-    return path;
 }
 
 // =====================================================================
