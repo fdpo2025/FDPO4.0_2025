@@ -200,6 +200,32 @@ std::vector<int> MultiPlannerNode::sequenceToBoxtypes(const std::string& seq) co
 bool MultiPlannerNode::planForRobot(const std::string& robot_id)
 {
     auto& r = robots_[robot_id];
+    auto formatVector = [](const std::vector<int>& values) {
+        std::ostringstream ss;
+        ss << "[";
+        for (size_t i = 0; i < values.size(); ++i) {
+            if (i > 0) ss << ", ";
+            ss << values[i];
+        }
+        ss << "]";
+        return ss.str();
+    };
+    auto formatSet = [](const std::unordered_set<int>& values) {
+        std::vector<int> sorted(values.begin(), values.end());
+        std::sort(sorted.begin(), sorted.end());
+        return formatVector(sorted);
+    };
+    auto dumpBoxes = [this]() {
+        std::ostringstream ss;
+        ss << "[";
+        const auto& special_nodes = planner_->factory.special_nodes;
+        for (size_t i = 0; i < special_nodes.size() && i < boxes_.size(); ++i) {
+            if (i > 0) ss << ", ";
+            ss << special_nodes[i] << ":" << boxes_[i];
+        }
+        ss << "]";
+        return ss.str();
+    };
 
     if (r.busy) {
         ROS_INFO("%s is already busy", robot_id.c_str());
@@ -227,8 +253,17 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
     if (r.box != EMPTY)
         filtered = applyOutputWarehouseRule(filtered);
 
+    ROS_INFO("[%s][DEBUG] valid_nodes=%s unavailable_pickups=%s filtered=%s reserved_goals=%zu boxes=%s",
+             robot_id.c_str(),
+             formatVector(valid_nodes).c_str(),
+             formatSet(unavailable).c_str(),
+             formatVector(filtered).c_str(),
+             reserved_goals_.size(),
+             dumpBoxes().c_str());
+
     if (filtered.empty()) {
         ROS_WARN("No valid nodes for %s", robot_id.c_str());
+        ROS_WARN("[%s][DEBUG] planning failed: no valid nodes after filtering", robot_id.c_str());
         r.waiting_replan = true;
         publishStateSnapshot(robot_id, "planning failed - no valid nodes", state);
         return false;
@@ -243,12 +278,23 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
     std::unordered_set<int> blocked = reserved_by_other;
     blocked.insert(extra.begin(), extra.end());
 
+    ROS_INFO("[%s][DEBUG] reserved_by_other=%s extra_blocked=%s blocked=%s",
+             robot_id.c_str(),
+             formatSet(reserved_by_other).c_str(),
+             formatSet(extra).c_str(),
+             formatSet(blocked).c_str());
+
     // Candidate groups
     std::vector<std::vector<int>> candidate_groups;
     if (r.box == EMPTY)
         candidate_groups = splitPickupCandidatesByPriority(robot_id, filtered);
     else
         candidate_groups = {filtered};
+
+    for (size_t i = 0; i < candidate_groups.size(); ++i) {
+        ROS_INFO("[%s][DEBUG] candidate_group[%zu]=%s",
+                 robot_id.c_str(), i, formatVector(candidate_groups[i]).c_str());
+    }
 
     std::vector<int> best_path;
     int best_goal = -1;
@@ -275,9 +321,15 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
             }
 
             auto path = shortestPathAvoiding(robot_node, node, blocked);
-            if (path.empty()) continue;
+            if (path.empty()) {
+                ROS_INFO("[%s][DEBUG] candidate node %d rejected: no path from %d with blocked=%s",
+                         robot_id.c_str(), node, robot_node, formatSet(blocked).c_str());
+                continue;
+            }
 
             double cost = pathCost(path);
+            ROS_INFO("[%s][DEBUG] candidate node %d path=%s cost=%.3f",
+                     robot_id.c_str(), node, formatVector(path).c_str(), cost);
             if (cost < local_best_cost) {
                 local_best_cost = cost;
                 local_best_path = path;
@@ -294,6 +346,12 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
 
     if (best_path.empty()) {
         ROS_WARN("No collision free path for %s", robot_id.c_str());
+        ROS_WARN("[%s][DEBUG] planning failed: robot_node=%d filtered=%s blocked=%s boxes=%s",
+                 robot_id.c_str(),
+                 robot_node,
+                 formatVector(filtered).c_str(),
+                 formatSet(blocked).c_str(),
+                 dumpBoxes().c_str());
         r.waiting_replan = true;
         publishStateSnapshot(robot_id, "planning failed - no path", state);
         return false;
