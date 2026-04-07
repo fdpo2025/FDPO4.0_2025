@@ -377,8 +377,8 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
         ROS_INFO("[%s] pickup_plan_count = %d", robot_id.c_str(), pickup_plan_count_);
     }
 
-    auto full_path = dropFirstTwoNodesUnlessStart31(extendPathWithPreviousNode(best_path));
-    auto compact_path = dropFirstTwoNodesUnlessStart31(
+    auto full_path = dropFirstNodeUnlessStart31(extendPathWithPreviousNode(best_path));
+    auto compact_path = dropFirstNodeUnlessStart31(
         extendPathWithPreviousNode(compactExistingPath(best_path)));
 
     if (isWarehouseNode(best_goal)) {
@@ -652,13 +652,13 @@ std::vector<int> MultiPlannerNode::extendPathWithPreviousNode(
     return extended;
 }
 
-std::vector<int> MultiPlannerNode::dropFirstTwoNodesUnlessStart31(
+std::vector<int> MultiPlannerNode::dropFirstNodeUnlessStart31(
     const std::vector<int>& path) const
 {
-    if (path.size() <= 2) return path;
+    if (path.size() <= 1) return path;
     if (path.front() == 31) return path;
 
-    return std::vector<int>(path.begin() + 2, path.end());
+    return std::vector<int>(path.begin() + 1, path.end());
 }
 
 // =====================================================================
