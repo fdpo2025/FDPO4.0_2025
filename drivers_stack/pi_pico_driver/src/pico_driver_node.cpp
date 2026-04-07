@@ -317,12 +317,12 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
 
 void PiPicoDriver::cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
   messageToSend.cp_send = msg->data;
-  cp_send_retries_ = 3;
+  cp_send_retries_ = 10;
 }
 
 void PiPicoDriver::pathSendCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg) {
   path_to_send_ = msg->data;
-  path_send_retries_ = 10;
+  path_send_retries_ = 30;
 }
 
 void PiPicoDriver::pubExtraMsgs() {
