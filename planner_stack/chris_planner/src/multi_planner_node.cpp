@@ -213,7 +213,14 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
     auto formatSet = [](const std::unordered_set<int>& values) {
         std::vector<int> sorted(values.begin(), values.end());
         std::sort(sorted.begin(), sorted.end());
-        return formatVector(sorted);
+        std::ostringstream ss;
+        ss << "[";
+        for (size_t i = 0; i < sorted.size(); ++i) {
+            if (i > 0) ss << ", ";
+            ss << sorted[i];
+        }
+        ss << "]";
+        return ss.str();
     };
     auto dumpBoxes = [this]() {
         std::ostringstream ss;
