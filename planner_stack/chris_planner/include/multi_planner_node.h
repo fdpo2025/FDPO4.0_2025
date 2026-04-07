@@ -52,7 +52,7 @@ private:
     std::vector<int> compactExistingPath(const std::vector<int>& path) const;
     double pathCost(const std::vector<int>& path) const;
     std::vector<int> extendPathWithPreviousNode(const std::vector<int>& path) const;
-    std::vector<int> dropFirstNodeUnlessStart31(const std::vector<int>& path) const;
+    std::vector<int> dropFirstTwoNodesUnlessStart31(const std::vector<int>& path) const;
 
     // Reservation system
     bool reserveBoxAtPlanning(const std::string& robot_id, int pickup_node);
