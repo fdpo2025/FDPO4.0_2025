@@ -14,7 +14,6 @@
 #include <unistd.h>
 #include <thread>
 #include <string.h>
-#include <iostream>
 #include <string>
 #include <cstdio>
 #include <cstdlib>
@@ -35,10 +34,12 @@ namespace Communication {
         struct ToPico {
 
             double v_d, w_d;
-            bool pick_box; 
+            bool iman;
             uint32_t cp_send;
-            std::vector<int32_t> path_send;
-
+            uint32_t np_send;
+            bool waiting_send;
+            uint32_t target_id_send;
+            bool stop_waiting_send;
 
         };
 
@@ -48,7 +49,11 @@ namespace Communication {
             double v_linear;
             double w_angular;
             uint32_t cp_rcv;
-            std::vector<int32_t> path_rcv;
+            uint32_t np_rcv;
+            bool wt_rcv;
+            std::vector<uint32_t> cp_all;
+            std::vector<uint32_t> np_all;
+            std::vector<uint32_t> wt_all;
 
         };
 
@@ -100,28 +105,27 @@ class PiPicoDriver {
         tf::TransformBroadcaster tf_broadcaster;
 
         ros::Subscriber cpSendSub;
-        ros::Subscriber pathSendSub;
+        ros::Subscriber npSendSub;
+        ros::Subscriber wtSendSub;
+        ros::Subscriber targetIdSendSub;
+        ros::Subscriber stopWaitingSendSub;
 
         ros::Publisher cpRcvPub;
-        ros::Publisher pathRcvPub;
+        ros::Publisher npRcvPub;
+        ros::Publisher wtRcvPub;
 
         void cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
-        void pathSendCallBack(const std_msgs::Int32MultiArray::ConstPtr& msg);
+        void npSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
+        void wtSendCallBack(const std_msgs::Bool::ConstPtr& msg);
+        void targetIdSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
+        void stopWaitingSendCallBack(const std_msgs::Bool::ConstPtr& msg);
 
         void pubExtraMsgs();
-        std::vector<int32_t> parsePathList(const char* s, size_t len);
-        int pathToBuffer(const std::vector<int32_t>& path, char* buf, size_t buf_size);
+        std::vector<uint32_t> parseUIntList(const char* s, size_t len);
+        void updateReducedStateFromArrays();
 
         char cmd_buf_[512];
 
-        std::vector<int32_t> path_to_send_;
-        int path_send_retries_ = 0;
-        int cp_send_retries_ = 0;
-
-        std::vector<int32_t> last_path_rcv_;
-        bool has_last_path_rcv_ = false;
-
-        uint32_t last_cp_rcv_ = 0;
-        bool has_last_cp_rcv_ = false;
+        int robot_id_ = 0;
 
 };
