@@ -132,7 +132,7 @@ private:
 
     WarehouseApproachTopology approach_topology_;
 
-   
+    bool isNodeReservedOrBlockedIndirectly(int node) const;
     bool isDirect11To27GloballyForbidden() const;
     bool isDirect11To27ReservedConsecutively() const;
 };

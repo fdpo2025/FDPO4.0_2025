@@ -932,12 +932,23 @@ bool MultiPlannerNode::isDirect11To27ReservedConsecutively() const
     return false;
 }
 
+bool MultiPlannerNode::isNodeReservedOrBlockedIndirectly(int node) const
+{
+    if (reserved_nodes_.count(node)) return true;
+
+    if (node == 12 && reserved_nodes_.count(13)) return true;
+    if (node == 26 && reserved_nodes_.count(25)) return true;
+
+    return false;
+}
+
 bool MultiPlannerNode::isDirect11To27GloballyForbidden() const
 {
     // Se 12 ou 26 estiverem reservados por qualquer robô,
     // então o troço direto 11 <-> 27 fica proibido globalmente.
-    if (reserved_nodes_.count(12) || reserved_nodes_.count(26)) {
-        ROS_INFO("Global rule active: direct edge 11<->27 forbidden because 12 or 26 is reserved");
+    if (isNodeReservedOrBlockedIndirectly(12) ||
+        isNodeReservedOrBlockedIndirectly(26)) {
+        ROS_INFO("Global rule active: direct edge 11<->27 forbidden because 12/26 are reserved or indirectly blocked by 13/25");
         return true;
     }
 
