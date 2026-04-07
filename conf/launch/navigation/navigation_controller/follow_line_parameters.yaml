@@ -14,16 +14,16 @@ navigation_controller:
   gain_fwd: 1.3
   vel_lin_nom: 0.3
   dist_da: 0.20
-  tol_findist: 0.05
+  tol_findist: 0.15
   max_etf: 0.2
   tol_init_line: 0.03
   line_switch_ratio: 0.85
   approaching_colinear_angle_rad: 0.087 # 5 graus (usado para ver se é preciso entrar no approaching, util em casos em que duas linhas são colineares e portanto não é preciso desacelerar)
 
   # Approaching normal (linha antes de warehouse, não pick/drop no pf): entra quando dist ao pf <= isto; v proporcional à dist até pf
-  approaching_enter_dist_m: 0.10
+  approaching_enter_dist_m: 0.1
   # Process warehouse go-to fase 1: |bearing| <= isto (rad). Fase 2: v constante (v_nom), w=0.
-  bearing_align_yaw_tol: 0.12
+  bearing_align_yaw_tol: 0.5
   k_approaching: 8.5
   gain_approaching_fwd: 1.0
   approaching_vel_normal: 0.07
