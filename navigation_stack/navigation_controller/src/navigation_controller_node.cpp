@@ -923,7 +923,7 @@ void NavigationController::followLine() {
     }
 
     if (error_ang_deg > 93.0) {
-        v_d = 0.0;
+        //v_d = 0.0;
         ROS_INFO_THROTTLE(1.0, "NavigationController: Angular error %.1f° > 93°, setting linear velocity to 0", error_ang_deg);
     }
     
