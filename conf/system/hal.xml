@@ -3,6 +3,8 @@
   <!-- Argumento para escolher o driver de LiDAR: "hlds" ou "ydlidar" -->
   <arg name="lidar_driver" default="ydlidar"/>
   <arg name="debug_pico_comm" default="false" doc="Enable Pi4-Pico communication debug logs"/>
+  <arg name="pico_robot_id" default="0" doc="ROBOT_ID no Pico (0-based); deve coincidir com o firmware"/>
+  <arg name="pico_num_robots" default="3" doc="Número de robôs na rede (2–4); deve coincidir com NUM_ROBOTS no firmware"/>
 
   <!-- Driver do LiDAR (seleção automática HLS-LFCD2 ou YDLidar X4) -->
   <include file="$(find conf)/launch/hardware/lidar_selector.launch">
@@ -12,6 +14,8 @@
   <!-- Driver do Pi Pico (Odometria e Controle de Motores) -->
   <include file="$(find conf)/launch/hardware/pi_pico_driver.launch">
     <arg name="debug_comm" value="$(arg debug_pico_comm)"/>
+    <arg name="robot_id" value="$(arg pico_robot_id)"/>
+    <arg name="num_robots" value="$(arg pico_num_robots)"/>
   </include>
   
 </launch>

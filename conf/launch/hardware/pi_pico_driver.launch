@@ -3,11 +3,15 @@
     <arg name="serial_port" default="/dev/ttyACM0"/>
     <arg name="baud_rate"  default="115200"/>
     <arg name="debug_comm" default="true" doc="Enable/disable communication debug logs"/>
+    <arg name="robot_id" default="0" doc="Handshake INIT: deve coincidir com ROBOT_ID no firmware"/>
+    <arg name="num_robots" default="3" doc="Handshake INIT: deve coincidir com NUM_ROBOTS no firmware"/>
 
     <node pkg="pi_pico_driver" type="pico_driver_node" name="pico_driver_node" output="screen">
         <param name="serial_port" value="$(arg serial_port)"/>
         <param name="baud_rate"   value="$(arg baud_rate)"/>
         <param name="debug_comm"  value="$(arg debug_comm)"/>
+        <param name="robot_id"    value="$(arg robot_id)"/>
+        <param name="num_robots"  value="$(arg num_robots)"/>
     </node>
 
 </launch>

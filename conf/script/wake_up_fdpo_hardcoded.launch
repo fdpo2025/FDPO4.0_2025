@@ -1,10 +1,12 @@
 <launch>
 
-	<!-- Argumentos configuráveis -->
+	<!-- Igual a wake_up_fdpo.launch mas sem comunicacoes_node (menos logs no terminal).
+	     Útil para depuração Pi4–Pico com debug_pico_comm:=true. -->
+
 	<arg name="map_file" default="$(find conf)/launch/hmi/maps/factory_map.yaml"/>
 	<arg name="rviz_config" default="$(find conf)/launch/hmi/fdpo_simulation.rviz"/>
 	<arg name="lidar_driver" default="ydlidar" doc="Escolha o driver de LiDAR: 'hlds' ou 'ydlidar'"/>
-	<arg name="debug_pico_comm" default="false" doc="Mostrar logs de comunicação Pi4-Pico (throttle no driver)"/>
+	<arg name="debug_pico_comm" default="false" doc="Mostrar logs de comunicação Pi4-Pico (com throttle no driver)"/>
 	<arg name="pico_robot_id" default="0" doc="ROBOT_ID no Pico (0-based); handshake série"/>
 	<arg name="pico_num_robots" default="3" doc="NUM_ROBOTS no firmware (2–4); handshake série"/>
 	<arg name="use_ekf" default="true" doc="Usar EKF localizer com beacons (se false, map=odom, só odometria)"/>
@@ -21,7 +23,6 @@
 	<arg name="planner_type" default="chris" doc="chris ou multi"/>
 	<arg name="robot_id" default="1" doc="ID do robo para comunicacoes (1 ou 2)"/>
 
-	<!-- HAL: Hardware Abstraction Layer (LiDAR, etc) -->
 	<include if="$(arg use_hal)" file="$(find conf)/system/hal.xml">
 		<arg name="lidar_driver" value="$(arg lidar_driver)"/>
 		<arg name="debug_pico_comm" value="$(arg debug_pico_comm)"/>
@@ -29,7 +30,6 @@
 		<arg name="pico_num_robots" value="$(arg pico_num_robots)"/>
 	</include>
 
-	<!-- Navigation: Localização e Controle de Navegação -->
 	<include if="$(arg use_navigation)" file="$(find conf)/system/navigation.xml">
 		<arg name="lidar_driver" value="$(arg lidar_driver)"/>
 		<arg name="use_ekf" value="$(arg use_ekf)"/>
@@ -37,8 +37,7 @@
 		<arg name="use_ss_controller" value="$(arg use_ss_controller)"/>
 		<arg name="robot_id" value="$(arg robot_id)" />
 	</include>
-    
-	<!-- HMI: Interface Humano-Máquina (Mapa, RViz, etc) -->
+
 	<include if="$(arg use_hmi)" file="$(find conf)/system/hmi.xml">
 		<arg name="map_file" value="$(arg map_file)"/>
 		<arg name="rviz_config" value="$(arg rviz_config)"/>
@@ -51,10 +50,11 @@
 		<arg name="planning_method" value="$(arg planning_method)" />
 		<arg name="planner_executable" value="$(eval 'chris_planner_node' if arg('planner_type') == 'chris' else 'multi_planner_node')" />
 		<arg name="robot_id" value="$(arg robot_id)" />
+		<arg name="launch_comunicacoes" value="false"/>
 	</include>
-		
+
 	<include file="$(find conf)/system/wifi.xml">
 		<arg name="enable" value="$(arg use_wifi)" />
 	</include>
-	
+
 </launch>

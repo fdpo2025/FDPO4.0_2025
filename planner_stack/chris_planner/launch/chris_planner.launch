@@ -5,6 +5,7 @@
   <arg name="robot_id" default="1" />
   <arg name="planner_executable" default="chris_planner_node" />
   <arg name="launch_planner" default="true" doc="false: não arranca chris_planner_node / multi_planner_node"/>
+  <arg name="launch_comunicacoes" default="true" doc="false: não arranca comunicacoes_node (menos ruído no terminal)"/>
 
   <!-- Planner -->
   <!-- arg('launch_planner') pode vir como bool True/False ou string 'true'/'false'; True == 'true' falha em Python -->
@@ -17,7 +18,8 @@
   </node>
 
   <!-- Communications -->
-  <node name="comunicacoes_planner"
+  <node if="$(eval str(arg('launch_comunicacoes')).lower() in ('true', '1'))"
+        name="comunicacoes_planner"
         pkg="chris_planner"
         type="comunicacoes_node"
         output="screen">

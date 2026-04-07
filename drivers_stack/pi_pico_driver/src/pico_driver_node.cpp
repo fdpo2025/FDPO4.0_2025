@@ -1,15 +1,14 @@
 #include "pico_driver_node.h"
 
 #include <algorithm>
+#include <cstring>
 
 /*
  * Serial protocol (ROS1 <-> Pico):
- *   INIT:ID,COLOR_SEQ
+ *   Handshake: REQ:INIT -> INIT:id,num_robots,crc8 -> ACK:OK
  *   CMD:v,w,iman,my_cp,my_np,my_waiting,target_id,stop_waiting
- *   POS:x,y,theta,v,w;CP:a,b,c;NP:d,e,f;WT:g,h,i
- * Rules:
- *   - IDs are 0-based.
- *   - target_id=255 means broadcast.
+ *   Optional: COLOR:RRRR (4 chars R|G|B) before POS; Pi4 ACK_COLOR:OK
+ *   POS:x,y,theta,v,w;CP:...;NP:...;WT:...
  */
 
 PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
@@ -41,16 +40,18 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   cpRcvPub = nh.advertise<std_msgs::UInt32>("/cp_rcv", 10);
   npRcvPub = nh.advertise<std_msgs::UInt32>("/np_rcv", 10);
   wtRcvPub = nh.advertise<std_msgs::Bool>("/wt_rcv", 10);
+  colorSequencePub_ = nh.advertise<std_msgs::String>("/color_sequence", 10, true);
   commTimer = nh.createTimer(ros::Duration(0.02), &PiPicoDriver::commTick, this);
 
   std::string serial_port;
   nh.param<std::string>("serial_port", serial_port, "/dev/ttyACM0");
   nh.param("debug_comm", debug_comm_, false);
   nh.param("robot_id", robot_id_, 0);
+  nh.param("num_robots", num_robots_, 3);
 
   ROS_INFO("[PiPicoDriver] Serial port: %s", serial_port.c_str());
-  ROS_INFO("[PiPicoDriver] robot_id=%d debug=%s",
-           robot_id_, debug_comm_ ? "ENABLED" : "DISABLED");
+  ROS_INFO("[PiPicoDriver] robot_id=%d num_robots=%d debug=%s",
+           robot_id_, num_robots_, debug_comm_ ? "ENABLED" : "DISABLED");
 
   serial_fd_ = -1;
   startSerial(serial_port);
@@ -129,46 +130,144 @@ void PiPicoDriver::pubOdom() {
   tf_broadcaster.sendTransform(odom_trans);
 }
 
-std::string PiPicoDriver::syncCall(const std::string& cmd, int timeout_ms) {
-  if (serial_fd_ < 0) {
-    ROS_ERROR("Serial closed.");
-    return "";
+uint8_t PiPicoDriver::crc8DallasMaxim(const uint8_t* data, size_t len) {
+  uint8_t crc = 0;
+  for (size_t i = 0; i < len; ++i) {
+    crc ^= data[i];
+    for (uint8_t j = 0; j < 8; ++j) {
+      if (crc & 0x01)
+        crc = static_cast<uint8_t>((crc >> 1) ^ 0x8C);
+      else
+        crc >>= 1;
+    }
   }
+  return crc;
+}
 
+void PiPicoDriver::writeSerialRaw(const char* data, size_t len) {
+  if (serial_fd_ < 0 || !data || len == 0) return;
+  (void)::write(serial_fd_, data, len);
+}
+
+bool PiPicoDriver::trySerialHandshake() {
+  if (serial_fd_ < 0) return false;
   tcflush(serial_fd_, TCIFLUSH);
-  const std::string command = cmd + "\n";
-  if (write(serial_fd_, command.c_str(), command.size()) < 0) {
-    ROS_ERROR("Erro ao enviar comando para a serial.");
-    return "";
+  static const char req[] = "REQ:INIT\n";
+  if (::write(serial_fd_, req, sizeof(req) - 1) < 0) {
+    return false;
   }
 
+  std::string acc;
   char buf[256];
-  std::string response;
-  ros::Time start_time = ros::Time::now();
-  ros::Duration timeout_duration(timeout_ms / 1000.0);
+  const ros::Time start = ros::Time::now();
+  const ros::Duration limit(kHandshakeTimeoutMs / 1000.0);
 
-  while (ros::Time::now() - start_time < timeout_duration) {
-    int n = read(serial_fd_, buf, sizeof(buf) - 1);
+  while (ros::Time::now() - start < limit) {
+    const int n = static_cast<int>(::read(serial_fd_, buf, sizeof(buf) - 1));
     if (n > 0) {
       buf[n] = '\0';
-      response += std::string(buf);
-      size_t newline_pos = response.find('\n');
-      if (newline_pos != std::string::npos) {
-        std::string line = response.substr(0, newline_pos);
-        decodeMsg(line);
-        return line;
+      acc += std::string(buf);
+      size_t p = 0;
+      while ((p = acc.find('\n')) != std::string::npos) {
+        std::string line = acc.substr(0, p);
+        acc.erase(0, p + 1);
+        while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+        if (line.rfind("INIT:", 0) != 0) {
+          continue;
+        }
+        int id = -1;
+        int num = -1;
+        unsigned crc_in = 0;
+        if (std::sscanf(line.c_str(), "INIT:%d,%d,%u", &id, &num, &crc_in) != 3) {
+          continue;
+        }
+        if (num < 2 || num > 4) continue;
+        if (id < 0 || id >= num_robots_) continue;
+        if (id != robot_id_) continue;
+        if (num != num_robots_) continue;
+        char pl[16];
+        const int m = std::snprintf(pl, sizeof(pl), "%d,%d", id, num);
+        if (m <= 0) continue;
+        const uint8_t crc = crc8DallasMaxim(reinterpret_cast<const uint8_t*>(pl), static_cast<size_t>(m));
+        if (static_cast<unsigned>(crc) != crc_in) continue;
+        static const char ack[] = "ACK:OK\n";
+        writeSerialRaw(ack, sizeof(ack) - 1);
+        if (debug_comm_) {
+          ROS_INFO_THROTTLE(1.0, "[PiPicoDriver] Handshake OK id=%d num_robots=%d", id, num);
+        }
+        return true;
+      }
+    } else {
+      ros::WallDuration(0.001).sleep();
+    }
+  }
+  return false;
+}
+
+std::string PiPicoDriver::readUntilPosLine(const std::string& cmd, int timeout_ms) {
+  if (serial_fd_ < 0) return "";
+  tcflush(serial_fd_, TCIFLUSH);
+  const std::string command = cmd + "\n";
+  if (::write(serial_fd_, command.c_str(), command.size()) < 0) {
+    ROS_ERROR_THROTTLE(5.0, "Erro ao enviar comando para a serial.");
+    return "";
+  }
+
+  std::string acc;
+  char buf[256];
+  const ros::Time start_time = ros::Time::now();
+  const ros::Duration timeout_duration(timeout_ms / 1000.0);
+
+  while (ros::Time::now() - start_time < timeout_duration) {
+    const int n = static_cast<int>(::read(serial_fd_, buf, sizeof(buf) - 1));
+    if (n > 0) {
+      buf[n] = '\0';
+      acc += std::string(buf);
+      size_t pos = 0;
+      while ((pos = acc.find('\n')) != std::string::npos) {
+        std::string line = acc.substr(0, pos);
+        acc.erase(0, pos + 1);
+        while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+        if (line.empty()) continue;
+        if (line.rfind("COLOR:", 0) == 0) {
+          decodeMsg(line);
+          continue;
+        }
+        if (line.rfind("POS:", 0) == 0) {
+          decodeMsg(line);
+          return line;
+        }
+        ROS_WARN_THROTTLE(2.0, "[PiPicoDriver] Linha inesperada antes de POS: %s",
+                          line.substr(0, 120).c_str());
       }
     }
   }
 
-  ROS_WARN("Timeout esperando resposta da Pico.");
+  ROS_WARN_THROTTLE(5.0, "Timeout esperando POS da Pico.");
   return "";
 }
 
 void PiPicoDriver::decodeMsg(const std::string& msg) {
   if (msg.empty()) return;
-  if (msg.rfind("INIT:", 0) == 0) {
-    ROS_INFO_THROTTLE(5.0, "[PiPicoDriver] %s", msg.c_str());
+
+  if (msg.rfind("COLOR:", 0) == 0) {
+    const std::string pay = msg.size() > 6 ? msg.substr(6) : "";
+    if (pay.size() == 4) {
+      bool ok = true;
+      for (char c : pay) {
+        if (c != 'R' && c != 'G' && c != 'B') {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) {
+        std_msgs::String m;
+        m.data = pay;
+        colorSequencePub_.publish(m);
+        writeSerialRaw("ACK_COLOR:OK\n", 13);
+        ROS_INFO_THROTTLE(2.0, "[PiPicoDriver] COLOR -> /color_sequence (%s)", pay.c_str());
+      }
+    }
     return;
   }
 
@@ -214,6 +313,18 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
 }
 
 void PiPicoDriver::commTick(const ros::TimerEvent&) {
+  if (!handshake_ok_) {
+    if (trySerialHandshake()) {
+      handshake_ok_ = true;
+      con_state.missed = 0;
+      con_state.link_ok = true;
+    } else {
+      ROS_WARN_THROTTLE(2.0,
+                        "[PiPicoDriver] À espera do handshake (REQ:INIT / INIT / ACK)...");
+    }
+    return;
+  }
+
   const int off = std::snprintf(cmd_buf_, sizeof(cmd_buf_),
                                 "CMD:%.4f,%.4f,%u,%u,%u,%u,%u,%u",
                                 messageToSend.v_d,
@@ -224,19 +335,24 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
                                 messageToSend.waiting_send ? 1U : 0U,
                                 messageToSend.target_id_send,
                                 messageToSend.stop_waiting_send ? 1U : 0U);
-  std::string cmd(cmd_buf_, off > 0 ? off : 0);
+  const std::string cmd(cmd_buf_, off > 0 ? off : 0);
 
   if (debug_comm_) {
-    ROS_INFO("Pi4->Pico: %s", cmd.c_str());
+    ROS_INFO_THROTTLE(2.0, "Pi4->Pico: %s", cmd.c_str());
   }
 
-  std::string resp = syncCall(cmd, 18);
+  const std::string resp = readUntilPosLine(cmd, kCommTimeoutMs);
   if (debug_comm_) {
-    ROS_INFO("Pico->Pi4: %s", resp.c_str());
+    ROS_INFO_THROTTLE(2.0, "Pico->Pi4 POS: %s", resp.c_str());
   }
 
   if (resp.empty()) {
     con_state.missed++;
+    if (con_state.missed >= 5) {
+      handshake_ok_ = false;
+      con_state.missed = 0;
+      ROS_WARN_THROTTLE(8.0, "[PiPicoDriver] Link perdido; a repetir handshake.");
+    }
     if (con_state.missed >= 2) {
       con_state.link_ok = false;
       ROS_WARN_THROTTLE(5.0, "[PiPicoDriver] Connection lost with Pico!");

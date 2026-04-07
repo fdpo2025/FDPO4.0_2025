@@ -4,6 +4,7 @@
   <arg name="planning_method" default="astar" />
   <arg name="planner_executable" default="chris_planner_node" />
   <arg name="robot_id" default="1" />
+  <arg name="launch_comunicacoes" default="true" doc="Arrancar comunicacoes_node (ponte WiFi/serial)"/>
 
   <!-- multi + robot_id:=2: só comunicacoes_node (sem multi_planner_node) -->
   <include file="$(find chris_planner)/launch/chris_planner.launch">
@@ -12,5 +13,6 @@
     <arg name="planner_executable" value="$(arg planner_executable)" />
     <arg name="robot_id" value="$(arg robot_id)" />
     <arg name="launch_planner" value="$(eval 'false' if arg('planner_type') == 'multi' and int(str(arg('robot_id')).strip()) == 2 else 'true')" />
+    <arg name="launch_comunicacoes" value="$(arg launch_comunicacoes)" />
   </include>
 </launch>

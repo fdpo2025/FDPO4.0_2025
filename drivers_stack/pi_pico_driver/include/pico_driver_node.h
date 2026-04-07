@@ -83,11 +83,20 @@ class PiPicoDriver {
         Communication::ConnectionState con_state{false, 0};
     
         int serial_fd_;
-        bool debug_comm_;  // Parâmetro para mostrar/ocultar logs de comunicação
+        bool debug_comm_;
+        bool handshake_ok_{false};
+        int num_robots_{3};
+        static constexpr int kHandshakeTimeoutMs = 500;
+        static constexpr int kCommTimeoutMs = 80;
+
         void startSerial(const std::string& port);
+        bool trySerialHandshake();
+        static uint8_t crc8DallasMaxim(const uint8_t* data, size_t len);
+        void writeSerialRaw(const char* data, size_t len);
+        std::string readUntilPosLine(const std::string& cmd, int timeout_ms);
         
         // Client-Server Communication between Pico & Pi4
-        std::string syncCall(const std::string& cmd, int timeout_ms);
+        std::string readUntilPosLine(const std::string& cmd, int timeout_ms);
         void decodeMsg(const std::string& msg);
 
          ros::Timer commTimer;
@@ -113,6 +122,7 @@ class PiPicoDriver {
         ros::Publisher cpRcvPub;
         ros::Publisher npRcvPub;
         ros::Publisher wtRcvPub;
+        ros::Publisher colorSequencePub_;
 
         void cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
         void npSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
