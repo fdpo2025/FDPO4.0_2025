@@ -1298,9 +1298,9 @@ void NavigationController::navPlanCallback(const plan_handler::NavPlan::ConstPtr
     // se ainda há rota ativa, guardar pendente
     // =========================
     if (!route.empty() || navigationFsm.state != navigation::states::idle) {
-        pendingNavPlan = *msg;
-        hasPendingNavPlan = true;
-        ROS_INFO("NavigationController: Current route still active, storing new NavPlan as pending");
+        appendRouteFromNavPlan(msg);
+        publishLineMarkers();
+        ROS_INFO("NavigationController: Current route active, appended new NavPlan to existing route");
         return;
     }
 
@@ -1329,10 +1329,36 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     previousWaypoint.node_id = -1;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
+    appendRouteFromNavPlan(msg);
+
+    updateDesiredPose();
+    
+    if (!route.empty()) {
+        followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+        ROS_WARN("followline 6");
+        followLineFsm.set_state();
+        skipNearbyWaypoints();
+    }
+    
+    publishLineMarkers();
+    completion_feedback_sent = false;
+    
+    ROS_INFO("NavigationController: Route loaded from NavPlan with %zu waypoints", route.size());
+}
+
+void NavigationController::appendRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg) {
+    if (msg->points.empty()) {
+        ROS_WARN("NavigationController: Received empty NavPlan for append, ignoring");
+        return;
+    }
+
+    const int start_id = route.empty() ? 0 : route.back().id + 1;
+    const Pose append_anchor_pose = route.empty() ? previousWaypoint.pose : route.back().pose;
+
     for (size_t i = 0; i < msg->points.size(); ++i) {
         const plan_handler::ControllerPoint& cp = msg->points[i];
         WayPoint waypoint_temp;
-        waypoint_temp.id = static_cast<int>(i);
+        waypoint_temp.id = start_id + static_cast<int>(i);
 
         // =========================
         // RECEBER NODE_ID
@@ -1352,7 +1378,9 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
                 double dy = cp.y - msg->points[i - 1].y;
                 waypoint_temp.pose.theta = std::atan2(dy, dx);
             } else {
-                waypoint_temp.pose.theta = poseCurr.theta;
+                double dx = cp.x - append_anchor_pose.x;
+                double dy = cp.y - append_anchor_pose.y;
+                waypoint_temp.pose.theta = std::atan2(dy, dx);
             }
         }
         
@@ -1374,20 +1402,6 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
 
         route.push_back(waypoint_temp);
     }
-
-    updateDesiredPose();
-    
-    if (!route.empty()) {
-        followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-        ROS_WARN("followline 6");
-        followLineFsm.set_state();
-        skipNearbyWaypoints();
-    }
-    
-    publishLineMarkers();
-    completion_feedback_sent = false;
-    
-    ROS_INFO("NavigationController: Route loaded from NavPlan with %zu waypoints", route.size());
 }
 
 // =========================

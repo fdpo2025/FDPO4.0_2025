@@ -199,6 +199,7 @@ class NavigationController {
         ros::Subscriber navPlanSub;
         void navPlanCallback(const plan_handler::NavPlan::ConstPtr& msg);
         void loadRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg);
+        void appendRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg);
         
         bool load_from_route;  // Se deve carregar waypoints do route.yaml
 
