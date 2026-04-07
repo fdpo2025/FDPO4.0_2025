@@ -93,8 +93,6 @@ class PiPicoDriver {
         bool trySerialHandshake();
         static uint8_t crc8DallasMaxim(const uint8_t* data, size_t len);
         void writeSerialRaw(const char* data, size_t len);
-        std::string readUntilPosLine(const std::string& cmd, int timeout_ms);
-        
         // Client-Server Communication between Pico & Pi4
         std::string readUntilPosLine(const std::string& cmd, int timeout_ms);
         void decodeMsg(const std::string& msg);
