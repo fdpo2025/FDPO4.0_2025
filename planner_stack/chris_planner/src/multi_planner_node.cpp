@@ -790,17 +790,6 @@ std::unordered_set<int> MultiPlannerNode::getExtraBlockedNodes(
 {
     std::unordered_set<int> blocked;
 
-    std::unordered_set<int> reserved_by_other;
-    for (auto& [n, owner] : reserved_nodes_)
-        if (owner != robot_id) reserved_by_other.insert(n);
-
-    for (int node : reserved_by_other) {
-        if (special_block_nodes_.count(node)) {
-            for (auto& [neigh, _w] : planner_->factory.graph.neighbors(node))
-                blocked.insert(neigh);
-        }
-    }
-
     // Regra global:
     // se algum caminho reservado estiver a usar 11 <-> 27 consecutivamente,
     // então 12 e 26 ficam bloqueados para qualquer novo planeamento.
