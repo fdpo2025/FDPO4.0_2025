@@ -42,6 +42,8 @@ private:
     // Core logic
     State buildState(const std::string& robot_id) const;
     bool planForRobot(const std::string& robot_id);
+    bool planReturnToPenultimateNode(const std::string& robot_id,
+                                     const std::vector<int>& published_path);
     void updateRobotPosition(const std::string& robot_id, int node);
     void goalReached(const std::string& robot_id);
 
@@ -130,6 +132,7 @@ private:
 
     // Pickup plan counter
     int pickup_plan_count_;
+    bool first_finish_return_done_ = false;
 
     WarehouseApproachTopology approach_topology_;
 
