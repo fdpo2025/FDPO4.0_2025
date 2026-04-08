@@ -43,8 +43,6 @@ private:
     // Core logic
     State buildState(const std::string& robot_id) const;
     bool planForRobot(const std::string& robot_id);
-    bool planFinalParkingAtNode33(const std::string& robot_id);
-    bool hasGlobalPendingWork() const;
     void updateRobotPosition(const std::string& robot_id, int node);
     void goalReached(const std::string& robot_id);
 
@@ -135,7 +133,6 @@ private:
 
     // Pickup plan counter
     int pickup_plan_count_;
-    bool final_parking_assigned_ = false;
 
     WarehouseApproachTopology approach_topology_;
 
