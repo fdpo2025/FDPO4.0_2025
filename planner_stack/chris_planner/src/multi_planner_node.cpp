@@ -883,22 +883,11 @@ std::vector<int> MultiPlannerNode::applyOutputWarehouseRule(
         return filtered;
     };
 
-    if (committed_outputs.empty()) {
-        std::vector<int> filtered;
-        for (int n : valid_nodes) {
-            if (!output_nodes_.count(n) || n == 36 || n == 37)
-                filtered.push_back(n);
-        }
-        ROS_INFO("[OUTPUT_RULE] first blue box restricted to output nodes 36/37");
-        return filtered;
-    }
+    if (committed_outputs.empty())
+        return restrict_to_output(36, "first blue box");
 
-    if (committed_outputs.size() == 1) {
-        if (committed_outputs.count(36))
-            return restrict_to_output(38, "second blue after first blue went to 36");
-        if (committed_outputs.count(37))
-            return restrict_to_output(35, "second blue after first blue went to 37");
-    }
+    if (committed_outputs.size() == 1 && committed_outputs.count(36))
+        return restrict_to_output(37, "second blue after first blue went to 36");
 
     ROS_INFO("[OUTPUT_RULE] no special blue-output rule applies, keeping all valid outputs");
     return valid_nodes;
