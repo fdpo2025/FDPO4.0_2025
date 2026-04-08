@@ -816,38 +816,39 @@ std::vector<int> MultiPlannerNode::applyOutputWarehouseRule(
 
     if (output_candidates.empty()) return valid_nodes;
 
-    bool output_has_box = false;
-    for (int node : output_nodes_) {
-        auto it = planner_->factory.index_of.find(node);
-        if (it != planner_->factory.index_of.end()) {
-            if (boxes_[it->second] != EMPTY) {
-                output_has_box = true;
-                break;
-            }
-        }
-    }
+    const std::vector<int> preferred_order = {37, 35, 38, 36};
 
-    bool output_has_reserved_dropoff = false;
-    for (auto& [other_id, other] : robots_) {
+    std::unordered_set<int> reserved_dropoffs;
+    for (const auto& [other_id, other] : robots_) {
         if (other.goal >= 0 && other.task_type == "dropoff" &&
             output_nodes_.count(other.goal)) {
-            output_has_reserved_dropoff = true;
-            break;
+            reserved_dropoffs.insert(other.goal);
         }
     }
 
-    if (!output_has_box && !output_has_reserved_dropoff) {
-        std::unordered_set<int> allowed_output = {36, 37};
+    auto is_available_output = [&](int node) {
+        auto it = planner_->factory.index_of.find(node);
+        if (it == planner_->factory.index_of.end()) return false;
+        if (boxes_[it->second] != EMPTY) return false;
+        if (reserved_dropoffs.count(node)) return false;
+        return std::find(output_candidates.begin(), output_candidates.end(), node) !=
+               output_candidates.end();
+    };
+
+    for (int preferred_node : preferred_order) {
+        if (!is_available_output(preferred_node)) continue;
+
         std::vector<int> filtered;
         for (int n : valid_nodes) {
-            if (!output_nodes_.count(n) || allowed_output.count(n))
+            if (!output_nodes_.count(n) || n == preferred_node)
                 filtered.push_back(n);
         }
-        ROS_INFO("[OUTPUT_RULE] output empty, restricting to 36/37");
+        ROS_INFO("[OUTPUT_RULE] prioritizing output node %d using preferred order 37->35->38->36",
+                 preferred_node);
         return filtered;
     }
 
-    ROS_INFO("[OUTPUT_RULE] output active, all output nodes available");
+    ROS_INFO("[OUTPUT_RULE] preferred output unavailable, keeping all valid outputs");
     return valid_nodes;
 }
 
