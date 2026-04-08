@@ -27,6 +27,7 @@ struct RobotState {
     bool waiting_replan = false;
     std::string task_type;
     int reserved_pickup_node = -1;
+    int held_published_last_node = -1;
 };
 
 class MultiPlannerNode {
@@ -42,6 +43,8 @@ private:
     // Core logic
     State buildState(const std::string& robot_id) const;
     bool planForRobot(const std::string& robot_id);
+    bool planFinalParkingAtNode33(const std::string& robot_id);
+    bool hasGlobalPendingWork() const;
     void updateRobotPosition(const std::string& robot_id, int node);
     void goalReached(const std::string& robot_id);
 
@@ -57,6 +60,8 @@ private:
     // Reservation system
     bool reserveBoxAtPlanning(const std::string& robot_id, int pickup_node);
     void reservePath(const std::string& robot_id, const std::vector<int>& path, int goal);
+    void releaseHeldPublishedLastNode(const std::string& robot_id);
+    void holdPublishedLastNode(const std::string& robot_id, const std::vector<int>& published_path);
     bool releaseNode(const std::string& robot_id, int node);
     bool releaseNodesBefore(const std::string& robot_id, int current_node);
     bool releaseAllPathNodesExceptCurrent(const std::string& robot_id, int current_node);
@@ -130,6 +135,7 @@ private:
 
     // Pickup plan counter
     int pickup_plan_count_;
+    bool final_parking_assigned_ = false;
 
     WarehouseApproachTopology approach_topology_;
 

@@ -126,6 +126,7 @@ void MultiPlannerNode::sequenceCb(const std_msgs::String::ConstPtr& msg)
     reserved_nodes_.clear();
     reserved_goals_.clear();
     pickup_plan_count_ = 0;
+    final_parking_assigned_ = false;
 
     for (auto& [id, r] : robots_) {
         r.node = 31;
@@ -139,6 +140,7 @@ void MultiPlannerNode::sequenceCb(const std_msgs::String::ConstPtr& msg)
         r.waiting_replan = false;
         r.task_type.clear();
         r.reserved_pickup_node = -1;
+        r.held_published_last_node = -1;
     }
 
     ROS_WARN("Initial boxes set");
@@ -388,8 +390,10 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
                  robot_id.c_str(), best_goal, side_node);
     }
 
+    releaseHeldPublishedLastNode(robot_id);
     reservePath(robot_id, full_path, best_goal);
     publishPath(robot_id, compact_path);
+    holdPublishedLastNode(robot_id, compact_path);
 
     r.path = full_path;
     r.compact_path = compact_path;
@@ -437,6 +441,32 @@ void MultiPlannerNode::reservePath(const std::string& robot_id,
         reserved_nodes_[n] = robot_id;
     }
     reserved_goals_[goal] = robot_id;
+}
+
+void MultiPlannerNode::releaseHeldPublishedLastNode(const std::string& robot_id)
+{
+    auto& r = robots_[robot_id];
+    if (r.held_published_last_node < 0) return;
+
+    auto it = reserved_nodes_.find(r.held_published_last_node);
+    if (it != reserved_nodes_.end() && it->second == robot_id)
+        reserved_nodes_.erase(it);
+
+    r.held_published_last_node = -1;
+}
+
+void MultiPlannerNode::holdPublishedLastNode(
+    const std::string& robot_id, const std::vector<int>& published_path)
+{
+    auto& r = robots_[robot_id];
+    if (published_path.empty()) {
+        r.held_published_last_node = -1;
+        return;
+    }
+
+    int held_node = resolveWarehouseId(published_path.back());
+    reserved_nodes_[held_node] = robot_id;
+    r.held_published_last_node = held_node;
 }
 
 void MultiPlannerNode::publishPath(const std::string& robot_id,
@@ -492,10 +522,18 @@ void MultiPlannerNode::goalReached(const std::string& robot_id)
     auto& r = robots_[robot_id];
     int goal = r.goal;
     std::string task_type = r.task_type;
+    int published_last_node = r.held_published_last_node;
 
     releaseAllPathNodesExceptCurrent(robot_id, goal);
+    if (published_last_node >= 0)
+        reserved_nodes_[published_last_node] = robot_id;
 
     ROS_INFO("%s reached goal %d with task_type=%s", robot_id.c_str(), goal, task_type.c_str());
+
+    if (task_type == "final_park_33") {
+        r.node = goal;
+        reserved_nodes_[goal] = robot_id;
+    }
 
     if (task_type == "pickup" || task_type == "dropoff") {
         State state{r.node, r.box, boxes_};
@@ -523,8 +561,93 @@ void MultiPlannerNode::goalReached(const std::string& robot_id)
 
     publishLogicalState(robot_id);
 
+    if (task_type == "final_park_33") {
+        r.waiting_replan = false;
+        tryReplanWaitingRobot(robot_id);
+        return;
+    }
+
+    if (!final_parking_assigned_ && !hasGlobalPendingWork()) {
+        if (planFinalParkingAtNode33(robot_id)) {
+            final_parking_assigned_ = true;
+            tryReplanWaitingRobot(robot_id);
+            return;
+        }
+    }
+
     planForRobot(robot_id);
     tryReplanWaitingRobot(robot_id);
+}
+
+bool MultiPlannerNode::hasGlobalPendingWork() const
+{
+    State global_state;
+    global_state.robot_node = 31;
+    global_state.robot_box_type = EMPTY;
+    global_state.boxes = boxes_;
+    global_state.recomputeHash();
+
+    if (!planner_->factory.terminalState(global_state))
+        return true;
+
+    for (const auto& [id, r] : robots_) {
+        if (r.box != EMPTY) return true;
+        if (r.reserved_pickup_node >= 0) return true;
+        if (r.goal >= 0 && (r.task_type == "pickup" || r.task_type == "dropoff"))
+            return true;
+    }
+
+    return false;
+}
+
+bool MultiPlannerNode::planFinalParkingAtNode33(const std::string& robot_id)
+{
+    auto& r = robots_[robot_id];
+    if (r.busy) return false;
+    if (r.goal >= 0) return false;
+
+    constexpr int parking_node = 33;
+
+    if (reserved_nodes_.count(parking_node) &&
+        reserved_nodes_.at(parking_node) != robot_id) {
+        ROS_WARN("[%s] cannot park at node 33 because it is already reserved",
+                 robot_id.c_str());
+        return false;
+    }
+
+    std::unordered_set<int> reserved_by_other;
+    for (const auto& [n, owner] : reserved_nodes_) {
+        if (owner != robot_id) reserved_by_other.insert(n);
+    }
+
+    auto extra = getExtraBlockedNodes(robot_id);
+    std::unordered_set<int> blocked = reserved_by_other;
+    blocked.insert(extra.begin(), extra.end());
+
+    auto path = shortestPathAvoiding(r.current_node, parking_node, blocked);
+    if (path.empty()) {
+        ROS_WARN("[%s] failed to plan final parking path to node 33",
+                 robot_id.c_str());
+        return false;
+    }
+
+    auto compact_path = dropFirstNodeUnlessStart31(compactExistingPath(path));
+
+    releaseHeldPublishedLastNode(robot_id);
+    reservePath(robot_id, path, parking_node);
+    publishPath(robot_id, compact_path);
+    holdPublishedLastNode(robot_id, compact_path);
+
+    r.path = path;
+    r.compact_path = compact_path;
+    r.goal = parking_node;
+    r.busy = true;
+    r.waiting_replan = false;
+    r.task_type = "final_park_33";
+
+    ROS_INFO("[%s] no global pending work, parking at node 33",
+             robot_id.c_str());
+    return true;
 }
 
 // =====================================================================
