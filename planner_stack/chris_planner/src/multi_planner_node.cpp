@@ -789,6 +789,11 @@ std::unordered_set<int> MultiPlannerNode::getExtraBlockedNodes(
     const std::string& robot_id) const
 {
     std::unordered_set<int> blocked;
+    if (isNodeReservedOrBlockedIndirectly(30)) {
+        blocked.insert(29);
+        ROS_INFO("[%s] global block: node 29 blocked because node 30 is reserved or indirectly blocked",
+                 robot_id.c_str());
+    }
 
     // Regra global:
     // se algum caminho reservado estiver a usar 11 <-> 27 consecutivamente,
@@ -816,7 +821,7 @@ std::vector<int> MultiPlannerNode::applyOutputWarehouseRule(
 
     if (output_candidates.empty()) return valid_nodes;
 
-    const std::vector<int> preferred_order = {37, 35, 38, 36};
+    const std::vector<int> preferred_order = {37, 35};
 
     std::unordered_set<int> reserved_dropoffs;
     for (const auto& [other_id, other] : robots_) {
@@ -843,12 +848,12 @@ std::vector<int> MultiPlannerNode::applyOutputWarehouseRule(
             if (!output_nodes_.count(n) || n == preferred_node)
                 filtered.push_back(n);
         }
-        ROS_INFO("[OUTPUT_RULE] prioritizing output node %d using preferred order 37->35->38->36",
+        ROS_INFO("[OUTPUT_RULE] prioritizing output node %d using preferred order 37->35",
                  preferred_node);
         return filtered;
     }
 
-    ROS_INFO("[OUTPUT_RULE] preferred output unavailable, keeping all valid outputs");
+    ROS_INFO("[OUTPUT_RULE] preferred outputs unavailable or already used, keeping all valid outputs");
     return valid_nodes;
 }
 
@@ -1003,6 +1008,7 @@ bool MultiPlannerNode::isNodeReservedOrBlockedIndirectly(int node) const
 
     if (node == 12 && reserved_nodes_.count(13)) return true;
     if (node == 26 && reserved_nodes_.count(25)) return true;
+    if (node == 29 && reserved_nodes_.count(30)) return true;
 
     return false;
 }
