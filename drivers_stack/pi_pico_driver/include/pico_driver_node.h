@@ -116,6 +116,7 @@ class PiPicoDriver {
         ros::Subscriber wtSendSub;
         ros::Subscriber targetIdSendSub;
         ros::Subscriber stopWaitingSendSub;
+        ros::Subscriber colorSequenceSub_;
 
         ros::Publisher cpRcvPub;
         ros::Publisher npRcvPub;
@@ -127,12 +128,17 @@ class PiPicoDriver {
         void wtSendCallBack(const std_msgs::Bool::ConstPtr& msg);
         void targetIdSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
         void stopWaitingSendCallBack(const std_msgs::Bool::ConstPtr& msg);
+        void colorSequenceCallBack(const std_msgs::String::ConstPtr& msg);
 
         void pubExtraMsgs();
         std::vector<uint32_t> parseUIntList(const char* s, size_t len);
         void updateReducedStateFromArrays();
 
         char cmd_buf_[512];
+        std::string last_color_from_pico_;
+        std::string last_color_sent_to_pico_;
+        std::string pending_color_to_pico_;
+        bool has_pending_color_to_pico_{false};
 
         int robot_id_ = 0;
 

@@ -35,6 +35,7 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   wtSendSub = nh.subscribe("/wt_send", 10, &PiPicoDriver::wtSendCallBack, this);
   targetIdSendSub = nh.subscribe("/target_id_send", 10, &PiPicoDriver::targetIdSendCallBack, this);
   stopWaitingSendSub = nh.subscribe("/stop_waiting_send", 10, &PiPicoDriver::stopWaitingSendCallBack, this);
+  colorSequenceSub_ = nh.subscribe("/color_sequence", 10, &PiPicoDriver::colorSequenceCallBack, this);
 
   posePub = nh.advertise<nav_msgs::Odometry>("/odom", 10);
   cpRcvPub = nh.advertise<std_msgs::UInt32>("/cp_rcv", 10);
@@ -263,6 +264,7 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
       if (ok) {
         std_msgs::String m;
         m.data = pay;
+        last_color_from_pico_ = pay;
         colorSequencePub_.publish(m);
         writeSerialRaw("ACK_COLOR:OK\n", 13);
         ROS_INFO_THROTTLE(2.0, "[PiPicoDriver] COLOR -> /color_sequence (%s)", pay.c_str());
@@ -325,6 +327,16 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
     return;
   }
 
+  if (has_pending_color_to_pico_) {
+    const std::string color_cmd = "COLOR:" + pending_color_to_pico_ + "\n";
+    writeSerialRaw(color_cmd.c_str(), color_cmd.size());
+    if (debug_comm_) {
+      ROS_INFO_THROTTLE(2.0, "Pi4->Pico: %s", color_cmd.substr(0, color_cmd.size() - 1).c_str());
+    }
+    last_color_sent_to_pico_ = pending_color_to_pico_;
+    has_pending_color_to_pico_ = false;
+  }
+
   const int off = std::snprintf(cmd_buf_, sizeof(cmd_buf_),
                                 "CMD:%.4f,%.4f,%u,%u,%u,%u,%u,%u",
                                 messageToSend.v_d,
@@ -382,6 +394,21 @@ void PiPicoDriver::targetIdSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
 
 void PiPicoDriver::stopWaitingSendCallBack(const std_msgs::Bool::ConstPtr& msg) {
   messageToSend.stop_waiting_send = msg->data;
+}
+
+void PiPicoDriver::colorSequenceCallBack(const std_msgs::String::ConstPtr& msg) {
+  const std::string seq = msg->data;
+  if (seq.size() != 4) return;
+  for (char c : seq) {
+    if (c != 'R' && c != 'G' && c != 'B') {
+      return;
+    }
+  }
+  // Ignore colors that originated from this Pico uplink.
+  if (seq == last_color_from_pico_) return;
+  if (seq == last_color_sent_to_pico_) return;
+  pending_color_to_pico_ = seq;
+  has_pending_color_to_pico_ = true;
 }
 
 void PiPicoDriver::pubExtraMsgs() {
