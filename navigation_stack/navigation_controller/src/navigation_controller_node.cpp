@@ -1161,7 +1161,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     else if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable) goToXYProcessWarehouse();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
-        v_d = previousWaypoint.backwards ? -0.1 : 0.1;
+        v_d = previousWaypoint.backwards ? -0.3 : 0.1;
         w_d = 0.0;
         ROS_INFO_THROTTLE(0.5, "NavigationController: pickBoxForward state - moving at %.2f m/s (backwards=%d)", 
                          v_d, previousWaypoint.backwards ? 1 : 0);
