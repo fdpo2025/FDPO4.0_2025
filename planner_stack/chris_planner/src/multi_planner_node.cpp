@@ -821,39 +821,54 @@ std::vector<int> MultiPlannerNode::applyOutputWarehouseRule(
 
     if (output_candidates.empty()) return valid_nodes;
 
-    const std::vector<int> preferred_order = {37, 35};
-
-    std::unordered_set<int> reserved_dropoffs;
+    std::unordered_set<int> committed_outputs;
     for (const auto& [other_id, other] : robots_) {
         if (other.goal >= 0 && other.task_type == "dropoff" &&
             output_nodes_.count(other.goal)) {
-            reserved_dropoffs.insert(other.goal);
+            committed_outputs.insert(other.goal);
         }
     }
 
-    auto is_available_output = [&](int node) {
+    for (int node : output_nodes_) {
         auto it = planner_->factory.index_of.find(node);
-        if (it == planner_->factory.index_of.end()) return false;
-        if (boxes_[it->second] != EMPTY) return false;
-        if (reserved_dropoffs.count(node)) return false;
-        return std::find(output_candidates.begin(), output_candidates.end(), node) !=
-               output_candidates.end();
-    };
+        if (it != planner_->factory.index_of.end() && boxes_[it->second] != EMPTY)
+            committed_outputs.insert(node);
+    }
 
-    for (int preferred_node : preferred_order) {
-        if (!is_available_output(preferred_node)) continue;
-
+    auto restrict_to_output = [&](int target_output, const char* reason) {
+        if (std::find(output_candidates.begin(), output_candidates.end(), target_output) ==
+            output_candidates.end()) {
+            ROS_INFO("[OUTPUT_RULE] target output %d unavailable for %s, keeping all valid outputs",
+                     target_output, reason);
+            return valid_nodes;
+        }
         std::vector<int> filtered;
         for (int n : valid_nodes) {
-            if (!output_nodes_.count(n) || n == preferred_node)
+            if (!output_nodes_.count(n) || n == target_output)
                 filtered.push_back(n);
         }
-        ROS_INFO("[OUTPUT_RULE] prioritizing output node %d using preferred order 37->35",
-                 preferred_node);
+        ROS_INFO("[OUTPUT_RULE] forcing output node %d for %s", target_output, reason);
+        return filtered;
+    };
+
+    if (committed_outputs.empty()) {
+        std::vector<int> filtered;
+        for (int n : valid_nodes) {
+            if (!output_nodes_.count(n) || n == 36 || n == 37)
+                filtered.push_back(n);
+        }
+        ROS_INFO("[OUTPUT_RULE] first blue box restricted to output nodes 36/37");
         return filtered;
     }
 
-    ROS_INFO("[OUTPUT_RULE] preferred outputs unavailable or already used, keeping all valid outputs");
+    if (committed_outputs.size() == 1) {
+        if (committed_outputs.count(36))
+            return restrict_to_output(38, "second blue after first blue went to 36");
+        if (committed_outputs.count(37))
+            return restrict_to_output(35, "second blue after first blue went to 37");
+    }
+
+    ROS_INFO("[OUTPUT_RULE] no special blue-output rule applies, keeping all valid outputs");
     return valid_nodes;
 }
 
