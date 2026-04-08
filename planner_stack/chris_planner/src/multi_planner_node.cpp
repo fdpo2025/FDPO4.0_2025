@@ -492,7 +492,6 @@ void MultiPlannerNode::goalReached(const std::string& robot_id)
     auto& r = robots_[robot_id];
     int goal = r.goal;
     std::string task_type = r.task_type;
-    std::vector<int> published_path = r.compact_path;
 
     releaseAllPathNodesExceptCurrent(robot_id, goal);
 
@@ -524,63 +523,8 @@ void MultiPlannerNode::goalReached(const std::string& robot_id)
 
     publishLogicalState(robot_id);
 
-    if (!first_finish_return_done_ &&
-        (task_type == "pickup" || task_type == "dropoff") &&
-        planReturnToPenultimateNode(robot_id, published_path)) {
-        first_finish_return_done_ = true;
-        tryReplanWaitingRobot(robot_id);
-        return;
-    }
-
     planForRobot(robot_id);
     tryReplanWaitingRobot(robot_id);
-}
-
-bool MultiPlannerNode::planReturnToPenultimateNode(
-    const std::string& robot_id,
-    const std::vector<int>& published_path)
-{
-    if (published_path.size() < 2) {
-        ROS_WARN("[%s] published path has no penultimate node to return to",
-                 robot_id.c_str());
-        return false;
-    }
-
-    int target_node = resolveWarehouseId(published_path[published_path.size() - 2]);
-
-    auto& r = robots_[robot_id];
-
-    std::unordered_set<int> reserved_by_other;
-    for (const auto& [n, owner] : reserved_nodes_) {
-        if (owner != robot_id) reserved_by_other.insert(n);
-    }
-
-    auto extra = getExtraBlockedNodes(robot_id);
-    std::unordered_set<int> blocked = reserved_by_other;
-    blocked.insert(extra.begin(), extra.end());
-
-    auto return_path = shortestPathAvoiding(r.current_node, target_node, blocked);
-    if (return_path.empty()) {
-        ROS_WARN("[%s] failed to plan return to published penultimate node %d",
-                 robot_id.c_str(), target_node);
-        return false;
-    }
-
-    auto compact_path = dropFirstNodeUnlessStart31(compactExistingPath(return_path));
-
-    reservePath(robot_id, return_path, target_node);
-    publishPath(robot_id, compact_path);
-
-    r.path = return_path;
-    r.compact_path = compact_path;
-    r.goal = target_node;
-    r.busy = true;
-    r.waiting_replan = false;
-    r.task_type = "return_to_penultimate";
-
-    ROS_INFO("[%s] first finisher returning to published penultimate node %d",
-             robot_id.c_str(), target_node);
-    return true;
 }
 
 // =====================================================================
