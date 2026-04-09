@@ -23,6 +23,7 @@
 #include <visualization_msgs/Marker.h>                            
 #include <plan_handler/NavPlan.h>
 #include <plan_handler/CompletionFeedback.h>
+#include <std_msgs/Bool.h>
 #include <std_msgs/Int32.h>
 #include <std_msgs/UInt32.h>
 
@@ -195,6 +196,10 @@ class NavigationController {
 
         ros::Subscriber navPlanSub;
         void navPlanCallback(const plan_handler::NavPlan::ConstPtr& msg);
+
+        ros::Subscriber waitStateSub_;
+        void waitStateCallback(const std_msgs::Bool::ConstPtr& msg);
+        bool network_wait_hold_{false};
         void loadRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg);
         
         bool load_from_route;  // Se deve carregar waypoints do route.yaml
