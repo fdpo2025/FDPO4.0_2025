@@ -1,0 +1,15 @@
+<launch>
+  <arg name="node_name" default="custom_planner_node" />
+  <arg name="debug_verbose" default="true" />
+  <arg name="color_sequence_topic" default="/color_sequence" />
+  <arg name="num_robots" default="2" doc="2 or 3 robots in this run" />
+
+  <node name="$(arg node_name)" pkg="custom_planner" type="custom_planner_node" output="screen">
+    <param name="debug_verbose" value="$(arg debug_verbose)"/>
+    <param name="color_sequence_topic" value="$(arg color_sequence_topic)"/>
+    <param name="num_robots" value="$(arg num_robots)"/>
+    <rosparam command="load" file="$(find custom_planner)/config/factory_graph.yaml" />
+    <rosparam command="load" file="$(find custom_planner)/config/missions.yaml" />
+  </node>
+</launch>
+
