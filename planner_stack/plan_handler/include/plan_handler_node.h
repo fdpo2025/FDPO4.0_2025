@@ -3,6 +3,7 @@
 #include <ros/ros.h>
 #include <std_msgs/Int32MultiArray.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/UInt32.h>
 #include <plan_handler/NavPlan.h>
 #include <plan_handler/ControllerPoint.h>
 #include <plan_handler/CompletionFeedback.h>
@@ -54,9 +55,15 @@ private:
     ros::Subscriber navCompletionFeedbackSub;
     ros::Publisher navPlanPub;
     ros::Publisher pickBoxPub;
+    ros::Publisher target_id_send_pub_;
+    ros::Publisher stop_waiting_send_pub_;
+
+    ros::Timer stop_waiting_off_timer_;
 
     void plannedPathsCallback(const std_msgs::Int32MultiArray::ConstPtr& msg);
     void navCompletionFeedbackCallback(const plan_handler::CompletionFeedback::ConstPtr& msg);
+    void onStopWaitingOff(const ros::TimerEvent&);
+    void publishRadioMsgPulse(uint32_t target_id);
 
     bool has_box;
     bool last_pick_box_state;

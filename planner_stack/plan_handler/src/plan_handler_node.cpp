@@ -3,6 +3,13 @@
 #include <xmlrpcpp/XmlRpcValue.h>
 #include <cmath>
 
+namespace {
+constexpr int kPlannerMsgSentinelBase = -900000000;
+inline bool isPlannerMsgSentinel(int v) {
+    return v <= kPlannerMsgSentinelBase && v >= kPlannerMsgSentinelBase - 255;
+}
+}  // namespace
+
 PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_) : nh(nh_)
 {
     nh.param("planned_paths_topic", planned_paths_topic, std::string("/planned_paths"));
@@ -109,20 +116,58 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_) : nh(nh_)
     navCompletionFeedbackSub = nh.subscribe("/nav_completion_feedback", 10, &PlanHandlerNode::navCompletionFeedbackCallback, this);
     navPlanPub = nh.advertise<plan_handler::NavPlan>("/nav_plan", 10);
     pickBoxPub = nh.advertise<std_msgs::Bool>("/pick_box", 10);
+    target_id_send_pub_ = nh.advertise<std_msgs::UInt32>("/target_id_send", 10);
+    stop_waiting_send_pub_ = nh.advertise<std_msgs::Bool>("/stop_waiting_send", 10);
+    stop_waiting_off_timer_ =
+        nh.createTimer(ros::Duration(1.0), &PlanHandlerNode::onStopWaitingOff, this, true, false);
+    stop_waiting_off_timer_.stop();
 
     ROS_INFO("PlanHandlerNode subscribing to: %s (queue_size: %d)", planned_paths_topic.c_str(), queue_size);
     ROS_INFO("PlanHandlerNode subscribing to: /nav_completion_feedback");
     ROS_INFO("PlanHandlerNode publishing to: /nav_plan");
     ROS_INFO("PlanHandlerNode publishing to: /pick_box");
+    ROS_INFO("PlanHandlerNode publishing to: /target_id_send /stop_waiting_send (MSG_* sentinels)");
     ROS_INFO("PlanHandlerNode instance created");
+}
+
+void PlanHandlerNode::onStopWaitingOff(const ros::TimerEvent&) {
+    std_msgs::Bool m;
+    m.data = false;
+    stop_waiting_send_pub_.publish(m);
+}
+
+void PlanHandlerNode::publishRadioMsgPulse(uint32_t target_id) {
+    std_msgs::UInt32 tid;
+    tid.data = target_id;
+    target_id_send_pub_.publish(tid);
+    std_msgs::Bool sw;
+    sw.data = true;
+    stop_waiting_send_pub_.publish(sw);
+    ROS_INFO("PlanHandlerNode: MSG sentinel -> target_id_send=%u, stop_waiting_send pulse on", target_id);
+    stop_waiting_off_timer_.stop();
+    stop_waiting_off_timer_.setPeriod(ros::Duration(0.08));
+    stop_waiting_off_timer_.start();
 }
 
 void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::ConstPtr& msg)
 {
+    std::vector<int32_t> seq(msg->data.begin(), msg->data.end());
+    size_t path_start = 0;
+    while (path_start < seq.size() && isPlannerMsgSentinel(seq[path_start])) {
+        const int target = kPlannerMsgSentinelBase - seq[path_start];
+        if (target >= 0 && target <= 255) {
+            publishRadioMsgPulse(static_cast<uint32_t>(target));
+        } else {
+            ROS_WARN("PlanHandlerNode: MSG sentinel out of range (target=%d), skipping", target);
+        }
+        ++path_start;
+    }
+
     std::vector<ControllerPoint> control_points;
     bool is_first_node = true;
 
-    for (const auto& value : msg->data) {
+    for (size_t k = path_start; k < seq.size(); ++k) {
+        const int value = seq[k];
 
         auto coord_it = factory_coordinates.find(value);
         if (coord_it == factory_coordinates.end()) {
