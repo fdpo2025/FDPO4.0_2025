@@ -122,6 +122,8 @@ class PiPicoDriver {
         ros::Publisher npRcvPub;
         ros::Publisher wtRcvPub;
         ros::Publisher rawSerialPub_;
+        ros::Publisher networkTablePub_;
+        ros::Publisher waitStatePub_;
         ros::Publisher colorSequencePub_;
 
         void cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
@@ -133,6 +135,7 @@ class PiPicoDriver {
 
         void pubExtraMsgs();
         void publishRawSerial(const char* direction, const std::string& line);
+        void publishNetworkTableAndWaitState();
         std::vector<uint32_t> parseUIntList(const char* s, size_t len);
         void updateReducedStateFromArrays();
 
@@ -143,5 +146,8 @@ class PiPicoDriver {
         bool has_pending_color_to_pico_{false};
 
         int robot_id_ = 0;
+
+        bool wait_state_initialized_{false};
+        bool last_published_wait_state_{false};
 
 };

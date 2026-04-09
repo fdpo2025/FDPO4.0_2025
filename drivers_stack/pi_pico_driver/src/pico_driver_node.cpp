@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <cstring>
 
+#include <pi_pico_driver/RadioNetworkTable.h>
+#include <std_msgs/Bool.h>
+
 /*
  * Serial protocol (ROS1 <-> Pico):
  *   Handshake: REQ:INIT -> INIT:id,num_robots,crc8 -> ACK:OK
@@ -42,6 +45,8 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   npRcvPub = nh.advertise<std_msgs::UInt32>("/np_rcv", 10);
   wtRcvPub = nh.advertise<std_msgs::Bool>("/wt_rcv", 10);
   rawSerialPub_ = nh.advertise<std_msgs::String>("/pi_pico_driver/raw_serial", 50);
+  networkTablePub_ = nh.advertise<pi_pico_driver::RadioNetworkTable>("/pi_pico_driver/network_table", 10);
+  waitStatePub_ = nh.advertise<std_msgs::Bool>("/pi_pico_driver/wait_state", 10, true);
   colorSequencePub_ = nh.advertise<std_msgs::String>("/color_sequence", 10, true);
   commTimer = nh.createTimer(ros::Duration(0.02), &PiPicoDriver::commTick, this);
 
@@ -325,6 +330,8 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
   std_msgs::Bool wt_msg;
   wt_msg.data = messageToReceive.wt_rcv;
   wtRcvPub.publish(wt_msg);
+
+  publishNetworkTableAndWaitState();
 }
 
 void PiPicoDriver::commTick(const ros::TimerEvent&) {
@@ -452,18 +459,66 @@ std::vector<uint32_t> PiPicoDriver::parseUIntList(const char* s, size_t len) {
 }
 
 void PiPicoDriver::updateReducedStateFromArrays() {
-  const size_t max_size = std::min({messageToReceive.cp_all.size(),
-                                    messageToReceive.np_all.size(),
-                                    messageToReceive.wt_all.size()});
-  if (max_size == 0) return;
+  const size_t n = std::min({messageToReceive.cp_all.size(),
+                             messageToReceive.np_all.size(),
+                             messageToReceive.wt_all.size()});
+  if (n == 0) {
+    messageToReceive.cp_rcv = 0;
+    messageToReceive.np_rcv = 0;
+    messageToReceive.wt_rcv = false;
+    return;
+  }
+  if (robot_id_ < 0 || static_cast<size_t>(robot_id_) >= n) {
+    messageToReceive.cp_rcv = 0;
+    messageToReceive.np_rcv = 0;
+    messageToReceive.wt_rcv = false;
+    ROS_WARN_THROTTLE(5.0, "[PiPicoDriver] robot_id=%d out of bounds for CP/NP/WT (n=%zu)",
+                      robot_id_, n);
+    return;
+  }
+  const size_t idx = static_cast<size_t>(robot_id_);
+  messageToReceive.cp_rcv = messageToReceive.cp_all[idx];
+  messageToReceive.np_rcv = messageToReceive.np_all[idx];
+  messageToReceive.wt_rcv = (messageToReceive.wt_all[idx] != 0);
+}
 
-  size_t peer_idx = 0;
-  if (max_size > 1 && static_cast<size_t>(robot_id_) < max_size) {
-    peer_idx = (robot_id_ == 0) ? 1 : 0;
-    if (peer_idx >= max_size) peer_idx = 0;
+void PiPicoDriver::publishNetworkTableAndWaitState() {
+  const size_t n = std::min({messageToReceive.cp_all.size(),
+                             messageToReceive.np_all.size(),
+                             messageToReceive.wt_all.size()});
+  if (n == 0) return;
+
+  if (messageToReceive.cp_all.size() != n || messageToReceive.np_all.size() != n ||
+      messageToReceive.wt_all.size() != n) {
+    ROS_WARN_THROTTLE(2.0, "[PiPicoDriver] CP/NP/WT length mismatch cp=%zu np=%zu wt=%zu (using min=%zu)",
+                      messageToReceive.cp_all.size(), messageToReceive.np_all.size(),
+                      messageToReceive.wt_all.size(), n);
   }
 
-  messageToReceive.cp_rcv = messageToReceive.cp_all[peer_idx];
-  messageToReceive.np_rcv = messageToReceive.np_all[peer_idx];
-  messageToReceive.wt_rcv = (messageToReceive.wt_all[peer_idx] != 0);
+  pi_pico_driver::RadioNetworkTable tbl;
+  tbl.header.stamp = ros::Time::now();
+  tbl.header.frame_id = "radio_network";
+  tbl.num_robots = static_cast<uint8_t>(std::min(n, static_cast<size_t>(255)));
+  tbl.cp.resize(n);
+  tbl.np.resize(n);
+  tbl.waiting.resize(n);
+  for (size_t i = 0; i < n; ++i) {
+    tbl.cp[i] = static_cast<uint8_t>(std::min(messageToReceive.cp_all[i], static_cast<uint32_t>(255)));
+    tbl.np[i] = static_cast<uint8_t>(std::min(messageToReceive.np_all[i], static_cast<uint32_t>(255)));
+    tbl.waiting[i] = (messageToReceive.wt_all[i] != 0);
+  }
+  networkTablePub_.publish(tbl);
+
+  if (robot_id_ >= 0 && static_cast<size_t>(robot_id_) < n) {
+    const bool w = tbl.waiting[static_cast<size_t>(robot_id_)];
+    if (!wait_state_initialized_ || w != last_published_wait_state_) {
+      std_msgs::Bool ws;
+      ws.data = w;
+      waitStatePub_.publish(ws);
+      wait_state_initialized_ = true;
+      last_published_wait_state_ = w;
+      ROS_INFO_THROTTLE(1.0, "[PiPicoDriver] /pi_pico_driver/wait_state=%d (robot_id=%d)",
+                        w ? 1 : 0, robot_id_);
+    }
+  }
 }
