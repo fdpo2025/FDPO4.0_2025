@@ -27,6 +27,11 @@ in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake
     rvizGoalSub = nh.subscribe("/move_base_simple/goal", 10, &NavigationController::rvizGoalCallBack, this);
     navPlanSub = nh.subscribe("/nav_plan", 10, &NavigationController::navPlanCallback, this);
     ROS_INFO("NavigationController subscribing to /nav_plan (load_from_route=%s)", load_from_route ? "true" : "false");
+
+    std::string wait_state_topic;
+    nh.param<std::string>("wait_state_topic", wait_state_topic, std::string("/pi_pico_driver/wait_state"));
+    waitStateSub_ = nh.subscribe(wait_state_topic, 10, &NavigationController::waitStateCallback, this);
+    ROS_INFO("NavigationController subscribing to %s (hold motion while waiting=true)", wait_state_topic.c_str());
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
     lineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_lines", 1, true);  // latch=true para RViz ver imediatamente
     virtualLineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_virtual_line", 1, true);
@@ -49,6 +54,13 @@ in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake
     dr_srv_.setCallback(cb);
 
     ROS_INFO("NavigationController instace created");
+}
+
+void NavigationController::waitStateCallback(const std_msgs::Bool::ConstPtr& msg) {
+    network_wait_hold_ = msg->data;
+    if (network_wait_hold_) {
+        ROS_INFO_THROTTLE(1.0, "NavigationController: network wait_state=true (holding route, cmd_vel=0)");
+    }
 }
 
 void NavigationController::reconfigCb(navigation_controller::NavigationConfig &cfg, uint32_t) {
@@ -939,6 +951,21 @@ void NavigationController::followLine() {
 
 void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
+    if (network_wait_hold_) {
+        v_d = 0.0;
+        w_d = 0.0;
+        geometry_msgs::Twist cmd;
+        cmd.linear.x = 0.0;
+        cmd.linear.y = 0.0;
+        cmd.linear.z = 0.0;
+        cmd.angular.x = 0.0;
+        cmd.angular.y = 0.0;
+        cmd.angular.z = 0.0;
+        velPub.publish(cmd);
+        ROS_INFO_THROTTLE(1.0, "NavigationController: WAIT hold active, skipping FSM tick");
+        return;
+    }
+
     navigationFsm.update_tis();
     const int nav_state_at_tick_start = navigationFsm.state;
     bool enable = !(mode == "stop" || mode == "pause") && !route.empty();
@@ -1348,7 +1375,8 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     
     publishLineMarkers();
     completion_feedback_sent = false;
-    
+    last_published_node_id = -1;
+
     ROS_INFO("NavigationController: Route loaded from NavPlan with %zu waypoints", route.size());
 }
 
