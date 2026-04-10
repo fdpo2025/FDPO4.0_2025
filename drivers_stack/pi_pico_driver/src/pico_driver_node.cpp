@@ -333,6 +333,9 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
       handshake_ok_ = true;
       con_state.missed = 0;
       con_state.link_ok = true;
+      // Pico resets color state on REQ:INIT; allow the same /color_sequence to be sent again.
+      last_color_from_pico_.clear();
+      last_color_sent_to_pico_.clear();
     } else {
       ROS_WARN_THROTTLE(2.0,
                         "[PiPicoDriver] À espera do handshake (REQ:INIT / INIT / ACK)...");
