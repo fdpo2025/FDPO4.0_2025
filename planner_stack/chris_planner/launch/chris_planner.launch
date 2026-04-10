@@ -2,7 +2,7 @@
 
   <arg name="node_name" default="chris_planner_node" />
   <arg name="planning_method" default="closest" />
-  <arg name="robot_id" default="1" />
+  <arg name="robot_id" default="0" doc="Índice 0-based (igual Pico); 0 hub, 1 secundário (multi)"/>
   <arg name="planner_executable" default="chris_planner_node" />
   <arg name="launch_planner" default="true" doc="false: não arranca chris_planner_node / multi_planner_node"/>
   <arg name="launch_comunicacoes" default="true" doc="false: não arranca comunicacoes_node (menos ruído no terminal)"/>

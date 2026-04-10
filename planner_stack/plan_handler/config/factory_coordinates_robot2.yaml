@@ -1,4 +1,4 @@
-# Coordenadas para robot_id:=2 (editar conforme calibração do robô 2)
+# Coordenadas para fleet index 1 (segundo robô; plan_handler robot_id:=1)
 factory_coords:
   "0":   [-0.677,  0.461]
   "1":   [-0.55,   0.466]

@@ -1,14 +1,14 @@
 <launch>
 
-	<!-- Igual a wake_up_fdpo.launch mas sem comunicacoes_node (menos logs no terminal).
-	     Útil para depuração Pi4–Pico com debug_pico_comm:=true. -->
+	<!-- Stack FDPO sem comunicacoes_node; por defeito usa custom_planner (missions.yaml) alinhado ao Pico.
+	     Para o legado chris_planner: planner_backend:=chris -->
 
 	<arg name="map_file" default="$(find conf)/launch/hmi/maps/factory_map.yaml"/>
 	<arg name="rviz_config" default="$(find conf)/launch/hmi/fdpo_simulation.rviz"/>
 	<arg name="lidar_driver" default="ydlidar" doc="Escolha o driver de LiDAR: 'hlds' ou 'ydlidar'"/>
 	<arg name="debug_pico_comm" default="false" doc="Mostrar logs de comunicação Pi4-Pico (com throttle no driver)"/>
-	<arg name="pico_robot_id" default="0" doc="ROBOT_ID no Pico (0-based); handshake série"/>
-	<arg name="pico_num_robots" default="3" doc="NUM_ROBOTS no firmware (2–4); handshake série"/>
+	<arg name="pico_robot_id" default="0" doc="ROBOT_ID no Pico (0-based); handshake série e missions.robot_N"/>
+	<arg name="pico_num_robots" default="2" doc="NUM_ROBOTS no firmware (2–4); handshake + missions_2 / missions_3 no custom_planner"/>
 	<arg name="use_ekf" default="true" doc="Usar EKF localizer com beacons (se false, map=odom, só odometria)"/>
 	<arg name="use_raw_odom" default="false" doc="Usar odometria pura (/odom) em vez de filtrada. Só funciona quando use_ekf=false"/>
 	<arg name="use_ss_controller" default="false" doc="Usar state space controller (true) ou controlador original (false)"/>
@@ -16,12 +16,15 @@
 	<arg name="use_navigation" default="true"/>
 	<arg name="use_hmi" default="true"/>
 	<arg name="use_rviz" default="false" doc="Ativar RViz automaticamente"/>
-	<arg name="use_planner" default="true" />
+	<arg name="use_planner" default="true" doc="Se false, não arranca custom_planner nem chris"/>
+	<arg name="planner_backend" default="custom" doc="custom: custom_planner + YAML; chris: chris_planner + planner.xml"/>
+	<arg name="custom_planner_debug" default="false" doc="Logs verbosos do custom_planner"/>
 	<arg name="planner_node_name" default="chris_planner_node" />
 	<arg name="planning_method" default="astar" doc="Planning method for chris_planner: closest, onebyone, greedy_h, or astar"/>
 	<arg name="use_wifi" default="true" />
-	<arg name="planner_type" default="chris" doc="chris ou multi"/>
-	<arg name="robot_id" default="1" doc="ID do robo para comunicacoes (1 ou 2)"/>
+	<arg name="planner_type" default="chris" doc="chris ou multi (só planner_backend:=chris)"/>
+	<!-- Índice de frota 0-based: igual a pico_robot_id (Pico / pi_pico_driver / plan_handler / EKF / comunicações). -->
+	<arg name="robot_id" default="$(arg pico_robot_id)" doc="Sobrescrever só se precisares de exceção; senão usa pico_robot_id"/>
 
 	<include if="$(arg use_hal)" file="$(find conf)/system/hal.xml">
 		<arg name="lidar_driver" value="$(arg lidar_driver)"/>
@@ -44,7 +47,17 @@
 		<arg name="use_rviz" value="$(arg use_rviz)"/>
 	</include>
 
-	<include if="$(arg use_planner)" file="$(find conf)/system/planner.xml">
+	<!-- custom_planner: /planned_paths, wait_state, /this_current_pose (missões missions.yaml) -->
+	<include if="$(eval str(arg('use_planner')).lower() in ('true', '1') and str(arg('planner_backend')) == 'custom')"
+	         file="$(find custom_planner)/launch/custom_planner.launch">
+		<arg name="debug_verbose" value="$(arg custom_planner_debug)"/>
+		<arg name="num_robots" value="$(arg pico_num_robots)"/>
+		<!-- Identidade vem do pi_pico_driver em /robot_identity (latched) após INIT da Pico -->
+	</include>
+
+	<!-- Legado: chris_planner / multi -->
+	<include if="$(eval str(arg('use_planner')).lower() in ('true', '1') and str(arg('planner_backend')) == 'chris')"
+	         file="$(find conf)/system/planner.xml">
 		<arg name="planner_type" value="$(arg planner_type)" />
 		<arg name="node_name" value="$(eval 'chris_planner_node' if arg('planner_type') == 'chris' else 'multi_planner_node')" />
 		<arg name="planning_method" value="$(arg planning_method)" />

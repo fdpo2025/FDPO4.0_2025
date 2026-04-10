@@ -42,9 +42,18 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   spawn_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/custom_planner/spawn_pose", 1, true);
 
   setState(STATE_IDLE);
-  ROS_INFO("custom_planner ready: /robot_identity, %s, %s, %s (num_robots=%d)",
-           color_sequence_topic_.c_str(), wait_state_topic_.c_str(),
-           this_current_pose_topic_.c_str(), num_robots_);
+
+  int initial_robot_id = -1;
+  nh_.param("initial_robot_id", initial_robot_id, -1);
+  if (initial_robot_id >= 0) {
+    applyRobotIdentity(initial_robot_id);
+  }
+
+  ROS_INFO(
+      "custom_planner ready: identity via /robot_identity (pi_pico_driver após INIT) ou param "
+      "initial_robot_id; topics %s, %s, %s (num_robots=%d)",
+      color_sequence_topic_.c_str(), wait_state_topic_.c_str(), this_current_pose_topic_.c_str(),
+      num_robots_);
 }
 
 bool CustomPlannerNode::loadMissions() {
@@ -94,8 +103,7 @@ void CustomPlannerNode::onMissionColorSequence(const std_msgs::String::ConstPtr&
   startMission(msg->data);
 }
 
-void CustomPlannerNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& msg) {
-  const int new_id = msg->data;
+void CustomPlannerNode::applyRobotIdentity(int new_id) {
   std::string replay;
   {
     std::lock_guard<std::mutex> lock(mtx_);
@@ -105,6 +113,10 @@ void CustomPlannerNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& msg) {
   }
   ROS_INFO("custom_planner robot identity=%d", new_id);
   if (!replay.empty()) startMission(replay);
+}
+
+void CustomPlannerNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& msg) {
+  applyRobotIdentity(msg->data);
 }
 
 void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {

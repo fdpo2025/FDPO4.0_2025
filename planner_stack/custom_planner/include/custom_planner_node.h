@@ -35,6 +35,8 @@ class CustomPlannerNode {
 
   void onMissionColorSequence(const std_msgs::String::ConstPtr& msg);
   void onRobotIdentity(const std_msgs::Int32::ConstPtr& msg);
+  /** Same logic as /robot_identity callback; optional param initial_robot_id at startup. */
+  void applyRobotIdentity(int new_id);
   void onWaitState(const std_msgs::Bool::ConstPtr& msg);
   void onThisCurrentPose(const std_msgs::UInt32::ConstPtr& msg);
 

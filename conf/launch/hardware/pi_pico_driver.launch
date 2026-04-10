@@ -3,7 +3,8 @@
     <arg name="serial_port" default="/dev/ttyACM0"/>
     <arg name="baud_rate"  default="115200"/>
     <arg name="debug_comm" default="true" doc="Enable/disable communication debug logs"/>
-    <arg name="robot_id" default="0" doc="Handshake INIT: deve coincidir com ROBOT_ID no firmware"/>
+    <arg name="robot_id" default="0" doc="Índice 0-based; handshake INIT deve coincidir com ROBOT_ID no firmware"/>
+    <arg name="robot_identity_topic" default="/robot_identity" doc="Latched std_msgs/Int32 = id confirmado na INIT"/>
     <arg name="num_robots" default="3" doc="Handshake INIT: deve coincidir com NUM_ROBOTS no firmware"/>
 
     <node pkg="pi_pico_driver" type="pico_driver_node" name="pico_driver_node" output="screen">
@@ -12,6 +13,7 @@
         <param name="debug_comm"  value="$(arg debug_comm)"/>
         <param name="robot_id"    value="$(arg robot_id)"/>
         <param name="num_robots"  value="$(arg num_robots)"/>
+        <param name="robot_identity_topic" value="$(arg robot_identity_topic)"/>
     </node>
 
 </launch>

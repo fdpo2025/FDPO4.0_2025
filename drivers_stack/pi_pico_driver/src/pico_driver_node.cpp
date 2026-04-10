@@ -56,6 +56,10 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   nh.param("robot_id", robot_id_, 0);
   nh.param("num_robots", num_robots_, 3);
 
+  std::string robot_identity_topic;
+  nh.param<std::string>("robot_identity_topic", robot_identity_topic, "/robot_identity");
+  robot_identity_pub_ = nh.advertise<std_msgs::Int32>(robot_identity_topic, 1, true);
+
   ROS_INFO("[PiPicoDriver] Serial port: %s", serial_port.c_str());
   ROS_INFO("[PiPicoDriver] robot_id=%d num_robots=%d debug=%s",
            robot_id_, num_robots_, debug_comm_ ? "ENABLED" : "DISABLED");
@@ -212,6 +216,10 @@ bool PiPicoDriver::trySerialHandshake() {
         if (debug_comm_) {
           ROS_INFO_THROTTLE(1.0, "[PiPicoDriver] Handshake OK id=%d num_robots=%d", id, num);
         }
+        // Same id as in INIT from Pico (must match launch robot_id); latched for custom_planner / others.
+        std_msgs::Int32 rid_msg;
+        rid_msg.data = id;
+        robot_identity_pub_.publish(rid_msg);
         return true;
       }
     } else {

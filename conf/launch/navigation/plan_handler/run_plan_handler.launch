@@ -2,7 +2,7 @@
   
   <arg name="planned_paths_topic" default="/planned_paths" doc="Topic to subscribe for planned paths (Int32MultiArray)"/>
   <arg name="queue_size" default="100" doc="Queue size for subscriber"/>
-  <arg name="robot_id" default="1" doc="robot_id:=2 carrega factory_coordinates_robot2.yaml"/>
+  <arg name="robot_id" default="0" doc="Índice 0-based; 1 carrega factory_coordinates_robot2.yaml"/>
   <!-- Caminho base já com $(find) expandido; o eval só escolhe o sufixo _robot2 -->
   <arg name="factory_coords_yaml_base" value="$(find plan_handler)/config/factory_coordinates"/>
 
@@ -12,7 +12,7 @@
   <!-- Carrega coordenadas da fábrica no Parameter Server antes do nó -->
   <!-- O C++ lê via nh.getParam("factory_coords", ...), que procura o parâmetro global /factory_coords -->
   <!-- Um único load evita dois if/unless onde o segundo podia sobrescrever /factory_coords -->
-  <rosparam file="$(eval arg('factory_coords_yaml_base') + ('_robot2' if int(str(arg('robot_id')).strip()) == 2 else '') + '.yaml')" command="load"/>
+  <rosparam file="$(eval arg('factory_coords_yaml_base') + ('_robot2' if int(str(arg('robot_id')).strip()) == 1 else '') + '.yaml')" command="load"/>
 
   <node pkg="plan_handler" type="plan_handler_node" name="plan_handler_node" output="screen">
     <param name="planned_paths_topic" value="$(arg planned_paths_topic)"/>

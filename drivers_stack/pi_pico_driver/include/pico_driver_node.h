@@ -5,6 +5,7 @@
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/Pose2D.h>
 #include <std_msgs/Float32.h>
+#include <std_msgs/Int32.h>
 #include <std_msgs/String.h>
 #include <nav_msgs/Odometry.h>
 #include <tf/transform_datatypes.h>
@@ -125,6 +126,8 @@ class PiPicoDriver {
         ros::Publisher networkTablePub_;
         ros::Publisher waitStatePub_;
         ros::Publisher colorSequencePub_;
+        /** Latched; id from Pico INIT line after handshake (fleet index 0-based). */
+        ros::Publisher robot_identity_pub_;
 
         void cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
         void npSendCallBack(const std_msgs::UInt32::ConstPtr& msg);

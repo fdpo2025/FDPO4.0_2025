@@ -13,8 +13,9 @@ ComunicacoesNode::ComunicacoesNode(ros::NodeHandle& nh, int robot_id)
     pub_target_id_send_ = nh_.advertise<std_msgs::UInt32>("/target_id_send", 10);
     pub_stop_waiting_send_ = nh_.advertise<std_msgs::Bool>("/stop_waiting_send", 10);
 
-    if (robot_id_ == 1) {
-        ROS_INFO("Comunicacoes: modo ROBOT_ID = 1");
+    // Fleet index 0-based (same as Pico ROBOT_ID / pi_pico_driver).
+    if (robot_id_ == 0) {
+        ROS_INFO("comunicacoes_node: fleet index 0 (hub / primary)");
 
         sub_r1_path_  = nh_.subscribe("/robot1_planned_paths", 10,
                                       &ComunicacoesNode::robot1PlannedPathCb, this);
@@ -31,14 +32,14 @@ ComunicacoesNode::ComunicacoesNode(ros::NodeHandle& nh, int robot_id)
         sub_stop_waiting_cmd_ = nh_.subscribe("/stop_waiting_cmd", 10,
                                               &ComunicacoesNode::stopWaitingCmdCb, this);
 
-    } else if (robot_id_ == 2) {
-        ROS_INFO("Comunicacoes: modo ROBOT_ID = 2");
+    } else if (robot_id_ == 1) {
+        ROS_INFO("comunicacoes_node: fleet index 1 (secondary)");
 
         sub_this_pose_= nh_.subscribe("/this_current_pose", 10,
                                       &ComunicacoesNode::thisCurrentPoseRobot2Cb, this);
 
     } else {
-        ROS_ERROR("ROBOT_ID must be 1 or 2");
+        ROS_ERROR("comunicacoes_node: robot_id must be 0 or 1 (fleet index; same as Pico)");
         ros::shutdown();
     }
 }
@@ -49,19 +50,19 @@ ComunicacoesNode::ComunicacoesNode(ros::NodeHandle& nh, int robot_id)
 
 void ComunicacoesNode::robot1PlannedPathCb(const std_msgs::Int32MultiArray::ConstPtr& msg)
 {
-    ROS_INFO("[R1] Local path received");
+    ROS_INFO_THROTTLE(5.0, "[R1] Local path received");
     pub_planned_paths_.publish(*msg);
 }
 
 void ComunicacoesNode::thisCurrentPoseRobot1Cb(const std_msgs::UInt32::ConstPtr& msg)
 {
-    ROS_INFO("[R1] Local position received: %u", msg->data);
+    ROS_INFO_THROTTLE(5.0, "[R1] Local position received: %u", msg->data);
     pub_robot1_pose_.publish(*msg);
 }
 
 void ComunicacoesNode::cpRcvCb(const std_msgs::UInt32::ConstPtr& msg)
 {
-    ROS_INFO("[R1] Position received from robot 2: %u", msg->data);
+    ROS_INFO_THROTTLE(5.0, "[R1] Position received from robot 2: %u", msg->data);
     pub_robot2_pose_.publish(*msg);
 }
 
@@ -91,7 +92,7 @@ void ComunicacoesNode::stopWaitingCmdCb(const std_msgs::Bool::ConstPtr& msg)
 
 void ComunicacoesNode::thisCurrentPoseRobot2Cb(const std_msgs::UInt32::ConstPtr& msg)
 {
-    ROS_INFO("[R2] Local position to send: %u", msg->data);
+    ROS_INFO_THROTTLE(5.0, "[R2] Local position to send: %u", msg->data);
     pub_cp_send_.publish(*msg);
     std_msgs::UInt32 np_msg;
     np_msg.data = 0;

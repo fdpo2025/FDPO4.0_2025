@@ -9,7 +9,8 @@
 
   <arg name="use_ss_controller" default="false" doc="Use state space controller (true) or original controller (false)"/>
   <arg name="use_raw_odom" default="false" doc="Use raw odometry (/odom) instead of filtered (/odometry/filtered). Only effective when use_ekf=false"/>
-  <arg name="robot_id" default="1" />
+  <!-- Índice de frota 0-based (igual ROBOT_ID na Pico / pi_pico_driver). 0 = YAML/ekf default; 1 = *_robot2. -->
+  <arg name="robot_id" default="0" />
 
   <!-- Navigation Controller: 
        - Se use_raw_odom=true: usa /odom (odometria pura)
