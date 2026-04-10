@@ -155,7 +155,7 @@ class NavigationController {
         void hardStop();
         void setTheta();
         void goToXY();
-        /** Process warehouse go-to: 1) alinha v=0 até bearing_align_yaw_tol (w com piso w_min após ±w_nom); 2) v (v_nom), w=0. */
+        /** Warehouse pick/drop (!align): go-to — 1) alinha v=0 até bearing_align_yaw_tol; 2) v (v_nom), w=0. */
         void goToXYProcessWarehouse();
         void followLine();
 
@@ -179,8 +179,8 @@ class NavigationController {
 
         double last_vel_before_approaching_;  // Última |v_d| em Follow_Line; teto em Approaching
         double approaching_brake_ref_dist_;   // dist(robô,pf) ao entrar em Approaching (normaliza v proporcional)
-        bool process_warehouse_goto_align_done_;  // Fase 2 do go-to process: já passou alinhamento inicial (v=0)
-        /** Distância ao alvo ao entrar em processWarehouseGoToXY (progresso 0–1 vs follow_line 70%). */
+        bool process_warehouse_goto_align_done_;  // Fase 2 do warehouse go-to: já passou alinhamento inicial (v=0)
+        /** Distância ao alvo ao entrar em warehouse go-to-XY (progresso 0–1 vs follow_line 70%). */
         double process_warehouse_goto_start_dist_;
         bool process_warehouse_goto_completion_sent_;
 
@@ -226,7 +226,7 @@ namespace navigation {
             idle = 0,
             driveToGoal,
             turnToFinalYaw,
-            /** Warehouse de processo (!align): go-to XY com fase inicial só rotação (bearing_align_yaw_tol). */
+            /** Warehouse pick/drop (!align): go-to-XY (process e não-process). */
             processWarehouseGoToXY,
             pickBoxForward,  // Estado para andar para frente após chegar a warehouse de pick
             done

@@ -976,8 +976,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     else if(navigationFsm.state == navigation::states::driveToGoal && !route.front().align && enable) {
 
-        bool process_warehouse_goto = route.front().is_warehouse && route.front().is_process_warehouse;
-        if (!process_warehouse_goto) {
+        bool warehouse_pickdrop_goto_xy = route.front().is_warehouse && !route.front().align;
+        if (!warehouse_pickdrop_goto_xy) {
 
             double switch_ratio = (route.front().line_switch_ratio > 0) ? 
                                    route.front().line_switch_ratio : param.line_switch_ratio;
@@ -1031,14 +1031,14 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             fb.y = route.front().pose.y;
             navCompletionFeedbackPub.publish(fb);
             process_warehouse_goto_completion_sent_ = true;
-            ROS_INFO("NavigationController: process warehouse go-to-XY arrival completion feedback (%.3f, %.3f)", fb.x, fb.y);
+            ROS_INFO("NavigationController: warehouse go-to-XY arrival completion feedback (%.3f, %.3f)", fb.x, fb.y);
         }
 
         previousWaypoint = route.front();
         publishCurrentNode(previousWaypoint.node_id);
 
         bool is_pick_warehouse = route.front().pick_box;
-        ROS_INFO("NavigationController: Arrived at process warehouse (go-to-XY) id=%d node_id=%d pick_box=%d",
+        ROS_INFO("NavigationController: Arrived at warehouse (go-to-XY) id=%d node_id=%d pick_box=%d",
                  previousWaypoint.id, previousWaypoint.node_id, is_pick_warehouse ? 1 : 0);
 
         if (is_pick_warehouse) {
@@ -1144,7 +1144,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     }
 
     if (navigationFsm.new_state == navigation::states::driveToGoal && enable && !route.empty()
-        && route.front().is_warehouse && route.front().is_process_warehouse && !route.front().align) {
+        && route.front().is_warehouse && !route.front().align) {
         navigationFsm.new_state = navigation::states::processWarehouseGoToXY;
     }
 
@@ -1173,7 +1173,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     // Mesmo critério que followLine (line_progress > 0.7): feedback para plan_handler /pick_box
     if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable && !route.empty()
-        && route.front().is_warehouse && route.front().is_process_warehouse) {
+        && route.front().is_warehouse) {
         const double completion_threshold = 0.7;
         const double pe = getPositionError();
         const double start = process_warehouse_goto_start_dist_;
@@ -1185,7 +1185,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             navCompletionFeedbackPub.publish(feedback);
             process_warehouse_goto_completion_sent_ = true;
             ROS_INFO(
-                "NavigationController: process warehouse go-to-XY completion feedback at %.1f%% (dist=%.3f m, ref=%.3f m)",
+                "NavigationController: warehouse go-to-XY completion feedback at %.1f%% (dist=%.3f m, ref=%.3f m)",
                 progress * 100.0, pe, start);
         }
         if (progress < completion_threshold) {
