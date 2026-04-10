@@ -41,6 +41,7 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   cpRcvPub = nh.advertise<std_msgs::UInt32>("/cp_rcv", 10);
   npRcvPub = nh.advertise<std_msgs::UInt32>("/np_rcv", 10);
   wtRcvPub = nh.advertise<std_msgs::Bool>("/wt_rcv", 10);
+  rawSerialPub_ = nh.advertise<std_msgs::String>("/pi_pico_driver/raw_serial", 50);
   colorSequencePub_ = nh.advertise<std_msgs::String>("/color_sequence", 10, true);
   commTimer = nh.createTimer(ros::Duration(0.02), &PiPicoDriver::commTick, this);
 
@@ -150,6 +151,13 @@ void PiPicoDriver::writeSerialRaw(const char* data, size_t len) {
   (void)::write(serial_fd_, data, len);
 }
 
+void PiPicoDriver::publishRawSerial(const char* direction, const std::string& line) {
+  if (!direction) return;
+  std_msgs::String msg;
+  msg.data = std::string(direction) + ":" + line;
+  rawSerialPub_.publish(msg);
+}
+
 bool PiPicoDriver::trySerialHandshake() {
   if (serial_fd_ < 0) return false;
   tcflush(serial_fd_, TCIFLUSH);
@@ -157,6 +165,7 @@ bool PiPicoDriver::trySerialHandshake() {
   if (::write(serial_fd_, req, sizeof(req) - 1) < 0) {
     return false;
   }
+  publishRawSerial("TX", "REQ:INIT");
 
   std::string acc;
   char buf[256];
@@ -176,6 +185,7 @@ bool PiPicoDriver::trySerialHandshake() {
         if (line.rfind("INIT:", 0) != 0) {
           continue;
         }
+        publishRawSerial("RX", line);
         int id = -1;
         int num = -1;
         unsigned crc_in = 0;
@@ -193,6 +203,7 @@ bool PiPicoDriver::trySerialHandshake() {
         if (static_cast<unsigned>(crc) != crc_in) continue;
         static const char ack[] = "ACK:OK\n";
         writeSerialRaw(ack, sizeof(ack) - 1);
+        publishRawSerial("TX", "ACK:OK");
         if (debug_comm_) {
           ROS_INFO_THROTTLE(1.0, "[PiPicoDriver] Handshake OK id=%d num_robots=%d", id, num);
         }
@@ -213,6 +224,7 @@ std::string PiPicoDriver::readUntilPosLine(const std::string& cmd, int timeout_m
     ROS_ERROR_THROTTLE(5.0, "Erro ao enviar comando para a serial.");
     return "";
   }
+  publishRawSerial("TX", cmd);
 
   std::string acc;
   char buf[256];
@@ -230,6 +242,7 @@ std::string PiPicoDriver::readUntilPosLine(const std::string& cmd, int timeout_m
         acc.erase(0, pos + 1);
         while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
         if (line.empty()) continue;
+        publishRawSerial("RX", line);
         if (line.rfind("COLOR:", 0) == 0) {
           decodeMsg(line);
           continue;
@@ -330,6 +343,7 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
   if (has_pending_color_to_pico_) {
     const std::string color_cmd = "COLOR:" + pending_color_to_pico_ + "\n";
     writeSerialRaw(color_cmd.c_str(), color_cmd.size());
+    publishRawSerial("TX", color_cmd.substr(0, color_cmd.size() - 1));
     if (debug_comm_) {
       ROS_INFO_THROTTLE(2.0, "Pi4->Pico: %s", color_cmd.substr(0, color_cmd.size() - 1).c_str());
     }

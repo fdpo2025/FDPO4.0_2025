@@ -121,6 +121,7 @@ class PiPicoDriver {
         ros::Publisher cpRcvPub;
         ros::Publisher npRcvPub;
         ros::Publisher wtRcvPub;
+        ros::Publisher rawSerialPub_;
         ros::Publisher colorSequencePub_;
 
         void cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
@@ -131,6 +132,7 @@ class PiPicoDriver {
         void colorSequenceCallBack(const std_msgs::String::ConstPtr& msg);
 
         void pubExtraMsgs();
+        void publishRawSerial(const char* direction, const std::string& line);
         std::vector<uint32_t> parseUIntList(const char* s, size_t len);
         void updateReducedStateFromArrays();
 
