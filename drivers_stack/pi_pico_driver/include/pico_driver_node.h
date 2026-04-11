@@ -118,6 +118,7 @@ class PiPicoDriver {
         ros::Subscriber targetIdSendSub;
         ros::Subscriber stopWaitingSendSub;
         ros::Subscriber colorSequenceSub_;
+        ros::Subscriber thisCurrentPoseForCpSub_;
 
         ros::Publisher cpRcvPub;
         ros::Publisher npRcvPub;
@@ -134,7 +135,10 @@ class PiPicoDriver {
         void wtSendCallBack(const std_msgs::Bool::ConstPtr& msg);
         void targetIdSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
         void stopWaitingSendCallBack(const std_msgs::Bool::ConstPtr& msg);
+        void thisCurrentPoseForCpSendCb(const std_msgs::UInt32::ConstPtr& msg);
         void colorSequenceCallBack(const std_msgs::String::ConstPtr& msg);
+
+        bool mirror_this_current_pose_to_cp_send_{true};
 
         void pubExtraMsgs();
         void publishRawSerial(const char* direction, const std::string& line);

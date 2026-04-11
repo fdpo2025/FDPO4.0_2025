@@ -39,6 +39,10 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   targetIdSendSub = nh.subscribe("/target_id_send", 10, &PiPicoDriver::targetIdSendCallBack, this);
   stopWaitingSendSub = nh.subscribe("/stop_waiting_send", 10, &PiPicoDriver::stopWaitingSendCallBack, this);
   colorSequenceSub_ = nh.subscribe("/color_sequence", 10, &PiPicoDriver::colorSequenceCallBack, this);
+  if (mirror_this_current_pose_to_cp_send_) {
+    thisCurrentPoseForCpSub_ =
+        nh.subscribe("/this_current_pose", 10, &PiPicoDriver::thisCurrentPoseForCpSendCb, this);
+  }
 
   posePub = nh.advertise<nav_msgs::Odometry>("/odom", 10);
   cpRcvPub = nh.advertise<std_msgs::UInt32>("/cp_rcv", 10);
@@ -55,14 +59,16 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   nh.param("debug_comm", debug_comm_, false);
   nh.param("robot_id", robot_id_, 0);
   nh.param("num_robots", num_robots_, 3);
+  nh.param("mirror_this_current_pose_to_cp_send", mirror_this_current_pose_to_cp_send_, true);
 
   std::string robot_identity_topic;
   nh.param<std::string>("robot_identity_topic", robot_identity_topic, "/robot_identity");
   robot_identity_pub_ = nh.advertise<std_msgs::Int32>(robot_identity_topic, 1, true);
 
   ROS_INFO("[PiPicoDriver] Serial port: %s", serial_port.c_str());
-  ROS_INFO("[PiPicoDriver] robot_id=%d num_robots=%d debug=%s",
-           robot_id_, num_robots_, debug_comm_ ? "ENABLED" : "DISABLED");
+  ROS_INFO("[PiPicoDriver] robot_id=%d num_robots=%d debug=%s mirror_this_current_pose_to_cp_send=%s",
+           robot_id_, num_robots_, debug_comm_ ? "ENABLED" : "DISABLED",
+           mirror_this_current_pose_to_cp_send_ ? "true" : "false");
 
   serial_fd_ = -1;
   startSerial(serial_port);
@@ -426,6 +432,10 @@ void PiPicoDriver::targetIdSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
 
 void PiPicoDriver::stopWaitingSendCallBack(const std_msgs::Bool::ConstPtr& msg) {
   messageToSend.stop_waiting_send = msg->data;
+}
+
+void PiPicoDriver::thisCurrentPoseForCpSendCb(const std_msgs::UInt32::ConstPtr& msg) {
+  messageToSend.cp_send = std::min<uint32_t>(msg->data, 255u);
 }
 
 void PiPicoDriver::colorSequenceCallBack(const std_msgs::String::ConstPtr& msg) {

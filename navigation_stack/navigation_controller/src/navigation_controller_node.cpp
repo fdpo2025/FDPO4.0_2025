@@ -1,4 +1,5 @@
 #include "navigation_controller_node.h"
+#include <algorithm>
 #include <cmath>
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0),
@@ -41,6 +42,7 @@ in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake
     // PUBLICAR NÓ ATUAL
     // =========================
     currentNodePub = nh.advertise<std_msgs::UInt32>("/this_current_pose", 10, true);
+    npSendGraphPub_ = nh.advertise<std_msgs::UInt32>("/np_send", 10, false);
 
     completion_feedback_sent = false;
     hasPendingNavPlan = false;
@@ -217,10 +219,14 @@ void NavigationController::loadNavigationParams() {
 
 void NavigationController::updateDesiredPose() {
 
-    if(route.empty()) return;
+    if (route.empty()) {
+        publishGraphNextNode();
+        return;
+    }
 
     poseDesired = route.front().pose;
     ROS_INFO("New waypoint (map): x=%.2f y=%.2f yaw=%.2f", poseDesired.x, poseDesired.y, poseDesired.theta);
+    publishGraphNextNode();
 
 }
 
@@ -1244,6 +1250,8 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
         previousWaypoint.id = -1;
         previousWaypoint.node_id = -1;
         last_published_node_id = -1;
+        last_published_np_node_id_ = -999;
+        publishGraphNextNode();
         hasPendingNavPlan = false;
 
         navigationFsm.new_state = navigation::states::idle;
@@ -1301,6 +1309,8 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
         ROS_WARN("NavigationController: Received empty NavPlan, ignoring");
         return;
     }
+
+    last_published_np_node_id_ = -999;
 
     route.clear();
     
@@ -1364,6 +1374,8 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
         route.push_back(waypoint_temp);
     }
 
+    snapPreviousWaypointToFirstTrackSegment();
+
     updateDesiredPose();
     
     if (!route.empty()) {
@@ -1394,6 +1406,49 @@ void NavigationController::publishCurrentNode(int node_id) {
     last_published_node_id = node_id;
 
     ROS_INFO("NavigationController: Published current node_id=%d to /this_current_pose", node_id);
+}
+
+void NavigationController::publishGraphNextNode() {
+    int nid = -1;
+    if (!route.empty() && route.front().node_id >= 0) {
+        nid = route.front().node_id;
+    }
+    if (nid == last_published_np_node_id_) {
+        return;
+    }
+    last_published_np_node_id_ = nid;
+    std_msgs::UInt32 m;
+    m.data = (nid < 0) ? 0u : static_cast<uint32_t>(std::min(nid, 255));
+    npSendGraphPub_.publish(m);
+    ROS_DEBUG("NavigationController: /np_send=%u (next graph node for radio)", m.data);
+}
+
+void NavigationController::snapPreviousWaypointToFirstTrackSegment() {
+    if (route.size() < 2) {
+        return;
+    }
+    const double p0x = route[0].pose.x;
+    const double p0y = route[0].pose.y;
+    const double p1x = route[1].pose.x;
+    const double p1y = route[1].pose.y;
+    const double dx = p1x - p0x;
+    const double dy = p1y - p0y;
+    const double L2 = dx * dx + dy * dy;
+    if (L2 < 1e-8) {
+        return;
+    }
+    const double t = ((poseCurr.x - p0x) * dx + (poseCurr.y - p0y) * dy) / L2;
+    // If the robot is already past the first node along the corridor, keep odom as line start.
+    if (t > 0.02) {
+        return;
+    }
+    previousWaypoint.pose.x = p0x + t * dx;
+    previousWaypoint.pose.y = p0y + t * dy;
+    previousWaypoint.pose.theta = std::atan2(dy, dx);
+    ROS_INFO(
+        "NavigationController: First segment anchored on factory line (t=%.3f): previous (%.3f,%.3f) "
+        "instead of raw odom (%.3f,%.3f)",
+        t, previousWaypoint.pose.x, previousWaypoint.pose.y, poseCurr.x, poseCurr.y);
 }
 
 // =========================

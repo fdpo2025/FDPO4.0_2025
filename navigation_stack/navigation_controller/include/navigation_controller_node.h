@@ -212,6 +212,13 @@ class NavigationController {
         void publishCurrentNode(int node_id);
         int last_published_node_id = -1;
 
+        /** Next graph node (route.front) for Pico /np_send when not using comunicacoes_node. */
+        ros::Publisher npSendGraphPub_;
+        void publishGraphNextNode();
+        int last_published_np_node_id_{-999};
+
+        void snapPreviousWaypointToFirstTrackSegment();
+
         plan_handler::NavPlan pendingNavPlan;
         bool hasPendingNavPlan = false;
         void loadPendingNavPlanIfAvailable();

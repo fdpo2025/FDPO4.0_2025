@@ -39,6 +39,7 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   planned_paths_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/planned_paths", 100, true);
   mission_state_pub_ = nh_.advertise<std_msgs::String>("/custom_planner/state", 10, true);
   radio_wait_target_pub_ = nh_.advertise<std_msgs::Int32>("/radio_wait_target", 10, false);
+  wt_send_pub_ = nh_.advertise<std_msgs::Bool>("/wt_send", 10, false);
   spawn_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/custom_planner/spawn_pose", 1, true);
 
   setState(STATE_IDLE);
@@ -121,8 +122,12 @@ void CustomPlannerNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& msg) {
 
 void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {
   std::lock_guard<std::mutex> lock(mtx_);
-  // wait_state=true: robot is waiting (frozen). false: running — resume YAML sequence.
-  if (state_ != STATE_WAITING || msg->data) return;
+  // wait_state mirrors network "waiting" for this robot_id (CMD wt_send + radio).
+  const bool prev = last_pi_wait_state_;
+  last_pi_wait_state_ = msg->data;
+  if (state_ != STATE_WAITING) return;
+  // Require falling edge: was waiting on the wire, peer cleared us via stop_waiting.
+  if (!prev || msg->data) return;
   if (!pending_segments_.empty()) {
     publishCurrentSegment();
     return;
@@ -406,7 +411,18 @@ void CustomPlannerNode::advanceStateMachineAfterSegment() {
 }
 
 void CustomPlannerNode::setState(MissionState new_state) {
+  const MissionState prev = state_;
   state_ = new_state;
+  if (prev == STATE_WAITING && new_state != STATE_WAITING) {
+    std_msgs::Bool wt;
+    wt.data = false;
+    wt_send_pub_.publish(wt);
+  }
+  if (new_state == STATE_WAITING) {
+    std_msgs::Bool wt;
+    wt.data = true;
+    wt_send_pub_.publish(wt);
+  }
   std_msgs::String msg;
   msg.data = (state_ == STATE_IDLE) ? "IDLE" : (state_ == STATE_NAVIGATING ? "NAVIGATING" : "WAITING");
   mission_state_pub_.publish(msg);

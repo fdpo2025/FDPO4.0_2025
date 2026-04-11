@@ -3,6 +3,7 @@
 #include <ros/ros.h>
 #include <std_msgs/Int32MultiArray.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/UInt32.h>
 #include <plan_handler/NavPlan.h>
 #include <plan_handler/ControllerPoint.h>
 #include <plan_handler/CompletionFeedback.h>
@@ -54,8 +55,13 @@ private:
     ros::Subscriber navCompletionFeedbackSub;
     ros::Publisher navPlanPub;
     ros::Publisher pickBoxPub;
+    ros::Publisher targetIdSendPub;
+    ros::Publisher stopWaitingSendPub;
+    ros::Timer stopWaitingResetTimer;
+    bool stopWaitingResetTimerValid{false};
 
     void plannedPathsCallback(const std_msgs::Int32MultiArray::ConstPtr& msg);
+    void publishRadioStopWaitingPulse(uint32_t target_robot_id);
     void navCompletionFeedbackCallback(const plan_handler::CompletionFeedback::ConstPtr& msg);
 
     bool has_box;

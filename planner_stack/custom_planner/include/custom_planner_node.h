@@ -73,6 +73,7 @@ class CustomPlannerNode {
   ros::Publisher planned_paths_pub_;
   ros::Publisher mission_state_pub_;
   ros::Publisher radio_wait_target_pub_;
+  ros::Publisher wt_send_pub_;
   ros::Publisher spawn_pose_pub_;
 
   std::string color_sequence_topic_;
@@ -91,5 +92,7 @@ class CustomPlannerNode {
   MissionState state_ = STATE_IDLE;
   mutable std::mutex mtx_;
   bool debug_verbose_ = false;
+  /** Last /pi_pico_driver/wait_state from network (true = this robot waiting on radio). */
+  bool last_pi_wait_state_ = false;
 };
 
