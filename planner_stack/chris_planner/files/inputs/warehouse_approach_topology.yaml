@@ -12,17 +12,29 @@
 "0":
   "8":
     "11": "right"
+    "39": "right"
+    "4": "right"
+    "41": "right"
+    "7": "right"
     "31": "left"
 "1":
   "9":
     "11": "right"
     "8": "left"
     "16": "left"
+    "39": "right"
+    "4": "right"
+    "41": "right"
+    "7": "right"
 "2":
   "10":
     "11": "right"
     "9": "left"
     "8": "left"
+    "39": "right"
+    "4": "right"
+    "41": "right"
+    "7": "right"
 "3":
   "11":
     "4": "right"
@@ -31,6 +43,8 @@
     "8": "left"
     "19": "right"
     "39": "right"
+    "41": "right"
+    "7": "right"
 "13":
   "12":
     "4": "left"
@@ -90,20 +104,34 @@
     "26": "right"
     "34": "right"
     "40": "right"
+    "42": "right"
+    "31": "right"
     "19": "right"
 "36":
   "28":
     "29": "left"
     "30": "left"
     "27": "right"
+    "34": "right"
+    "40": "right"
+    "42": "right"
+    "31": "right"
 "37":
   "29":
     "30": "left"
     "22": "left"
     "27": "right"
+    "34": "right"
+    "40": "right"
+    "42": "right"
+    "31": "right"
 "38":
   "30":
     "22": "left"
     "15": "left"
     "7": "left"
     "27": "right"
+    "34": "right"
+    "40": "right"
+    "42": "right"
+    "31": "right"
