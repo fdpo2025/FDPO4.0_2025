@@ -128,6 +128,13 @@ void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {
   if (state_ != STATE_WAITING) return;
   // Require falling edge: was waiting on the wire, peer cleared us via stop_waiting.
   if (!prev || msg->data) return;
+  // Pico applies CMD after radio RX in the same core1 tick; wt_send=true would re-assert
+  // is_waiting before the next planner tick. Drop wt immediately so CMD matches release.
+  {
+    std_msgs::Bool wt;
+    wt.data = false;
+    wt_send_pub_.publish(wt);
+  }
   if (!pending_segments_.empty()) {
     publishCurrentSegment();
     return;
