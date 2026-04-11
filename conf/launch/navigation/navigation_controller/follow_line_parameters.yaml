@@ -26,6 +26,8 @@ navigation_controller:
   approaching_enter_dist_m: 0.1
   # Warehouse pick/drop (!align) go-to: fase 1 |bearing| <= isto (rad). Fase 2: v constante (v_nom), w=0.
   bearing_align_yaw_tol: 0.5
+  # Estado pickBoxForward após pick warehouse: módulo da velocidade (m/s); sinal com backwards do waypoint.
+  pick_box_forward_vel: 0.1
   k_approaching: 8.5
   gain_approaching_fwd: 1.0
   approaching_vel_normal: 0.07
@@ -44,6 +46,9 @@ navigation_controller:
 
 plan_handler:
   vel_lin_nom_warehouse_process: 0.025
+  # Linha até warehouse de pick (input, não-process)
+  vel_lin_nom_warehouse_pick: 0.06
+  # Linha até warehouse de drop (output, não-process)
   vel_lin_nom_warehouse_other: 0.06
 
   line_switch_before_pick: 1.0
@@ -54,5 +59,6 @@ plan_handler:
   line_switch_after_warehouse: 0.7
   line_switch_normal: 0.75
 
-  vel_lin_nom_after_warehouse: 0.1
+  # Primeira perna depois de sair da warehouse (backwards). Legacy: vel_lin_nom_after_warehouse ainda é lido como fallback.
+  vel_lin_nom_backwards_after_warehouse: 0.25
   vel_lin_nom_normal: -1.0

@@ -198,6 +198,7 @@ void NavigationController::loadNavigationParams() {
     nh_fl.param("k_approaching_process", param.k_approaching_process, param.k_approaching_pickdrop);
     nh_fl.param("gain_approaching_fwd_process", param.gain_approaching_fwd_process, param.gain_approaching_fwd_pickdrop);
     nh_fl.param("approaching_vel_process", param.approaching_vel_process, param.approaching_vel_pickdrop);
+    nh_fl.param("pick_box_forward_vel", param.pick_box_forward_vel, 0.1);
 
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f (follow_line from /follow_line/navigation_controller)", 
              param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
@@ -1161,7 +1162,8 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     else if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable) goToXYProcessWarehouse();
     else if(navigationFsm.state == navigation::states::turnToFinalYaw && enable) setTheta();
     else if(navigationFsm.state == navigation::states::pickBoxForward && enable) {
-        v_d = previousWaypoint.backwards ? -0.1 : 0.1;
+        const double v_pf = param.pick_box_forward_vel;
+        v_d = previousWaypoint.backwards ? -v_pf : v_pf;
         w_d = 0.0;
         ROS_INFO_THROTTLE(0.5, "NavigationController: pickBoxForward state - moving at %.2f m/s (backwards=%d)", 
                          v_d, previousWaypoint.backwards ? 1 : 0);

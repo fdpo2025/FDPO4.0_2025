@@ -10,6 +10,7 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_) : nh(nh_)
 
     ros::NodeHandle nh_fl("follow_line/plan_handler");
     nh_fl.param("vel_lin_nom_warehouse_process", fl_.vel_lin_nom_warehouse_process, 0.025);
+    nh_fl.param("vel_lin_nom_warehouse_pick", fl_.vel_lin_nom_warehouse_pick, 0.06);
     nh_fl.param("vel_lin_nom_warehouse_other", fl_.vel_lin_nom_warehouse_other, 0.06);
     nh_fl.param("line_switch_before_pick", fl_.line_switch_before_pick, 0.95);
     nh_fl.param("line_switch_plan_stack_before_pick", fl_.line_switch_plan_stack_before_pick, 1.0);
@@ -18,7 +19,11 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_) : nh(nh_)
     nh_fl.param("line_switch_after_warehouse_process", fl_.line_switch_after_warehouse_process, 1.0);
     nh_fl.param("line_switch_after_warehouse", fl_.line_switch_after_warehouse, 0.7);
     nh_fl.param("line_switch_normal", fl_.line_switch_normal, 0.75);
-    nh_fl.param("vel_lin_nom_after_warehouse", fl_.vel_lin_nom_after_warehouse, 0.1);
+    {
+        double legacy_after = 0.1;
+        nh_fl.param("vel_lin_nom_after_warehouse", legacy_after, 0.1);
+        nh_fl.param("vel_lin_nom_backwards_after_warehouse", fl_.vel_lin_nom_backwards_after_warehouse, legacy_after);
+    }
     nh_fl.param("vel_lin_nom_normal", fl_.vel_lin_nom_normal, -1.0);
 
     ROS_INFO("PlanHandlerNode: follow_line params from /follow_line/plan_handler (follow_line_parameters.yaml)");
@@ -158,9 +163,6 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             was_last_warehouse_process = is_process_warehouse.count(resolved_id);
             point.line_switch_ratio = 1.0;
             point.backwards = false;
-            point.vel_lin_nom = is_process_warehouse.count(resolved_id)
-                                    ? fl_.vel_lin_nom_warehouse_process
-                                    : fl_.vel_lin_nom_warehouse_other;
 
             // Se é o primeiro nó do caminho e é warehouse, não adicionar
             if (is_first_node) {
@@ -213,6 +215,16 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                 }
             }
 
+            if (point.pick_box) {
+                point.vel_lin_nom = is_process_warehouse.count(resolved_id)
+                                        ? fl_.vel_lin_nom_warehouse_process
+                                        : fl_.vel_lin_nom_warehouse_pick;
+            } else {
+                point.vel_lin_nom = is_process_warehouse.count(resolved_id)
+                                        ? fl_.vel_lin_nom_warehouse_process
+                                        : fl_.vel_lin_nom_warehouse_other;
+            }
+
         } else {
             point.is_warehouse = false;
             point.is_process_warehouse = false;
@@ -227,7 +239,7 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
             point.backwards = fe_warehouse_coordinate;
             point.vel_lin_nom = fe_warehouse_coordinate
-                                    ? fl_.vel_lin_nom_after_warehouse
+                                    ? fl_.vel_lin_nom_backwards_after_warehouse
                                     : fl_.vel_lin_nom_normal;
             point.should_pub = false;
         }

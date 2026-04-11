@@ -123,6 +123,8 @@ class NavigationController {
             double k_approaching_process;
             double gain_approaching_fwd_process;
             double approaching_vel_process;
+            /** pickBoxForward: |v| após pick warehouse (YAML /follow_line/navigation_controller). */
+            double pick_box_forward_vel = 0.1;
 
         };
 

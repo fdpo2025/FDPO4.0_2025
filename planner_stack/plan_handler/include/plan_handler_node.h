@@ -18,6 +18,9 @@ struct Pose {
 /** Parâmetros de follow line vindos de /follow_line/plan_handler (follow_line_parameters.yaml) */
 struct PlanHandlerFollowLineConfig {
     double vel_lin_nom_warehouse_process = 0.025;
+    /** Vel. nominal na linha até warehouse de pick não-process (input). */
+    double vel_lin_nom_warehouse_pick = 0.06;
+    /** Vel. nominal na linha até warehouse de drop não-process (output). */
     double vel_lin_nom_warehouse_other = 0.06;
     double line_switch_before_pick = 0.95;
     double line_switch_plan_stack_before_pick = 1.0;
@@ -26,7 +29,8 @@ struct PlanHandlerFollowLineConfig {
     double line_switch_after_warehouse_process = 1.0;
     double line_switch_after_warehouse = 0.7;
     double line_switch_normal = 0.75;
-    double vel_lin_nom_after_warehouse = 0.1;
+    /** Primeira perna após sair da warehouse (backwards): /follow_line/plan_handler/vel_lin_nom_backwards_after_warehouse */
+    double vel_lin_nom_backwards_after_warehouse = 0.1;
     double vel_lin_nom_normal = -1.0;
 };
 
