@@ -217,8 +217,6 @@ class NavigationController {
         void publishGraphNextNode();
         int last_published_np_node_id_{-999};
 
-        void snapPreviousWaypointToFirstTrackSegment();
-
         plan_handler::NavPlan pendingNavPlan;
         bool hasPendingNavPlan = false;
         void loadPendingNavPlanIfAvailable();
