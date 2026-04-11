@@ -182,6 +182,12 @@ std::vector<CustomPlannerNode::MissionSegment> CustomPlannerNode::buildMissionSe
           seg.wait_after = true;
           out.push_back(seg);
           seg = MissionSegment();
+        } else {
+          // Leading "W" at start of a leg (e.g. robot_1 manga_1): wait before any path.
+          // Previously this -1 was dropped because seg was empty, so both robots moved together.
+          MissionSegment wait_before_move;
+          wait_before_move.wait_after = true;
+          out.push_back(wait_before_move);
         }
       } else if (v <= -1000) {
         if (!seg.nodes.empty()) {
