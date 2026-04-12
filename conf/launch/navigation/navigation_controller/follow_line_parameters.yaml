@@ -28,6 +28,9 @@ navigation_controller:
   bearing_align_yaw_tol: 0.5
   # Estado pickBoxForward após pick warehouse: módulo da velocidade (m/s); sinal com backwards do waypoint.
   pick_box_forward_vel: 0.2
+  # Após drop: rotação em sitio para soltar íman (antes do segmento backwards). Duração 0 = desliga.
+  drop_magnet_wiggle_duration_sec: 0.1
+  drop_magnet_wiggle_angular_vel: 0.8
   k_approaching: 8.5
   gain_approaching_fwd: 1.0
   approaching_vel_normal: 0.07

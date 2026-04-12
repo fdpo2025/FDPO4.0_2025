@@ -199,10 +199,31 @@ void NavigationController::loadNavigationParams() {
     nh_fl.param("gain_approaching_fwd_process", param.gain_approaching_fwd_process, param.gain_approaching_fwd_pickdrop);
     nh_fl.param("approaching_vel_process", param.approaching_vel_process, param.approaching_vel_pickdrop);
     nh_fl.param("pick_box_forward_vel", param.pick_box_forward_vel, 0.1);
+    nh_fl.param("drop_magnet_wiggle_duration_sec", param.drop_magnet_wiggle_duration_sec, 0.1);
+    nh_fl.param("drop_magnet_wiggle_angular_vel", param.drop_magnet_wiggle_angular_vel, 0.8);
 
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f (follow_line from /follow_line/navigation_controller)", 
              param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
 
+}
+
+void NavigationController::transitionAfterDropWarehouse(const char* trace_tag) {
+    route.pop_front();
+    updateDesiredPose();
+    followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+    if (trace_tag) ROS_WARN("%s", trace_tag);
+    followLineFsm.set_state();
+    completion_feedback_sent = false;
+    if (route.empty()) {
+        navigationFsm.new_state = navigation::states::idle;
+    } else if (route.front().backwards && param.drop_magnet_wiggle_duration_sec > 1e-6) {
+        drop_magnet_wiggle_start_time_ = ros::Time::now();
+        navigationFsm.new_state = navigation::states::dropMagnetReleaseWiggle;
+        ROS_INFO("NavigationController: Post-drop magnet wiggle: duration=%.3fs, w=%.3f rad/s (before backwards segment)",
+                 param.drop_magnet_wiggle_duration_sec, param.drop_magnet_wiggle_angular_vel);
+    } else {
+        navigationFsm.new_state = navigation::states::done;
+    }
 }
 
 void NavigationController::updateDesiredPose() {
@@ -1004,20 +1025,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
                     in_pick_box_forward = true;
                     ROS_INFO("NavigationController: Completed line to pick warehouse, entering pickBoxForward state");
                 } else {
-                    route.pop_front();
-                    updateDesiredPose();
-                    
-                    followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-                    ROS_WARN("followline 3");
-                    followLineFsm.set_state();
-                    
-                    completion_feedback_sent = false;
-                    
-                    if(route.empty()) {
-                        navigationFsm.new_state = navigation::states::idle;
-                    } else {
-                        navigationFsm.new_state = navigation::states::done;
-                    }
+                    transitionAfterDropWarehouse("followline 3");
                 }
             }
         }
@@ -1047,20 +1055,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             pick_box_forward_start_time = ros::Time::now();
             in_pick_box_forward = true;
         } else {
-            route.pop_front();
-            updateDesiredPose();
-
-            followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-            ROS_WARN("followline process goto pop");
-            followLineFsm.set_state();
-
-            completion_feedback_sent = false;
-
-            if (route.empty()) {
-                navigationFsm.new_state = navigation::states::idle;
-            } else {
-                navigationFsm.new_state = navigation::states::done;
-            }
+            transitionAfterDropWarehouse("followline process goto pop");
         }
     }
 
@@ -1093,19 +1088,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             in_pick_box_forward = true;
             ROS_INFO("NavigationController: Completed turnToFinalYaw at pick warehouse, entering pickBoxForward state");
         } else {
-            route.pop_front();
-            completion_feedback_sent = false;
-            updateDesiredPose();
-            
-            followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-            ROS_WARN("followline 4");
-            followLineFsm.set_state();
-            
-            if(route.empty()) {
-                navigationFsm.new_state = navigation::states::idle;
-            } else {
-                navigationFsm.new_state = navigation::states::done;
-            }
+            transitionAfterDropWarehouse("followline 4");
         }
 
     }
@@ -1144,6 +1127,14 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         }
     }
 
+    else if (navigationFsm.state == navigation::states::dropMagnetReleaseWiggle && enable) {
+        const double elapsed = (ros::Time::now() - drop_magnet_wiggle_start_time_).toSec();
+        if (elapsed >= param.drop_magnet_wiggle_duration_sec) {
+            navigationFsm.new_state = navigation::states::done;
+            ROS_INFO("NavigationController: dropMagnetReleaseWiggle finished (elapsed=%.3fs)", elapsed);
+        }
+    }
+
     if (navigationFsm.new_state == navigation::states::driveToGoal && enable && !route.empty()
         && route.front().is_warehouse && !route.front().align) {
         navigationFsm.new_state = navigation::states::processWarehouseGoToXY;
@@ -1167,6 +1158,13 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         w_d = 0.0;
         ROS_INFO_THROTTLE(0.5, "NavigationController: pickBoxForward state - moving at %.2f m/s (backwards=%d)", 
                          v_d, previousWaypoint.backwards ? 1 : 0);
+    }
+    else if (navigationFsm.state == navigation::states::dropMagnetReleaseWiggle && enable) {
+        v_d = 0.0;
+        double w_cmd = param.drop_magnet_wiggle_angular_vel;
+        if (std::abs(w_cmd) > param.w_nom) w_cmd = std::copysign(param.w_nom, w_cmd);
+        w_d = w_cmd;
+        ROS_INFO_THROTTLE(0.2, "NavigationController: dropMagnetReleaseWiggle w_d=%.3f rad/s", w_d);
     }
     else {
         v_d = 0.0;

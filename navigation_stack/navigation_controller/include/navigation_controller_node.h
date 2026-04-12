@@ -125,6 +125,10 @@ class NavigationController {
             double approaching_vel_process;
             /** pickBoxForward: |v| após pick warehouse (YAML /follow_line/navigation_controller). */
             double pick_box_forward_vel = 0.1;
+            /** Após drop: rotação em sitio (soltar íman) antes do segmento backwards; duração (s). */
+            double drop_magnet_wiggle_duration_sec = 0.1;
+            /** ω em dropMagnetReleaseWiggle (rad/s), eixo Z; sinal = sentido. */
+            double drop_magnet_wiggle_angular_vel = 0.8;
 
         };
 
@@ -132,6 +136,8 @@ class NavigationController {
         Parameters param;
         void loadNavigationParams();
         void pickBoxAction();
+        /** Após consumir waypoint de drop: pop + próximo segmento; se egress backwards, wiggle antes de done. */
+        void transitionAfterDropWarehouse(const char* trace_tag);
 
         double normalizeAngle(double theta);
 
@@ -189,6 +195,7 @@ class NavigationController {
         // Estado para pick box forward
         ros::Time pick_box_forward_start_time;
         bool in_pick_box_forward;  // Se está no estado de andar para frente após pick
+        ros::Time drop_magnet_wiggle_start_time_;
         void skipNearbyWaypoints();  // Skip waypoints se já estamos perto deles
 
         ros::Timer controlTimer;
@@ -231,6 +238,8 @@ namespace navigation {
             /** Warehouse pick/drop (!align): go-to-XY (process e não-process). */
             processWarehouseGoToXY,
             pickBoxForward,  // Estado para andar para frente após chegar a warehouse de pick
+            /** Após drop: ω constante durante drop_magnet_wiggle_duration_sec antes do backwards. */
+            dropMagnetReleaseWiggle,
             done
 
         }; 
