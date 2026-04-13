@@ -14,6 +14,8 @@
 #include <XmlRpcValue.h>
 #include <geometry_msgs/PoseStamped.h> 
 #include <navigation_controller/NavigationControl.h> 
+#include <mutex>
+#include <set>
 #include <string>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
@@ -25,6 +27,7 @@
 #include <plan_handler/CompletionFeedback.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Int32.h>
+#include <std_msgs/UInt32MultiArray.h>
 #include <std_msgs/UInt32.h>
 
 
@@ -50,6 +53,8 @@ struct WayPoint {
     bool is_warehouse;          // Se o ponto final é uma warehouse
     bool is_process_warehouse;  // Warehouse de process (segmento final antes de pick/drop process)
     int node_id;
+    /** Índice 0.. no NavPlan que gerou o ponto; -1 se não aplicável (ex. route.yaml / RViz). */
+    int plan_index;
 };
 
 struct Line{
@@ -200,6 +205,15 @@ class NavigationController {
         ros::Subscriber waitStateSub_;
         void waitStateCallback(const std_msgs::Bool::ConstPtr& msg);
         bool network_wait_hold_{false};
+        /** Mid-route pause: não fazer pop da route até wait_state libertar (pick _W). */
+        bool route_execution_pause_hold_{false};
+        ros::Subscriber nav_pause_after_wp_sub_;
+        void navPauseAfterWpIndexCb(const std_msgs::UInt32MultiArray::ConstPtr& msg);
+        ros::Publisher nav_route_pause_request_pub_;
+        void onRouteWaypointConsumedForPauseCheck(const WayPoint& consumed);
+        std::mutex nav_pause_mtx_;
+        std::vector<uint32_t> staged_nav_pause_indices_;
+        std::multiset<uint32_t> pause_remaining_after_wp_;
         void loadRouteFromNavPlan(const plan_handler::NavPlan::ConstPtr& msg);
         
         bool load_from_route;  // Se deve carregar waypoints do route.yaml

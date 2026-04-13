@@ -1,10 +1,11 @@
 #include "navigation_controller_node.h"
 #include <algorithm>
 #include <cmath>
+#include <string>
 
 NavigationController::NavigationController(ros::NodeHandle& nh_) : nh(nh_), v_d(0.0), w_d(0.0),
 navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineStates::Follow_Line),
-k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false, false, false, -1}), tfBuffer(), tfListener(tfBuffer),
+k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false, false, false, -1, -1}), tfBuffer(), tfListener(tfBuffer),
 in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake_ref_dist_(0.1),
     process_warehouse_goto_align_done_(false) {
 
@@ -33,6 +34,16 @@ in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake
     nh.param<std::string>("wait_state_topic", wait_state_topic, std::string("/pi_pico_driver/wait_state"));
     waitStateSub_ = nh.subscribe(wait_state_topic, 10, &NavigationController::waitStateCallback, this);
     ROS_INFO("NavigationController subscribing to %s (hold motion while waiting=true)", wait_state_topic.c_str());
+
+    std::string nav_pause_topic;
+    nh.param<std::string>("nav_pause_after_wp_index_topic", nav_pause_topic, std::string("/nav_pause_after_wp_index"));
+    nav_pause_after_wp_sub_ =
+        nh.subscribe(nav_pause_topic, 10, &NavigationController::navPauseAfterWpIndexCb, this);
+    std::string nav_pause_req_topic;
+    nh.param<std::string>("nav_route_pause_request_topic", nav_pause_req_topic, std::string("/nav_route_pause_request"));
+    nav_route_pause_request_pub_ = nh.advertise<std_msgs::Bool>(nav_pause_req_topic, 5, false);
+    ROS_INFO("NavigationController: pause indices %s, pause request pub %s", nav_pause_topic.c_str(),
+             nav_pause_req_topic.c_str());
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
     lineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_lines", 1, true);  // latch=true para RViz ver imediatamente
     virtualLineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_virtual_line", 1, true);
@@ -60,9 +71,40 @@ in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake
 
 void NavigationController::waitStateCallback(const std_msgs::Bool::ConstPtr& msg) {
     network_wait_hold_ = msg->data;
+    if (!msg->data) {
+        route_execution_pause_hold_ = false;
+    }
     if (network_wait_hold_) {
         ROS_INFO_THROTTLE(1.0, "NavigationController: network wait_state=true (holding route, cmd_vel=0)");
     }
+}
+
+void NavigationController::navPauseAfterWpIndexCb(const std_msgs::UInt32MultiArray::ConstPtr& msg) {
+    std::lock_guard<std::mutex> lk(nav_pause_mtx_);
+    staged_nav_pause_indices_.assign(msg->data.begin(), msg->data.end());
+    std::string human;
+    for (size_t i = 0; i < staged_nav_pause_indices_.size(); ++i) {
+        if (i) human += ", ";
+        human += std::to_string(static_cast<int>(staged_nav_pause_indices_[i]) + 1);
+    }
+    ROS_INFO("NavigationController: staged nav_pause_after_wp_index (base0) count=%zu [human: %s]",
+             staged_nav_pause_indices_.size(), human.c_str());
+}
+
+void NavigationController::onRouteWaypointConsumedForPauseCheck(const WayPoint& consumed) {
+    if (consumed.plan_index < 0) return;
+    const uint32_t idx = static_cast<uint32_t>(consumed.plan_index);
+    auto it = pause_remaining_after_wp_.find(idx);
+    if (it == pause_remaining_after_wp_.end()) return;
+    pause_remaining_after_wp_.erase(it);
+    route_execution_pause_hold_ = true;
+    std_msgs::Bool rq;
+    rq.data = true;
+    nav_route_pause_request_pub_.publish(rq);
+    ROS_INFO(
+        "NavigationController: mid-route pause after consuming plan_index=%d (human=%d); holding route pops until "
+        "wait_state clears",
+        consumed.plan_index, consumed.plan_index + 1);
 }
 
 void NavigationController::reconfigCb(navigation_controller::NavigationConfig &cfg, uint32_t) {
@@ -105,6 +147,7 @@ void NavigationController::loadRouteFromParameters(){
     previousWaypoint.is_warehouse = false;
     previousWaypoint.is_process_warehouse = false;
     previousWaypoint.node_id = -1;
+    previousWaypoint.plan_index = -1;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
     for(int i = 0; i < static_cast<int>(waypoints.size()); ++i){
@@ -120,6 +163,7 @@ void NavigationController::loadRouteFromParameters(){
         waypoint_temp.is_warehouse = false;  // route.yaml não tem is_warehouse, usar false
         waypoint_temp.is_process_warehouse = false;
         waypoint_temp.node_id = -1;  // route.yaml não tem node_id
+        waypoint_temp.plan_index = -1;
         
         // line_switch_ratio: se não definido, usar -1 (significa usar parâmetro global)
         if (waypoints[i].hasMember("line_switch_ratio")) {
@@ -471,7 +515,8 @@ void NavigationController::publishVirtualLineMarker(double pi_x, double pi_y, do
 }
 
 void NavigationController::skipNearbyWaypoints() {
-    
+    if (route_execution_pause_hold_) return;
+
     while (route.size() >= 2 && !route.front().align) {
         double pi_x = previousWaypoint.pose.x;
         double pi_y = previousWaypoint.pose.y;
@@ -481,7 +526,8 @@ void NavigationController::skipNearbyWaypoints() {
         double line_length = std::sqrt((pf_x - pi_x) * (pf_x - pi_x) + (pf_y - pi_y) * (pf_y - pi_y));
         
         if (line_length < 0.01) {
-            previousWaypoint = route.front();
+            const WayPoint consumed = route.front();
+            previousWaypoint = consumed;
 
             // =========================
             // PUBLICAR NÓ ATUAL
@@ -489,6 +535,7 @@ void NavigationController::skipNearbyWaypoints() {
             publishCurrentNode(previousWaypoint.node_id);
 
             route.pop_front();
+            onRouteWaypointConsumedForPauseCheck(consumed);
             ROS_INFO("Skipped waypoint (line too short): id=%d", previousWaypoint.id);
             continue;
         }
@@ -506,7 +553,8 @@ void NavigationController::skipNearbyWaypoints() {
                                route.front().line_switch_ratio : param.line_switch_ratio;
         
         if (progress >= switch_ratio) {
-            previousWaypoint = route.front();
+            const WayPoint consumed = route.front();
+            previousWaypoint = consumed;
 
             // =========================
             // PUBLICAR NÓ ATUAL
@@ -514,6 +562,7 @@ void NavigationController::skipNearbyWaypoints() {
             publishCurrentNode(previousWaypoint.node_id);
 
             route.pop_front();
+            onRouteWaypointConsumedForPauseCheck(consumed);
             ROS_INFO("Skipped nearby waypoint: id=%d (progress=%.0f%% >= threshold=%.0f%%)", 
                      previousWaypoint.id, progress * 100, switch_ratio * 100);
         } else {
@@ -560,6 +609,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
         previousWaypoint.is_warehouse = false;
         previousWaypoint.is_process_warehouse = false;
         previousWaypoint.node_id = -1;
+        previousWaypoint.plan_index = -1;
         ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
     }
 
@@ -577,6 +627,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
     waypoint_temp.is_warehouse = false;
     waypoint_temp.is_process_warehouse = false;
     waypoint_temp.node_id = -1; // goal RViz não tem node_id
+    waypoint_temp.plan_index = -1;
 
     route.push_back(waypoint_temp);
     ROS_INFO("RViz goal added: x=%.2f y=%.2f yaw=%.2f (map frame)", 
@@ -1032,7 +1083,9 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
                     in_pick_box_forward = true;
                     ROS_INFO("NavigationController: Completed line to pick warehouse, entering pickBoxForward state");
                 } else {
+                    const WayPoint consumed = route.front();
                     route.pop_front();
+                    onRouteWaypointConsumedForPauseCheck(consumed);
                     updateDesiredPose();
                     
                     followLineFsm.new_state = navigation::followLineStates::Follow_Line;
@@ -1065,7 +1118,9 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             pick_box_forward_start_time = ros::Time::now();
             in_pick_box_forward = true;
         } else {
+            const WayPoint consumed = route.front();
             route.pop_front();
+            onRouteWaypointConsumedForPauseCheck(consumed);
             updateDesiredPose();
 
             followLineFsm.new_state = navigation::followLineStates::Follow_Line;
@@ -1111,7 +1166,9 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             in_pick_box_forward = true;
             ROS_INFO("NavigationController: Completed turnToFinalYaw at pick warehouse, entering pickBoxForward state");
         } else {
+            const WayPoint consumed = route.front();
             route.pop_front();
+            onRouteWaypointConsumedForPauseCheck(consumed);
             completion_feedback_sent = false;
             updateDesiredPose();
             
@@ -1146,7 +1203,9 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         if (elapsed_time >= 0.7) {
             in_pick_box_forward = false;
             if (!route.empty()) {
+                const WayPoint consumed = route.front();
                 route.pop_front();
+                onRouteWaypointConsumedForPauseCheck(consumed);
                 updateDesiredPose();
                 followLineFsm.new_state = navigation::followLineStates::Follow_Line;
                 ROS_WARN("followline 5");
@@ -1201,7 +1260,9 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         }
     }
 
-    if (route.empty() && (v_d == 0.0 && w_d == 0.0)) {
+    if (route_execution_pause_hold_) {
+        hardStop();
+    } else if (route.empty() && (v_d == 0.0 && w_d == 0.0)) {
         geometry_msgs::Twist cmd;
         cmd.linear.x  = 0.0;
         cmd.linear.y  = 0.0;
@@ -1249,6 +1310,13 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
         route.clear();
         previousWaypoint.id = -1;
         previousWaypoint.node_id = -1;
+        previousWaypoint.plan_index = -1;
+        {
+            std::lock_guard<std::mutex> lk(nav_pause_mtx_);
+            staged_nav_pause_indices_.clear();
+            pause_remaining_after_wp_.clear();
+        }
+        route_execution_pause_hold_ = false;
         last_published_node_id = -1;
         last_published_np_node_id_ = -999;
         publishGraphNextNode();
@@ -1313,6 +1381,20 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     last_published_np_node_id_ = -999;
 
     route.clear();
+    route_execution_pause_hold_ = false;
+    {
+        std::lock_guard<std::mutex> lk(nav_pause_mtx_);
+        pause_remaining_after_wp_.clear();
+        for (uint32_t u : staged_nav_pause_indices_) {
+            if (static_cast<size_t>(u) < msg->points.size()) {
+                pause_remaining_after_wp_.insert(u);
+            } else {
+                ROS_WARN("NavigationController: dropping pause_after_wp_index=%u (out of range for NavPlan size %zu)",
+                         static_cast<unsigned>(u), msg->points.size());
+            }
+        }
+        staged_nav_pause_indices_.clear();
+    }
     
     previousWaypoint.id = 0;
     previousWaypoint.pose.x = poseCurr.x;
@@ -1326,12 +1408,14 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     previousWaypoint.is_warehouse = false;
     previousWaypoint.is_process_warehouse = false;
     previousWaypoint.node_id = -1;
+    previousWaypoint.plan_index = -1;
     ROS_INFO("Initial position set as previousWaypoint: x=%.2f y=%.2f", poseCurr.x, poseCurr.y);
 
     for (size_t i = 0; i < msg->points.size(); ++i) {
         const plan_handler::ControllerPoint& cp = msg->points[i];
         WayPoint waypoint_temp;
         waypoint_temp.id = static_cast<int>(i);
+        waypoint_temp.plan_index = static_cast<int>(i);
 
         // =========================
         // RECEBER NODE_ID

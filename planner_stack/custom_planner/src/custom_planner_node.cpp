@@ -6,6 +6,23 @@
 #include <regex>
 #include <unordered_set>
 
+namespace {
+int approachNodeForInputShelf(int shelf) {
+  switch (shelf) {
+    case 0:
+      return 8;
+    case 1:
+      return 9;
+    case 2:
+      return 10;
+    case 3:
+      return 11;
+    default:
+      return -1;
+  }
+}
+}  // namespace
+
 #define CP_DBG(...)        \
   do {                     \
     if (debug_verbose_) {  \
@@ -37,6 +54,13 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   this_pose_sub_ = nh_.subscribe(this_current_pose_topic_, 50, &CustomPlannerNode::onThisCurrentPose, this);
 
   planned_paths_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/planned_paths", 100, true);
+  std::string pause_topic;
+  nh_.param<std::string>("nav_pause_after_wp_index_topic", pause_topic, std::string("/nav_pause_after_wp_index"));
+  nav_pause_after_wp_index_pub_ = nh_.advertise<std_msgs::UInt32MultiArray>(pause_topic, 1, true);
+  std::string pause_req_topic;
+  nh_.param<std::string>("nav_route_pause_request_topic", pause_req_topic, std::string("/nav_route_pause_request"));
+  nav_route_pause_request_sub_ =
+      nh_.subscribe(pause_req_topic, 10, &CustomPlannerNode::onNavRoutePauseRequest, this);
   mission_state_pub_ = nh_.advertise<std_msgs::String>("/custom_planner/state", 10, true);
   radio_wait_target_pub_ = nh_.advertise<std_msgs::Int32>("/radio_wait_target", 10, false);
   wt_send_pub_ = nh_.advertise<std_msgs::Bool>("/wt_send", 10, false);
@@ -139,7 +163,20 @@ void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {
     publishCurrentSegment();
     return;
   }
+  if (active_segment_has_intrinsic_wait_) {
+    setState(STATE_NAVIGATING);
+    return;
+  }
   setState(STATE_IDLE);
+}
+
+void CustomPlannerNode::onNavRoutePauseRequest(const std_msgs::Bool::ConstPtr& msg) {
+  if (!msg->data) return;
+  std::lock_guard<std::mutex> lock(mtx_);
+  if (state_ != STATE_NAVIGATING) return;
+  if (!active_segment_has_intrinsic_wait_) return;
+  setState(STATE_WAITING);
+  ROS_INFO("custom_planner: nav requested mid-route pause -> STATE_WAITING (intrinsic _W segment)");
 }
 
 void CustomPlannerNode::onThisCurrentPose(const std_msgs::UInt32::ConstPtr& msg) {
@@ -185,8 +222,22 @@ std::vector<CustomPlannerNode::MissionSegment> CustomPlannerNode::buildMissionSe
   if (targets.getType() != XmlRpc::XmlRpcValue::TypeArray) return out;
 
   for (int i = 0; i < targets.size(); ++i) {
-    std::vector<int> leg_nodes = resolveMissionLeg(targets[i], color_sequence);
+    std::vector<uint32_t> leg_pause;
+    std::vector<int> leg_nodes = resolveMissionLeg(targets[i], color_sequence, &leg_pause);
     if (leg_nodes.empty()) continue;
+    if (!leg_pause.empty()) {
+      bool has_split = false;
+      for (int v : leg_nodes) {
+        if (v == -1) {
+          has_split = true;
+          break;
+        }
+      }
+      if (has_split) {
+        ROS_WARN("custom_planner: leg has pause_after_wp_index and -1 splits; dropping pause metadata for safety");
+        leg_pause.clear();
+      }
+    }
     MissionSegment seg;
     for (int v : leg_nodes) {
       if (v == -1) {
@@ -213,14 +264,19 @@ std::vector<CustomPlannerNode::MissionSegment> CustomPlannerNode::buildMissionSe
         seg.nodes.push_back(v);
       }
     }
-    if (!seg.nodes.empty()) out.push_back(seg);
+    if (!seg.nodes.empty()) {
+      seg.pause_after_wp_index = std::move(leg_pause);
+      out.push_back(seg);
+    }
   }
   return out;
 }
 
 std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue& leg,
-                                                      const std::string& color_sequence) const {
+                                                      const std::string& color_sequence,
+                                                      std::vector<uint32_t>* leg_pause_out) const {
   std::vector<int> out;
+  std::vector<std::pair<int, int>> shelf_pick_wait_pairs;
   if (leg.getType() != XmlRpc::XmlRpcValue::TypeArray) return out;
   for (int i = 0; i < leg.size(); ++i) {
     const XmlRpc::XmlRpcValue& item = leg[i];
@@ -239,7 +295,13 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
       bool wait_pick = false;
       if (parseColorWithWaitSuffix(token, color_token, wait_pick)) {
         const int input = resolveIndexedColorNode(color_token, color_sequence);
-        if (input >= 0) appendWarehousePickupTraversal(input, out, wait_pick);
+        if (input >= 0) {
+          appendWarehousePickupTraversal(input, out, wait_pick);
+          if (wait_pick) {
+            const int ap = approachNodeForInputShelf(input);
+            if (ap >= 0) shelf_pick_wait_pairs.push_back(std::make_pair(input, ap));
+          }
+        }
         continue;
       }
       const int input = resolveIndexedColorNode(token, color_sequence);
@@ -252,6 +314,27 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
     if (tryReadInt(item, v)) out.push_back(v);
   }
   collapseConsecutiveDuplicateNodes(out);
+  if (leg_pause_out && !shelf_pick_wait_pairs.empty()) {
+    size_t search_from = 0;
+    for (const auto& pr : shelf_pick_wait_pairs) {
+      const int shelf = pr.first;
+      const int ap = pr.second;
+      bool found = false;
+      for (size_t j = search_from; j + 2 < out.size(); ++j) {
+        if (out[j] == ap && out[j + 1] == shelf && out[j + 2] == ap) {
+          leg_pause_out->push_back(static_cast<uint32_t>(j + 1));
+          ROS_INFO("custom_planner: pause_after_wp_index=%zu (human=%zu) after shelf node %d (approach %d)",
+                   static_cast<size_t>(j + 1), static_cast<size_t>(j + 2), shelf, ap);
+          search_from = j + 3;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        ROS_WARN("custom_planner: could not locate shelf %d / approach %d triplet after collapse", shelf, ap);
+      }
+    }
+  }
   return out;
 }
 
@@ -341,19 +424,14 @@ bool CustomPlannerNode::tryReadInt(const XmlRpc::XmlRpcValue& item, int& value) 
 
 void CustomPlannerNode::appendWarehousePickupTraversal(int input_shelf_node, std::vector<int>& out,
                                                        bool wait_at_pick) const {
-  int approach = -1;
-  switch (input_shelf_node) {
-    case 0: approach = 8; break;
-    case 1: approach = 9; break;
-    case 2: approach = 10; break;
-    case 3: approach = 11; break;
-    default:
-      out.push_back(input_shelf_node);
-      return;
+  const int approach = approachNodeForInputShelf(input_shelf_node);
+  if (approach < 0) {
+    out.push_back(input_shelf_node);
+    return;
   }
   out.push_back(approach);
   out.push_back(input_shelf_node);
-  if (wait_at_pick) out.push_back(-1);
+  (void)wait_at_pick;
   out.push_back(approach);
 }
 
@@ -380,10 +458,17 @@ void CustomPlannerNode::publishCurrentSegment() {
   }
   if (!validatePath(current.nodes)) {
     ROS_ERROR("custom_planner: invalid segment path.");
+    active_segment_has_intrinsic_wait_ = false;
     setState(STATE_IDLE);
     return;
   }
   active_segment_nodes_ = current.nodes;
+  active_segment_has_intrinsic_wait_ = !current.pause_after_wp_index.empty();
+
+  std_msgs::UInt32MultiArray pause_msg;
+  pause_msg.data.assign(current.pause_after_wp_index.begin(), current.pause_after_wp_index.end());
+  nav_pause_after_wp_index_pub_.publish(pause_msg);
+
   std_msgs::Int32MultiArray path_msg;
   path_msg.data.clear();
   if (current.notify_robot_id != -2) {
@@ -393,7 +478,7 @@ void CustomPlannerNode::publishCurrentSegment() {
   planned_paths_pub_.publish(path_msg);
   setState(STATE_NAVIGATING);
 
-  if (current.wait_after) {
+  if (current.wait_after && current.pause_after_wp_index.empty()) {
     MissionSegment wait_marker;
     wait_marker.wait_after = true;
     pending_segments_.push_front(wait_marker);
@@ -414,6 +499,7 @@ void CustomPlannerNode::advanceStateMachineAfterSegment() {
     publishCurrentSegment();
     return;
   }
+  active_segment_has_intrinsic_wait_ = false;
   setState(STATE_IDLE);
 }
 
