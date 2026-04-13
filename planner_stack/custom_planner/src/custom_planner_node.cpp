@@ -21,6 +21,21 @@ int approachNodeForInputShelf(int shelf) {
       return -1;
   }
 }
+
+/** Mission leg tokens from YAML: MSG_* encoded as -1000 - robot_id (see parseMessageToken). */
+bool isMsgLegToken(int v) { return v <= -1000 && v >= -1000 - 255; }
+
+/** Graph node id in expanded leg (excludes W=-1 and MSG tokens). Matches /planned_paths body indices. */
+bool isPhysicalGraphNode(int v) { return v != -1 && !isMsgLegToken(v); }
+
+/** 0-based index of out[out_idx] among physical nodes only (NavPlan / planned_paths order). */
+uint32_t physicalNodeIndexAtOutIndex(const std::vector<int>& out, size_t out_idx) {
+  uint32_t cnt = 0;
+  for (size_t i = 0; i < out_idx && i < out.size(); ++i) {
+    if (isPhysicalGraphNode(out[i])) ++cnt;
+  }
+  return cnt;
+}
 }  // namespace
 
 #define CP_DBG(...)        \
@@ -230,16 +245,21 @@ std::vector<CustomPlannerNode::MissionSegment> CustomPlannerNode::buildMissionSe
     std::vector<uint32_t> leg_pause;
     std::vector<int> leg_nodes = resolveMissionLeg(targets[i], color_sequence, &leg_pause);
     if (leg_nodes.empty()) continue;
+    // Only drop _W metadata if there is a mid-leg "W" (-1) after some graph nodes (ambiguous vs shelf pause).
+    // Leading W (-1 before any physical node) does not invalidate shelf indices.
     if (!leg_pause.empty()) {
-      bool has_split = false;
+      bool seen_physical = false;
+      bool mid_leg_wait = false;
       for (int v : leg_nodes) {
         if (v == -1) {
-          has_split = true;
-          break;
+          if (seen_physical) mid_leg_wait = true;
+        } else if (isPhysicalGraphNode(v) || isMsgLegToken(v)) {
+          if (isPhysicalGraphNode(v)) seen_physical = true;
         }
       }
-      if (has_split) {
-        ROS_WARN("custom_planner: leg has pause_after_wp_index and -1 splits; dropping pause metadata for safety");
+      if (mid_leg_wait) {
+        ROS_WARN(
+            "custom_planner: leg has pause_after_wp_index and mid-leg W (-1); dropping pause metadata for safety");
         leg_pause.clear();
       }
     }
@@ -327,9 +347,12 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
       bool found = false;
       for (size_t j = search_from; j + 2 < out.size(); ++j) {
         if (out[j] == ap && out[j + 1] == shelf && out[j + 2] == ap) {
-          leg_pause_out->push_back(static_cast<uint32_t>(j + 1));
-          ROS_INFO("custom_planner: pause_after_wp_index=%zu (human=%zu) after shelf node %d (approach %d)",
-                   static_cast<size_t>(j + 1), static_cast<size_t>(j + 2), shelf, ap);
+          const uint32_t pause_idx = physicalNodeIndexAtOutIndex(out, j + 1);
+          leg_pause_out->push_back(pause_idx);
+          ROS_INFO(
+              "custom_planner: pause_after_wp_index=%u (human=%u) at shelf node %d after approach %d "
+              "(physical path index, not raw leg token index)",
+              static_cast<unsigned>(pause_idx), static_cast<unsigned>(pause_idx + 1), shelf, ap);
           search_from = j + 3;
           found = true;
           break;
