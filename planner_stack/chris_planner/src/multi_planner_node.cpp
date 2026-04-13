@@ -379,8 +379,9 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
     }
 
     auto full_path = dropFirstNodeUnlessStart31(extendPathWithPreviousNode(best_path));
-    auto compact_path = dropFirstNodeUnlessStart31(
-        extendPathWithPreviousNode(compactExistingPath(best_path)));
+    auto compact_path = adaptPublishedPath(
+        dropFirstNodeUnlessStart31(
+            extendPathWithPreviousNode(compactExistingPath(best_path))));
 
     if (isWarehouseNode(best_goal)) {
         int side_node = determineApproachSideNode(best_path, best_goal);
@@ -691,6 +692,17 @@ std::vector<int> MultiPlannerNode::dropFirstNodeUnlessStart31(
     if (path.front() == 31) return path;
 
     return std::vector<int>(path.begin() + 1, path.end());
+}
+
+std::vector<int> MultiPlannerNode::adaptPublishedPath(
+    const std::vector<int>& path) const
+{
+    auto adapted = path;
+    for (int i = 1; i < static_cast<int>(adapted.size()); ++i) {
+        if (adapted[i - 1] == 7 && adapted[i] == 30)
+            adapted[i] = 130;
+    }
+    return adapted;
 }
 
 // =====================================================================

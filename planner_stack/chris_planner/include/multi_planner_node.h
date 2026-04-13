@@ -54,6 +54,7 @@ private:
     double pathCost(const std::vector<int>& path) const;
     std::vector<int> extendPathWithPreviousNode(const std::vector<int>& path) const;
     std::vector<int> dropFirstNodeUnlessStart31(const std::vector<int>& path) const;
+    std::vector<int> adaptPublishedPath(const std::vector<int>& path) const;
 
     // Reservation system
     bool reserveBoxAtPlanning(const std::string& robot_id, int pickup_node);
