@@ -6,7 +6,8 @@ navigationFsm(navigation::states::idle), followLineFsm(navigation::followLineSta
 k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false, false, false, -1}), tfBuffer(), tfListener(tfBuffer),
 in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake_ref_dist_(0.1),
     process_warehouse_goto_align_done_(false), process_warehouse_goto_start_dist_(0.0),
-    process_warehouse_goto_completion_sent_(false) {
+    process_warehouse_goto_completion_sent_(false), drop_magnet_wiggle_start_yaw_(0.0),
+    drop_magnet_wiggle_target_rad_(0.0) {
 
     mode = "idle";
 
@@ -199,7 +200,7 @@ void NavigationController::loadNavigationParams() {
     nh_fl.param("gain_approaching_fwd_process", param.gain_approaching_fwd_process, param.gain_approaching_fwd_pickdrop);
     nh_fl.param("approaching_vel_process", param.approaching_vel_process, param.approaching_vel_pickdrop);
     nh_fl.param("pick_box_forward_vel", param.pick_box_forward_vel, 0.1);
-    nh_fl.param("drop_magnet_wiggle_duration_sec", param.drop_magnet_wiggle_duration_sec, 0.1);
+    nh_fl.param("drop_magnet_wiggle_angle_deg", param.drop_magnet_wiggle_angle_deg, 25.0);
     nh_fl.param("drop_magnet_wiggle_angular_vel", param.drop_magnet_wiggle_angular_vel, 0.8);
 
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f (follow_line from /follow_line/navigation_controller)", 
@@ -216,11 +217,12 @@ void NavigationController::transitionAfterDropWarehouse(const char* trace_tag) {
     completion_feedback_sent = false;
     if (route.empty()) {
         navigationFsm.new_state = navigation::states::idle;
-    } else if (route.front().backwards && param.drop_magnet_wiggle_duration_sec > 1e-6) {
-        drop_magnet_wiggle_start_time_ = ros::Time::now();
+    } else if (route.front().backwards && param.drop_magnet_wiggle_angle_deg > 1e-6) {
+        drop_magnet_wiggle_start_yaw_ = poseCurr.theta;
+        drop_magnet_wiggle_target_rad_ = param.drop_magnet_wiggle_angle_deg * M_PI / 180.0;
         navigationFsm.new_state = navigation::states::dropMagnetReleaseWiggle;
-        ROS_INFO("NavigationController: Post-drop magnet wiggle: duration=%.3fs, w=%.3f rad/s (before backwards segment)",
-                 param.drop_magnet_wiggle_duration_sec, param.drop_magnet_wiggle_angular_vel);
+        ROS_INFO("NavigationController: Post-drop magnet wiggle: start_yaw=%.3f rad, target=%.2f deg, w=%.3f rad/s (before backwards segment)",
+                 drop_magnet_wiggle_start_yaw_, param.drop_magnet_wiggle_angle_deg, param.drop_magnet_wiggle_angular_vel);
     } else {
         navigationFsm.new_state = navigation::states::done;
     }
@@ -1128,10 +1130,12 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     }
 
     else if (navigationFsm.state == navigation::states::dropMagnetReleaseWiggle && enable) {
-        const double elapsed = (ros::Time::now() - drop_magnet_wiggle_start_time_).toSec();
-        if (elapsed >= param.drop_magnet_wiggle_duration_sec) {
+        double traveled = normalizeAngle(poseCurr.theta - drop_magnet_wiggle_start_yaw_);
+        if (traveled < 0.0) traveled += 2.0 * M_PI;
+        if (traveled >= drop_magnet_wiggle_target_rad_) {
             navigationFsm.new_state = navigation::states::done;
-            ROS_INFO("NavigationController: dropMagnetReleaseWiggle finished (elapsed=%.3fs)", elapsed);
+            ROS_INFO("NavigationController: dropMagnetReleaseWiggle finished (traveled=%.3f rad, target=%.3f rad)",
+                     traveled, drop_magnet_wiggle_target_rad_);
         }
     }
 
@@ -1163,8 +1167,11 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
         v_d = 0.0;
         double w_cmd = param.drop_magnet_wiggle_angular_vel;
         if (std::abs(w_cmd) > param.w_nom) w_cmd = std::copysign(param.w_nom, w_cmd);
-        w_d = w_cmd;
-        ROS_INFO_THROTTLE(0.2, "NavigationController: dropMagnetReleaseWiggle w_d=%.3f rad/s", w_d);
+        w_d = std::abs(w_cmd);
+        double traveled = normalizeAngle(poseCurr.theta - drop_magnet_wiggle_start_yaw_);
+        if (traveled < 0.0) traveled += 2.0 * M_PI;
+        ROS_INFO_THROTTLE(0.2, "NavigationController: dropMagnetReleaseWiggle w_d=%.3f rad/s traveled=%.1f/%.1f deg",
+                          w_d, traveled * 180.0 / M_PI, drop_magnet_wiggle_target_rad_ * 180.0 / M_PI);
     }
     else {
         v_d = 0.0;
