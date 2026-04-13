@@ -29,6 +29,7 @@
 #include <std_msgs/Int32.h>
 #include <std_msgs/UInt32MultiArray.h>
 #include <std_msgs/UInt32.h>
+#include <std_msgs/UInt32MultiArray.h>
 
 
 
@@ -211,6 +212,9 @@ class NavigationController {
         void navPauseAfterWpIndexCb(const std_msgs::UInt32MultiArray::ConstPtr& msg);
         ros::Publisher nav_route_pause_request_pub_;
         void onRouteWaypointConsumedForPauseCheck(const WayPoint& consumed);
+        /** Monotonic id from NavPlan.header.seq when route loaded from /nav_plan (plan_handler). */
+        uint32_t loaded_nav_plan_seq_{0};
+        ros::Publisher nav_plan_waypoint_consumed_pub_;
         std::mutex nav_pause_mtx_;
         std::vector<uint32_t> staged_nav_pause_indices_;
         std::multiset<uint32_t> pause_remaining_after_wp_;

@@ -44,6 +44,14 @@ in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake
     nav_route_pause_request_pub_ = nh.advertise<std_msgs::Bool>(nav_pause_req_topic, 5, false);
     ROS_INFO("NavigationController: pause indices %s, pause request pub %s", nav_pause_topic.c_str(),
              nav_pause_req_topic.c_str());
+
+    std::string consumed_topic;
+    nh.param<std::string>("nav_plan_waypoint_consumed_topic", consumed_topic,
+                          std::string("/nav_plan_waypoint_consumed"));
+    nav_plan_waypoint_consumed_pub_ =
+        nh.advertise<std_msgs::UInt32MultiArray>(consumed_topic, 50, false);
+    ROS_INFO("NavigationController: publishing consumed plan_index on %s (data: [nav_plan_seq, plan_index])",
+             consumed_topic.c_str());
     velPub = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 10);
     lineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_lines", 1, true);  // latch=true para RViz ver imediatamente
     virtualLineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_virtual_line", 1, true);
@@ -93,6 +101,16 @@ void NavigationController::navPauseAfterWpIndexCb(const std_msgs::UInt32MultiArr
 
 void NavigationController::onRouteWaypointConsumedForPauseCheck(const WayPoint& consumed) {
     if (consumed.plan_index < 0) return;
+
+    {
+        std_msgs::UInt32MultiArray ev;
+        ev.layout.dim.clear();
+        ev.data.resize(2);
+        ev.data[0] = loaded_nav_plan_seq_;
+        ev.data[1] = static_cast<uint32_t>(consumed.plan_index);
+        nav_plan_waypoint_consumed_pub_.publish(ev);
+    }
+
     const uint32_t idx = static_cast<uint32_t>(consumed.plan_index);
     auto it = pause_remaining_after_wp_.find(idx);
     if (it == pause_remaining_after_wp_.end()) return;
@@ -1377,6 +1395,8 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
         ROS_WARN("NavigationController: Received empty NavPlan, ignoring");
         return;
     }
+
+    loaded_nav_plan_seq_ = static_cast<uint32_t>(msg->header.seq);
 
     last_published_np_node_id_ = -999;
 

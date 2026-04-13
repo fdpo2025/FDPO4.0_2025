@@ -119,6 +119,11 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_) : nh(nh_)
 
     // ROS subscribers e publishers
     plannedPathsSub = nh.subscribe(planned_paths_topic, queue_size, &PlanHandlerNode::plannedPathsCallback, this);
+    std::string consumed_topic;
+    nh.param<std::string>("nav_plan_waypoint_consumed_topic", consumed_topic,
+                          std::string("/nav_plan_waypoint_consumed"));
+    navPlanWaypointConsumedSub_ =
+        nh.subscribe(consumed_topic, 50, &PlanHandlerNode::navPlanWaypointConsumedCallback, this);
     navCompletionFeedbackSub = nh.subscribe("/nav_completion_feedback", 10, &PlanHandlerNode::navCompletionFeedbackCallback, this);
     navPlanPub = nh.advertise<plan_handler::NavPlan>("/nav_plan", 10);
     pickBoxPub = nh.advertise<std_msgs::Bool>("/pick_box", 10);
@@ -126,6 +131,7 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_) : nh(nh_)
     stopWaitingSendPub = nh.advertise<std_msgs::Bool>("/stop_waiting_send", 10);
 
     ROS_INFO("PlanHandlerNode subscribing to: %s (queue_size: %d)", planned_paths_topic.c_str(), queue_size);
+    ROS_INFO("PlanHandlerNode subscribing to: %s (deferred MSG via nav consumption)", consumed_topic.c_str());
     ROS_INFO("PlanHandlerNode subscribing to: /nav_completion_feedback");
     ROS_INFO("PlanHandlerNode publishing to: /nav_plan");
     ROS_INFO("PlanHandlerNode publishing to: /pick_box");
@@ -157,14 +163,31 @@ void PlanHandlerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
     stopWaitingResetTimerValid = true;
 }
 
+void PlanHandlerNode::navPlanWaypointConsumedCallback(const std_msgs::UInt32MultiArray::ConstPtr& msg) {
+    if (msg->data.size() < 2) return;
+    const uint32_t seq = msg->data[0];
+    const int consumed_index = static_cast<int>(msg->data[1]);
+    for (auto it = pending_msg_pulses_.begin(); it != pending_msg_pulses_.end();) {
+        if (it->nav_plan_seq == seq && it->trigger_plan_index == consumed_index) {
+            publishRadioStopWaitingPulse(it->target_robot_id);
+            it = pending_msg_pulses_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::ConstPtr& msg)
 {
+    pending_msg_pulses_.clear();
+
     std::vector<ControllerPoint> control_points;
     bool is_first_node = true;
 
+    std::vector<uint32_t> msg_targets;
     size_t idx = 0;
     while (idx < msg->data.size() && isPlannedPathMsgSentinel(msg->data[idx])) {
-        publishRadioStopWaitingPulse(decodeMsgTargetRobotId(msg->data[idx]));
+        msg_targets.push_back(decodeMsgTargetRobotId(msg->data[idx]));
         ++idx;
     }
 
@@ -290,10 +313,31 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
 
     ROS_INFO("PlanHandlerNode: Received new path with %zu waypoints. Stack size: %zu", control_points.size(), plan_stack.size());
 
+    if (!msg_targets.empty() && control_points.empty()) {
+        ROS_WARN(
+            "PlanHandlerNode: MSG sentinel(s) on /planned_paths but no NavPlan points after processing; "
+            "deferred radio pulse(s) skipped");
+    }
+
     if (!control_points.empty()) {
         plan_handler::NavPlan nav_plan;
         nav_plan.header.stamp = ros::Time::now();
         nav_plan.header.frame_id = "map";
+        const uint32_t seq = ++nav_plan_publish_seq_;
+        nav_plan.header.seq = static_cast<uint32_t>(seq);
+
+        const int trigger_plan_index = static_cast<int>(control_points.size()) - 1;
+        for (uint32_t tid : msg_targets) {
+            PendingMsgPulse p;
+            p.target_robot_id = tid;
+            p.trigger_plan_index = trigger_plan_index;
+            p.nav_plan_seq = seq;
+            pending_msg_pulses_.push_back(p);
+            ROS_INFO(
+                "PlanHandlerNode: deferred MSG pulse target_robot=%u until navigation consumes plan_index=%d "
+                "(0-based, %zu NavPlan points, nav_plan seq=%u)",
+                tid, trigger_plan_index, control_points.size(), seq);
+        }
 
         nav_plan.points.resize(control_points.size());
 

@@ -488,9 +488,7 @@ void CustomPlannerNode::publishCurrentSegment() {
     wait_marker.wait_after = true;
     pending_segments_.push_front(wait_marker);
   }
-  if (current.notify_robot_id != -2) {
-    publishRadioWakeRequest(current.notify_robot_id);
-  }
+  // MSG_* radio pulse is deferred to plan_handler until navigation_controller consumes the target plan_index.
 }
 
 void CustomPlannerNode::advanceStateMachineAfterSegment() {
