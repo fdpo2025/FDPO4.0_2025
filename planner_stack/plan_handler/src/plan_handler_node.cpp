@@ -179,7 +179,9 @@ void PlanHandlerNode::navPlanWaypointConsumedCallback(const std_msgs::UInt32Mult
 
 void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::ConstPtr& msg)
 {
-    pending_msg_pulses_.clear();
+    // Do not clear pending_msg_pulses_ here: a new /planned_paths may arrive (e.g. next segment
+    // when this_current_pose hits the last node) before navigation_controller publishes consumption
+    // of the previous NavPlan's last plan_index — that would drop the deferred MSG pulse.
 
     std::vector<ControllerPoint> control_points;
     bool is_first_node = true;
