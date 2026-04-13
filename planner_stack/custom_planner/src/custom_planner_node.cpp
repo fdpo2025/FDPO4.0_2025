@@ -147,6 +147,11 @@ void CustomPlannerNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& msg) {
 void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {
   std::lock_guard<std::mutex> lock(mtx_);
   // wait_state mirrors network "waiting" for this robot_id (CMD wt_send + radio).
+  if (state_ == STATE_WAITING && wait_state_resync_armed_) {
+    last_pi_wait_state_ = msg->data;
+    wait_state_resync_armed_ = false;
+    return;
+  }
   const bool prev = last_pi_wait_state_;
   last_pi_wait_state_ = msg->data;
   if (state_ != STATE_WAITING) return;
@@ -506,6 +511,9 @@ void CustomPlannerNode::advanceStateMachineAfterSegment() {
 void CustomPlannerNode::setState(MissionState new_state) {
   const MissionState prev = state_;
   state_ = new_state;
+  if (new_state == STATE_WAITING && prev != STATE_WAITING) {
+    wait_state_resync_armed_ = true;
+  }
   if (prev == STATE_WAITING && new_state != STATE_WAITING) {
     std_msgs::Bool wt;
     wt.data = false;

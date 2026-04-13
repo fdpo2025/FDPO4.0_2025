@@ -103,5 +103,8 @@ class CustomPlannerNode {
   bool debug_verbose_ = false;
   /** Last /pi_pico_driver/wait_state from network (true = this robot waiting on radio). */
   bool last_pi_wait_state_ = false;
+  /** After entering STATE_WAITING, ignore one edge cycle: re-baseline last_pi_wait_state_ so a stale
+   *  True→False from before this wait cannot immediately release (fixes leading "W" skipped). */
+  bool wait_state_resync_armed_ = false;
 };
 
