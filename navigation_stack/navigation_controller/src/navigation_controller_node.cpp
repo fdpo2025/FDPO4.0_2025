@@ -903,18 +903,24 @@ void NavigationController::followLine() {
     }
 
     followLineFsm.set_state();
-    
-    const double completion_threshold = 0.7;
-    if (line_progress > completion_threshold && !completion_feedback_sent) {
+
+    // Same threshold as driveToGoal line switch — avoids plan_handler pruning plan_stack at
+    // hardcoded 70% while the controller only pops at per-waypoint line_switch_ratio (e.g. 75%).
+    const double completion_switch = (currentWaypoint.line_switch_ratio > 0)
+                                         ? currentWaypoint.line_switch_ratio
+                                         : param.line_switch_ratio;
+    if (line_progress >= completion_switch && !completion_feedback_sent) {
         plan_handler::CompletionFeedback feedback;
         feedback.x = line.pf.pose.x;
         feedback.y = line.pf.pose.y;
         navCompletionFeedbackPub.publish(feedback);
         completion_feedback_sent = true;
-        ROS_INFO("NavigationController: Published completion feedback for waypoint (%.3f, %.3f) at %.1f%% progress", 
-                 feedback.x, feedback.y, line_progress * 100.0);
+        ROS_INFO(
+            "NavigationController: Published completion feedback for waypoint (%.3f, %.3f) at %.1f%% progress "
+            "(threshold=%.0f%% = line_switch_ratio)",
+            feedback.x, feedback.y, line_progress * 100.0, completion_switch * 100.0);
     }
-    if (line_progress < completion_threshold) {
+    if (line_progress < completion_switch) {
         completion_feedback_sent = false;
     }
 
