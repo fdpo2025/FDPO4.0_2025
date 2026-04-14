@@ -1,5 +1,6 @@
 #include "ekf_localizer/localizer_node.h"
 
+#include <ros/param.h>
 #include <string>
 
 namespace {
@@ -66,6 +67,11 @@ LocalizerNode::LocalizerNode(ros::NodeHandle& nh) : nh(nh), tf_buffer(ros::Durat
     X_state(0) = init_x;
     X_state(1) = init_y;
     X_state(2) = init_theta;
+
+    // Espelhar no param server a pose efetiva (missions ou ekf_params) — mesmo caminho que o launch carrega.
+    ros::param::set("/ekf_params/initial_pose/x", init_x);
+    ros::param::set("/ekf_params/initial_pose/y", init_y);
+    ros::param::set("/ekf_params/initial_pose/theta", init_theta);
     
     ROS_INFO("[LocalizerNode] Initial pose: x=%.3f, y=%.3f, theta=%.3f rad (%.1f°)", 
              init_x, init_y, init_theta, init_theta * 180.0 / M_PI);
