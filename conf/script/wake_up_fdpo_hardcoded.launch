@@ -8,7 +8,8 @@
 	<arg name="lidar_driver" default="ydlidar" doc="Escolha o driver de LiDAR: 'hlds' ou 'ydlidar'"/>
 	<arg name="debug_pico_comm" default="false" doc="Mostrar logs de comunicação Pi4-Pico (com throttle no driver)"/>
 	<arg name="pico_robot_id" default="0" doc="ROBOT_ID no Pico (0-based); handshake série e missions.robot_N"/>
-	<arg name="pico_num_robots" default="2" doc="NUM_ROBOTS no firmware (2–4); handshake + missions_2 / missions_3 no custom_planner"/>
+	<arg name="pico_num_robots" default="2" doc="NUM_ROBOTS no firmware (2–4); handshake + missions_2/3/4 no custom_planner e EKF spawn"/>
+	<arg name="spawn_manga" default="manga_1" doc="robot_spawns em missions.yaml antes da color_sequence (EKF + alinhamento)"/>
 	<arg name="use_ekf" default="true" doc="Usar EKF localizer com beacons (se false, map=odom, só odometria)"/>
 	<arg name="use_raw_odom" default="false" doc="Usar odometria pura (/odom) em vez de filtrada. Só funciona quando use_ekf=false"/>
 	<arg name="use_ss_controller" default="false" doc="Usar state space controller (true) ou controlador original (false)"/>
@@ -39,6 +40,8 @@
 		<arg name="use_raw_odom" value="$(arg use_raw_odom)"/>
 		<arg name="use_ss_controller" value="$(arg use_ss_controller)"/>
 		<arg name="robot_id" value="$(arg robot_id)" />
+		<arg name="num_robots" value="$(arg pico_num_robots)" />
+		<arg name="spawn_manga" value="$(arg spawn_manga)" />
 	</include>
 
 	<include if="$(arg use_hmi)" file="$(find conf)/system/hmi.xml">

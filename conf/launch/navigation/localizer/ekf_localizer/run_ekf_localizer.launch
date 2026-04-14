@@ -1,9 +1,17 @@
 <launch>
-  <arg name="robot_id" default="0" doc="Índice 0-based; 0=ekf_params.yaml, outro=robot2"/>
+  <arg name="robot_id" default="0" doc="Índice 0-based (Pico / frota); escolhe robot_spawns/robot_N em missions.yaml"/>
+  <arg name="num_robots" default="2" doc="Tamanho da frota: missions_2 (≤2), missions_3 (3), missions_4 (≥4)"/>
+  <arg name="spawn_manga" default="manga_1" doc="Chave da manga em missions.yaml (robot_spawns por manga)"/>
 
-  <!-- Load EKF parameters based on fleet index (0 = default robot) -->
-  <rosparam if="$(eval int(str(arg('robot_id')).strip()) == 0)" file="$(find conf)/launch/navigation/localizer/ekf_params.yaml" command="load"/>
-  <rosparam unless="$(eval int(str(arg('robot_id')).strip()) == 0)" file="$(find conf)/launch/navigation/localizer/ekf_params_robot2.yaml" command="load"/>
-  
-  <node name="localizer_node" pkg="localizer" type="localizer_node" output="screen"/>
+  <!-- Covariâncias / Q: base comum; a pose inicial vem de missions.yaml quando disponível -->
+  <rosparam file="$(find conf)/launch/navigation/localizer/ekf_params.yaml" command="load"/>
+  <!-- Mesmo ficheiro que o custom_planner; namespace fixo para o localizer ler por robot_id -->
+  <rosparam file="$(find custom_planner)/config/missions.yaml" command="load" ns="/fdpo_missions"/>
+
+  <node name="localizer_node" pkg="localizer" type="localizer_node" output="screen">
+    <param name="robot_id" value="$(arg robot_id)"/>
+    <param name="num_robots" value="$(arg num_robots)"/>
+    <param name="spawn_manga" value="$(arg spawn_manga)"/>
+    <param name="use_missions_spawn" value="true"/>
+  </node>
 </launch>

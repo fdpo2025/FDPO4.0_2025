@@ -20,6 +20,7 @@
 	<arg name="use_wifi" default="true" />
 	<arg name="planner_type" default="chris" doc="chris ou multi"/>
 	<arg name="robot_id" default="0" doc="ID do robo para comunicacoes (0 ou 1)"/>
+	<arg name="spawn_manga" default="manga_1" doc="EKF: robot_spawns em missions.yaml (antes da missão)"/>
 
 	<!-- HAL: Hardware Abstraction Layer (LiDAR, etc) -->
 	<include if="$(arg use_hal)" file="$(find conf)/system/hal.xml">
@@ -36,6 +37,8 @@
 		<arg name="use_raw_odom" value="$(arg use_raw_odom)"/>
 		<arg name="use_ss_controller" value="$(arg use_ss_controller)"/>
 		<arg name="robot_id" value="$(arg robot_id)" />
+		<arg name="num_robots" value="$(arg pico_num_robots)" />
+		<arg name="spawn_manga" value="$(arg spawn_manga)" />
 	</include>
     
 	<!-- HMI: Interface Humano-Máquina (Mapa, RViz, etc) -->

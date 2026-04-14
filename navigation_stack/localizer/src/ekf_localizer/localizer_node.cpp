@@ -1,15 +1,67 @@
 #include "ekf_localizer/localizer_node.h"
 
+#include <string>
+
+namespace {
+
+/** Align with missions.yaml top-level keys (custom_planner uses missions_2 / missions_3; missions_4 for 4 robots). */
+std::string missionsRootKeyFromFleetSize(int num_robots) {
+  if (num_robots <= 2) return "missions_2";
+  if (num_robots == 3) return "missions_3";
+  return "missions_4";
+}
+
+/** Override initial pose from /fdpo_missions/<missions_key>/<spawn_manga>/robot_spawns/robot_<id> (see run_ekf_localizer.launch). */
+bool tryLoadSpawnFromMissions(const ros::NodeHandle& nh, int robot_id, int num_robots, const std::string& spawn_manga,
+                              double* out_x, double* out_y, double* out_theta) {
+  bool use_missions_spawn = true;
+  nh.param("use_missions_spawn", use_missions_spawn, true);
+  if (!use_missions_spawn) return false;
+
+  const std::string root = missionsRootKeyFromFleetSize(num_robots);
+  const std::string base =
+      "/fdpo_missions/" + root + "/" + spawn_manga + "/robot_spawns/robot_" + std::to_string(robot_id);
+
+  double mx = 0.0, my = 0.0, mtheta = 0.0;
+  if (!ros::param::get(base + "/x", mx) || !ros::param::get(base + "/y", my) ||
+      !ros::param::get(base + "/theta", mtheta)) {
+    ROS_WARN("[LocalizerNode] No spawn params at %s; using ekf_params initial_pose.", base.c_str());
+    return false;
+  }
+  *out_x = mx;
+  *out_y = my;
+  *out_theta = mtheta;
+  ROS_INFO("[LocalizerNode] Initial pose from missions.yaml: %s → x=%.3f y=%.3f theta=%.3f rad", base.c_str(), mx, my,
+           mtheta);
+  return true;
+}
+
+}  // namespace
+
 LocalizerNode::LocalizerNode(ros::NodeHandle& nh) : nh(nh), tf_buffer(ros::Duration(10.0))  {
 
     loadBeaconsFromParams();
     loadEKFParams();
 
-    // Pos. inicial (configurável via parâmetros)
+    // Pos. inicial: ekf_params (fallback) + opcional override por robot_spawns em missions.yaml
     double init_x, init_y, init_theta;
     nh.param("ekf_params/initial_pose/x", init_x, 0.0);
     nh.param("ekf_params/initial_pose/y", init_y, 0.0);
     nh.param("ekf_params/initial_pose/theta", init_theta, 0.0);
+
+    int robot_id = 0;
+    nh.param("robot_id", robot_id, 0);
+    int num_robots = 2;
+    nh.param("num_robots", num_robots, 2);
+    std::string spawn_manga = "manga_1";
+    nh.param("spawn_manga", spawn_manga, std::string("manga_1"));
+
+    double sx = 0.0, sy = 0.0, st = 0.0;
+    if (tryLoadSpawnFromMissions(nh, robot_id, num_robots, spawn_manga, &sx, &sy, &st)) {
+      init_x = sx;
+      init_y = sy;
+      init_theta = st;
+    }
     
     X_state(0) = init_x;
     X_state(1) = init_y;

@@ -1,4 +1,6 @@
-# EKF Localizer Parameters - Robot 2
+# EKF Localizer Parameters - Robot 2 (legado)
+# Com run_ekf_localizer.launch atual, a pose inicial vem de missions.yaml (robot_spawns por robot_id).
+# Este ficheiro já não é carregado pelo launch; mantido só como referência.
 # Configuration of covariance matrices for the Extended Kalman Filter
 
 ekf_params:

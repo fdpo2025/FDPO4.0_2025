@@ -9,8 +9,10 @@
 
   <arg name="use_ss_controller" default="false" doc="Use state space controller (true) or original controller (false)"/>
   <arg name="use_raw_odom" default="false" doc="Use raw odometry (/odom) instead of filtered (/odometry/filtered). Only effective when use_ekf=false"/>
-  <!-- Índice de frota 0-based (igual ROBOT_ID na Pico / pi_pico_driver). 0 = YAML/ekf default; 1 = *_robot2. -->
+  <!-- Índice de frota 0-based (igual ROBOT_ID na Pico / pi_pico_driver). Pose inicial: missions.yaml robot_spawns. -->
   <arg name="robot_id" default="0" />
+  <arg name="num_robots" default="2" doc="Alinha missions_2 / missions_3 / missions_4 com custom_planner"/>
+  <arg name="spawn_manga" default="manga_1" doc="Chave da manga para robot_spawns (antes da color_sequence)"/>
 
   <!-- Navigation Controller: 
        - Se use_raw_odom=true: usa /odom (odometria pura)
@@ -32,6 +34,8 @@
   <!-- EKF Localizer -->
   <include if="$(arg use_ekf)" file="$(find conf)/launch/navigation/localizer/ekf_localizer/run_ekf_localizer.launch">
     <arg name="robot_id" value="$(arg robot_id)" />
+    <arg name="num_robots" value="$(arg num_robots)" />
+    <arg name="spawn_manga" value="$(arg spawn_manga)" />
   </include>
 
   <!-- without EKF: transformações estáticas -->

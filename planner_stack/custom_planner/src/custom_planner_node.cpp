@@ -38,6 +38,15 @@ uint32_t physicalNodeIndexAtOutIndex(const std::vector<int>& out, size_t out_idx
 }
 }  // namespace
 
+bool CustomPlannerNode::isWarehouseCoordinate(int node_id) {
+  const int resolved = (node_id >= 100) ? node_id - 100 : node_id;
+  static const std::unordered_set<int> kIds = {
+      0,   1,   2,   3,                    // input (plan_handler_node.cpp)
+      13,  14,  17,  18,  20,  21,  24,  25,  // process
+      35,  36,  37,  38};                   // output
+  return kIds.count(resolved) != 0;
+}
+
 #define CP_DBG(...)        \
   do {                     \
     if (debug_verbose_) {  \
@@ -110,7 +119,12 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
 }
 
 bool CustomPlannerNode::loadMissions() {
-  const std::string missions_key = (num_robots_ == 3) ? "missions_3" : "missions_2";
+  std::string missions_key = "missions_2";
+  if (num_robots_ == 3) {
+    missions_key = "missions_3";
+  } else if (num_robots_ >= 4) {
+    missions_key = "missions_4";
+  }
   if (!nh_.getParam(missions_key, missions_root_)) {
     ROS_ERROR("Missing '%s' parameter. Load config/missions.yaml in launch.", missions_key.c_str());
     return false;
@@ -212,7 +226,10 @@ void CustomPlannerNode::onNavPlanWaypointConsumed(const std_msgs::UInt32MultiArr
   }
   if (seq != active_nav_plan_seq_) return;
 
-  const uint32_t consumed_count = plan_index + 1;
+  // plan_handler drops the first planned_paths node from NavPlan if it is a warehouse; NavPlan
+  // plan_index advances one step behind mission physical-node count for that omission.
+  const uint32_t consumed_count =
+      plan_index + 1u + static_cast<uint32_t>(active_task_.plan_handler_skips_first_nav_waypoint);
   if (consumed_count <= consumed_nav_nodes_count_) return;
   consumed_nav_nodes_count_ = consumed_count;
   processTimelineLocked();
@@ -273,6 +290,12 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
       if (isPhysicalGraphNode(t)) task.nav_nodes.push_back(t);
     }
     if (task.nav_nodes.empty()) continue;
+    task.plan_handler_skips_first_nav_waypoint =
+        isWarehouseCoordinate(task.nav_nodes[0]) ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0);
+    if (task.plan_handler_skips_first_nav_waypoint && debug_verbose_) {
+      ROS_INFO("custom_planner: task first nav node %d is warehouse; compensating nav_plan consumed count (+1)",
+               task.nav_nodes[0]);
+    }
     uint32_t physical_before = 0;
     task.token_required_consumed_count.reserve(task.timeline_tokens.size());
     for (int t : task.timeline_tokens) {

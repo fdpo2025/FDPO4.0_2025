@@ -40,6 +40,12 @@ class CustomPlannerNode {
     std::vector<int> timeline_tokens;
     std::vector<int> nav_nodes;
     std::vector<uint32_t> token_required_consumed_count;
+    /**
+     * When 1, plan_handler omits the first /planned_paths node from NavPlan if it is a warehouse
+     * (same IDs as plan_handler_node). Timeline counts physical nodes in nav_nodes including that
+     * node, so we add this to (plan_index+1) when mapping nav_plan_waypoint_consumed.
+     */
+    uint8_t plan_handler_skips_first_nav_waypoint = 0;
   };
 
   void onMissionColorSequence(const std_msgs::String::ConstPtr& msg);
@@ -80,6 +86,9 @@ class CustomPlannerNode {
   void publishSpawnPose(const std::string& manga_key);
   void publishRadioWakeRequest(int wait_topic_value);
   bool tryReadDouble(const XmlRpc::XmlRpcValue& v, double& out) const;
+
+  /** Must match is_warehouse_coordinate in plan_handler_node.cpp (first-node skip rule). */
+  static bool isWarehouseCoordinate(int node_id);
 
   ros::NodeHandle nh_;
   ros::Subscriber mission_color_sub_;
