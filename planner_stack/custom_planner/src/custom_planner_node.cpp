@@ -275,9 +275,13 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   consumed_nav_nodes_count_ = 0;
   active_nav_plan_seq_ = 0;
   active_nav_plan_seq_valid_ = false;
+  mission_route_published_ = false;
   setState(STATE_NAVIGATING);
-  publishMissionRoute();
   processTimelineLocked();
+  if (state_ == STATE_NAVIGATING && !mission_route_published_) {
+    publishMissionRoute();
+    mission_route_published_ = true;
+  }
 }
 
 std::vector<CustomPlannerNode::MissionSegment> CustomPlannerNode::buildMissionSegments(
@@ -510,7 +514,10 @@ void CustomPlannerNode::appendWarehousePickupTraversal(int input_shelf_node, std
   }
   out.push_back(approach);
   out.push_back(input_shelf_node);
-  (void)wait_at_pick;
+  if (wait_at_pick) {
+    // _W semantics: pause exactly after consuming the shelf node.
+    out.push_back(-1);
+  }
   out.push_back(approach);
 }
 
@@ -598,6 +605,11 @@ void CustomPlannerNode::processTimelineLocked() {
     setState(STATE_IDLE);
   } else if (state_ == STATE_IDLE) {
     setState(STATE_NAVIGATING);
+  }
+
+  if (state_ == STATE_NAVIGATING && !mission_route_published_) {
+    publishMissionRoute();
+    mission_route_published_ = true;
   }
 }
 

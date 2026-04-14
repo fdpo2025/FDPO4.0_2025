@@ -102,6 +102,7 @@ class CustomPlannerNode {
   uint32_t consumed_nav_nodes_count_ = 0;
   uint32_t active_nav_plan_seq_ = 0;
   bool active_nav_plan_seq_valid_ = false;
+  bool mission_route_published_ = false;
   std::string last_color_sequence_;
   std::string pending_color_sequence_;
   int robot_id_ = -1;
