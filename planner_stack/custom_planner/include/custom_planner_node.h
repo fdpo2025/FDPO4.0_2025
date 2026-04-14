@@ -36,6 +36,12 @@ class CustomPlannerNode {
     std::vector<uint32_t> pause_after_wp_index;
   };
 
+  struct MissionTask {
+    std::vector<int> timeline_tokens;
+    std::vector<int> nav_nodes;
+    std::vector<uint32_t> token_required_consumed_count;
+  };
+
   void onMissionColorSequence(const std_msgs::String::ConstPtr& msg);
   void onRobotIdentity(const std_msgs::Int32::ConstPtr& msg);
   /** Same logic as /robot_identity callback; optional param initial_robot_id at startup. */
@@ -61,8 +67,9 @@ class CustomPlannerNode {
   void collapseConsecutiveDuplicateNodes(std::vector<int>& nodes) const;
 
   void startMission(const std::string& color_sequence);
-  void publishMissionRoute();
+  void publishMissionRoute(const std::vector<int>& nav_nodes);
   void processTimelineLocked();
+  bool loadNextTaskLocked();
   void publishRadioStopWaitingPulse(uint32_t target_robot_id);
   void setState(MissionState new_state);
 
@@ -96,8 +103,9 @@ class CustomPlannerNode {
   XmlRpc::XmlRpcValue missions_root_;
   std::vector<int> valid_node_ids_;
   std::unordered_map<int, int> color_input_node_by_index_;
-  std::vector<int> mission_timeline_tokens_;
-  std::vector<uint32_t> token_required_consumed_count_;
+  std::deque<MissionTask> pending_tasks_;
+  MissionTask active_task_;
+  bool has_active_task_ = false;
   size_t timeline_cursor_ = 0;
   uint32_t consumed_nav_nodes_count_ = 0;
   uint32_t active_nav_plan_seq_ = 0;

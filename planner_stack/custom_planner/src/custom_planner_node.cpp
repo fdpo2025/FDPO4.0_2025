@@ -196,6 +196,7 @@ void CustomPlannerNode::onThisCurrentPose(const std_msgs::UInt32::ConstPtr& msg)
 void CustomPlannerNode::onNavPlanWaypointConsumed(const std_msgs::UInt32MultiArray::ConstPtr& msg) {
   if (msg->data.size() < 2) return;
   std::lock_guard<std::mutex> lock(mtx_);
+  if (!has_active_task_ || !mission_route_published_) return;
   const uint32_t seq = msg->data[0];
   const uint32_t plan_index = msg->data[1];
 
@@ -221,8 +222,9 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   last_color_sequence_ = color_sequence;
   const std::string manga_key = selectMangaKey(color_sequence);
   publishSpawnPose(manga_key);
-  mission_timeline_tokens_.clear();
-  std::vector<int> nav_nodes;
+  pending_tasks_.clear();
+  has_active_task_ = false;
+  active_task_ = MissionTask();
 
   if (!missions_root_.valid() || !missions_root_.hasMember(manga_key)) {
     setState(STATE_IDLE);
@@ -248,27 +250,28 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   for (int i = 0; i < targets.size(); ++i) {
     std::vector<int> leg_nodes = resolveMissionLeg(targets[i], color_sequence, nullptr);
     if (leg_nodes.empty()) continue;
+    MissionTask task;
     for (int t : leg_nodes) {
-      mission_timeline_tokens_.push_back(t);
-      if (isPhysicalGraphNode(t)) nav_nodes.push_back(t);
+      task.timeline_tokens.push_back(t);
+      if (isPhysicalGraphNode(t)) task.nav_nodes.push_back(t);
     }
+    if (task.nav_nodes.empty()) continue;
+    uint32_t physical_before = 0;
+    task.token_required_consumed_count.reserve(task.timeline_tokens.size());
+    for (int t : task.timeline_tokens) {
+      if (isPhysicalGraphNode(t)) {
+        ++physical_before;
+        task.token_required_consumed_count.push_back(physical_before);
+      } else {
+        task.token_required_consumed_count.push_back(physical_before);
+      }
+    }
+    pending_tasks_.push_back(task);
   }
 
-  if (nav_nodes.empty()) {
+  if (pending_tasks_.empty()) {
     setState(STATE_IDLE);
     return;
-  }
-
-  token_required_consumed_count_.clear();
-  token_required_consumed_count_.reserve(mission_timeline_tokens_.size());
-  uint32_t physical_before = 0;
-  for (int t : mission_timeline_tokens_) {
-    if (isPhysicalGraphNode(t)) {
-      ++physical_before;
-      token_required_consumed_count_.push_back(physical_before);
-    } else {
-      token_required_consumed_count_.push_back(physical_before);
-    }
   }
 
   timeline_cursor_ = 0;
@@ -276,12 +279,12 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   active_nav_plan_seq_ = 0;
   active_nav_plan_seq_valid_ = false;
   mission_route_published_ = false;
+  if (!loadNextTaskLocked()) {
+    setState(STATE_IDLE);
+    return;
+  }
   setState(STATE_NAVIGATING);
   processTimelineLocked();
-  if (state_ == STATE_NAVIGATING && !mission_route_published_) {
-    publishMissionRoute();
-    mission_route_published_ = true;
-  }
 }
 
 std::vector<CustomPlannerNode::MissionSegment> CustomPlannerNode::buildMissionSegments(
@@ -530,12 +533,7 @@ void CustomPlannerNode::collapseConsecutiveDuplicateNodes(std::vector<int>& node
   nodes.swap(out);
 }
 
-void CustomPlannerNode::publishMissionRoute() {
-  std::vector<int> nav_nodes;
-  nav_nodes.reserve(mission_timeline_tokens_.size());
-  for (int t : mission_timeline_tokens_) {
-    if (isPhysicalGraphNode(t)) nav_nodes.push_back(t);
-  }
+void CustomPlannerNode::publishMissionRoute(const std::vector<int>& nav_nodes) {
   if (!validatePath(nav_nodes)) {
     ROS_ERROR("custom_planner: invalid mission route.");
     setState(STATE_IDLE);
@@ -575,13 +573,14 @@ void CustomPlannerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
 }
 
 void CustomPlannerNode::processTimelineLocked() {
+  if (!has_active_task_) return;
   if (state_ == STATE_WAITING) return;
 
-  while (timeline_cursor_ < mission_timeline_tokens_.size()) {
-    if (timeline_cursor_ >= token_required_consumed_count_.size()) break;
-    if (consumed_nav_nodes_count_ < token_required_consumed_count_[timeline_cursor_]) break;
+  while (timeline_cursor_ < active_task_.timeline_tokens.size()) {
+    if (timeline_cursor_ >= active_task_.token_required_consumed_count.size()) break;
+    if (consumed_nav_nodes_count_ < active_task_.token_required_consumed_count[timeline_cursor_]) break;
 
-    const int tok = mission_timeline_tokens_[timeline_cursor_];
+    const int tok = active_task_.timeline_tokens[timeline_cursor_];
     if (isPhysicalGraphNode(tok)) {
       ++timeline_cursor_;
       continue;
@@ -601,16 +600,35 @@ void CustomPlannerNode::processTimelineLocked() {
     ++timeline_cursor_;
   }
 
-  if (timeline_cursor_ >= mission_timeline_tokens_.size()) {
+  if (timeline_cursor_ >= active_task_.timeline_tokens.size()) {
+    if (loadNextTaskLocked()) {
+      setState(STATE_NAVIGATING);
+      processTimelineLocked();
+      return;
+    }
+    has_active_task_ = false;
     setState(STATE_IDLE);
   } else if (state_ == STATE_IDLE) {
     setState(STATE_NAVIGATING);
   }
 
-  if (state_ == STATE_NAVIGATING && !mission_route_published_) {
-    publishMissionRoute();
+  if (has_active_task_ && state_ == STATE_NAVIGATING && !mission_route_published_) {
+    publishMissionRoute(active_task_.nav_nodes);
     mission_route_published_ = true;
   }
+}
+
+bool CustomPlannerNode::loadNextTaskLocked() {
+  if (pending_tasks_.empty()) return false;
+  active_task_ = pending_tasks_.front();
+  pending_tasks_.pop_front();
+  has_active_task_ = true;
+  timeline_cursor_ = 0;
+  consumed_nav_nodes_count_ = 0;
+  active_nav_plan_seq_ = 0;
+  active_nav_plan_seq_valid_ = false;
+  mission_route_published_ = false;
+  return true;
 }
 
 void CustomPlannerNode::setState(MissionState new_state) {
