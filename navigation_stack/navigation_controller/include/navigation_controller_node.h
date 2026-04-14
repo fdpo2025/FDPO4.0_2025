@@ -23,6 +23,7 @@
 #include <visualization_msgs/Marker.h>                            
 #include <plan_handler/NavPlan.h>
 #include <plan_handler/CompletionFeedback.h>
+#include <std_msgs/Bool.h>
 #include <std_msgs/Int32.h>
 #include <std_msgs/UInt32.h>
 
@@ -129,6 +130,10 @@ class NavigationController {
             double drop_magnet_wiggle_angle_deg = 25.0;
             /** ω em dropMagnetReleaseWiggle (rad/s), eixo Z; sinal = sentido. */
             double drop_magnet_wiggle_angular_vel = 0.8;
+            /** Publica /pick_box=false nesta percentagem da linha antes de um drop output. <=0 desliga. */
+            double drop_pick_box_release_ratio_other = 0.9;
+            /** Publica /pick_box=false nesta percentagem da linha antes de um drop process. <=0 desliga. */
+            double drop_pick_box_release_ratio_process = 0.9;
 
         };
 
@@ -163,6 +168,7 @@ class NavigationController {
         void hardStop();
         void setTheta();
         void goToXY();
+        void maybePublishEarlyDropPickBoxRelease();
         /** Warehouse pick/drop (!align): go-to — 1) alinha v=0 até bearing_align_yaw_tol; 2) v (v_nom), w=0. */
         void goToXYProcessWarehouse();
         void followLine();
@@ -183,7 +189,9 @@ class NavigationController {
         void publishVirtualLineMarker(double pi_x, double pi_y, double pf_x, double pf_y);
         
         ros::Publisher navCompletionFeedbackPub;
+        ros::Publisher pickBoxPub;
         bool completion_feedback_sent;  // Para enviar feedback apenas uma vez por linha
+        int drop_pick_box_release_published_for_node_id_;
 
         double last_vel_before_approaching_;  // Última |v_d| em Follow_Line; teto em Approaching
         double approaching_brake_ref_dist_;   // dist(robô,pf) ao entrar em Approaching (normaliza v proporcional)

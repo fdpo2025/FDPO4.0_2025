@@ -7,7 +7,7 @@ k1(0.0), previousWaypoint({-1, {0, 0, 0}, false, false, -1.0, -1.0, false, false
 in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake_ref_dist_(0.1),
     process_warehouse_goto_align_done_(false), process_warehouse_goto_start_dist_(0.0),
     process_warehouse_goto_completion_sent_(false), drop_magnet_wiggle_start_yaw_(0.0),
-    drop_magnet_wiggle_target_rad_(0.0) {
+    drop_magnet_wiggle_target_rad_(0.0), drop_pick_box_release_published_for_node_id_(-1) {
 
     mode = "idle";
 
@@ -33,6 +33,7 @@ in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake
     lineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_lines", 1, true);  // latch=true para RViz ver imediatamente
     virtualLineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_virtual_line", 1, true);
     navCompletionFeedbackPub = nh.advertise<plan_handler::CompletionFeedback>("/nav_completion_feedback", 10);
+    pickBoxPub = nh.advertise<std_msgs::Bool>("/pick_box", 10);
 
     // =========================
     // PUBLICAR NÓ ATUAL
@@ -78,6 +79,7 @@ void NavigationController::loadRouteFromParameters(){
     if(!nh.getParam("waypoints", waypoints)) return;
 
     route.clear();
+    drop_pick_box_release_published_for_node_id_ = -1;
     
     // Inicializar previousWaypoint com posição atual do robô
     // Isto define o ponto inicial da primeira linha
@@ -202,6 +204,8 @@ void NavigationController::loadNavigationParams() {
     nh_fl.param("pick_box_forward_vel", param.pick_box_forward_vel, 0.1);
     nh_fl.param("drop_magnet_wiggle_angle_deg", param.drop_magnet_wiggle_angle_deg, 25.0);
     nh_fl.param("drop_magnet_wiggle_angular_vel", param.drop_magnet_wiggle_angular_vel, 0.8);
+    nh_fl.param("drop_pick_box_release_ratio_other", param.drop_pick_box_release_ratio_other, 0.9);
+    nh_fl.param("drop_pick_box_release_ratio_process", param.drop_pick_box_release_ratio_process, 0.9);
 
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f (follow_line from /follow_line/navigation_controller)", 
              param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
@@ -556,6 +560,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
 
     if(!rvizGoalAppend) {
         route.clear();
+        drop_pick_box_release_published_for_node_id_ = -1;
         previousWaypoint.id = 0;
         previousWaypoint.pose.x = poseCurr.x;
         previousWaypoint.pose.y = poseCurr.y;
@@ -771,6 +776,46 @@ void NavigationController::goToXY() {
         v_d = -v_d;
 }
 
+void NavigationController::maybePublishEarlyDropPickBoxRelease() {
+    const WayPoint* drop_waypoint = nullptr;
+
+    if (!route.empty() && route.front().is_warehouse && !route.front().pick_box) {
+        drop_waypoint = &route.front();
+    } else if (route.size() > 1 && route[1].is_warehouse && !route[1].pick_box) {
+        drop_waypoint = &route[1];
+    }
+
+    if (!drop_waypoint) {
+        drop_pick_box_release_published_for_node_id_ = -1;
+        return;
+    }
+
+    const double release_ratio = drop_waypoint->is_process_warehouse
+        ? param.drop_pick_box_release_ratio_process
+        : param.drop_pick_box_release_ratio_other;
+
+    if (release_ratio <= 0.0 || release_ratio > 1.0) {
+        return;
+    }
+
+    if (drop_pick_box_release_published_for_node_id_ == drop_waypoint->node_id) {
+        return;
+    }
+
+    if (line_progress < release_ratio) {
+        return;
+    }
+
+    std_msgs::Bool pick_box_msg;
+    pick_box_msg.data = false;
+    pickBoxPub.publish(pick_box_msg);
+    drop_pick_box_release_published_for_node_id_ = drop_waypoint->node_id;
+
+    ROS_INFO("NavigationController: Early /pick_box=false for drop node_id=%d at %.1f%% progress (threshold=%.1f%%, process=%d)",
+             drop_waypoint->node_id, line_progress * 100.0, release_ratio * 100.0,
+             drop_waypoint->is_process_warehouse ? 1 : 0);
+}
+
 void NavigationController::followLine() {
     
     if(route.empty()) {
@@ -844,6 +889,7 @@ void NavigationController::followLine() {
     }
 
     followLineFsm.set_state();
+    maybePublishEarlyDropPickBoxRelease();
     
     const double completion_threshold = 0.7;
     if (line_progress > completion_threshold && !completion_feedback_sent) {
@@ -1259,6 +1305,7 @@ bool NavigationController::controlSrvCb(navigation_controller::NavigationControl
     else if(mode == "stop") {
 
         route.clear();
+        drop_pick_box_release_published_for_node_id_ = -1;
         previousWaypoint.id = -1;
         previousWaypoint.node_id = -1;
         last_published_node_id = -1;
@@ -1321,6 +1368,7 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     }
 
     route.clear();
+    drop_pick_box_release_published_for_node_id_ = -1;
     
     previousWaypoint.id = 0;
     previousWaypoint.pose.x = poseCurr.x;
