@@ -256,7 +256,15 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
     std::vector<int> leg_nodes = resolveMissionLeg(targets[i], color_sequence, nullptr, false);
     if (leg_nodes.empty()) continue;
     MissionTask task;
+    task.timeline_tokens.reserve(leg_nodes.size());
     for (int t : leg_nodes) {
+      // Normalize only consecutive duplicated physical nodes in mission source.
+      // Keep MSG/W semantics untouched and preserve duplicates separated by events.
+      if (!task.timeline_tokens.empty() && isPhysicalGraphNode(t)
+          && isPhysicalGraphNode(task.timeline_tokens.back())
+          && task.timeline_tokens.back() == t) {
+        continue;
+      }
       task.timeline_tokens.push_back(t);
       if (isPhysicalGraphNode(t)) task.nav_nodes.push_back(t);
     }
