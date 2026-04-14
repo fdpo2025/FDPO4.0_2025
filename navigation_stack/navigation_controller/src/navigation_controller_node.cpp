@@ -781,8 +781,6 @@ void NavigationController::maybePublishEarlyDropPickBoxRelease() {
 
     if (!route.empty() && route.front().is_warehouse && !route.front().pick_box) {
         drop_waypoint = &route.front();
-    } else if (route.size() > 1 && route[1].is_warehouse && !route[1].pick_box) {
-        drop_waypoint = &route[1];
     }
 
     if (!drop_waypoint) {
