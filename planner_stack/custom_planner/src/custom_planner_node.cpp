@@ -76,9 +76,16 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   nh_.param<std::string>("nav_route_pause_request_topic", pause_req_topic, std::string("/nav_route_pause_request"));
   nav_route_pause_request_sub_ =
       nh_.subscribe(pause_req_topic, 10, &CustomPlannerNode::onNavRoutePauseRequest, this);
+  std::string consumed_topic;
+  nh_.param<std::string>("nav_plan_waypoint_consumed_topic", consumed_topic,
+                         std::string("/nav_plan_waypoint_consumed"));
+  nav_plan_waypoint_consumed_sub_ =
+      nh_.subscribe(consumed_topic, 50, &CustomPlannerNode::onNavPlanWaypointConsumed, this);
   mission_state_pub_ = nh_.advertise<std_msgs::String>("/custom_planner/state", 10, true);
   radio_wait_target_pub_ = nh_.advertise<std_msgs::Int32>("/radio_wait_target", 10, false);
   wt_send_pub_ = nh_.advertise<std_msgs::Bool>("/wt_send", 10, false);
+  target_id_send_pub_ = nh_.advertise<std_msgs::UInt32>("/target_id_send", 10, false);
+  stop_waiting_send_pub_ = nh_.advertise<std_msgs::Bool>("/stop_waiting_send", 10, false);
   spawn_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/custom_planner/spawn_pose", 1, true);
 
   setState(STATE_IDLE);
@@ -172,41 +179,36 @@ void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {
   if (state_ != STATE_WAITING) return;
   // Require falling edge: was waiting on the wire, peer cleared us via stop_waiting.
   if (!prev || msg->data) return;
-  // Pico applies CMD after radio RX in the same core1 tick; wt_send=true would re-assert
-  // is_waiting before the next planner tick. Drop wt immediately so CMD matches release.
-  {
-    std_msgs::Bool wt;
-    wt.data = false;
-    wt_send_pub_.publish(wt);
-  }
-  if (!pending_segments_.empty()) {
-    publishCurrentSegment();
-    return;
-  }
-  if (active_segment_has_intrinsic_wait_) {
-    setState(STATE_NAVIGATING);
-    return;
-  }
-  setState(STATE_IDLE);
+  setState(STATE_NAVIGATING);
+  processTimelineLocked();
 }
 
 void CustomPlannerNode::onNavRoutePauseRequest(const std_msgs::Bool::ConstPtr& msg) {
-  if (!msg->data) return;
-  std::lock_guard<std::mutex> lock(mtx_);
-  if (state_ != STATE_NAVIGATING) return;
-  if (!active_segment_has_intrinsic_wait_) return;
-  setState(STATE_WAITING);
-  ROS_INFO("custom_planner: nav requested mid-route pause -> STATE_WAITING (intrinsic _W segment)");
+  (void)msg;
+  // Deprecated path: waits are timeline-driven in custom_planner.
 }
 
 void CustomPlannerNode::onThisCurrentPose(const std_msgs::UInt32::ConstPtr& msg) {
+  (void)msg;
+  // Legacy segment completion signal no longer used.
+}
+
+void CustomPlannerNode::onNavPlanWaypointConsumed(const std_msgs::UInt32MultiArray::ConstPtr& msg) {
+  if (msg->data.size() < 2) return;
   std::lock_guard<std::mutex> lock(mtx_);
-  if (state_ != STATE_NAVIGATING || active_segment_nodes_.empty()) return;
-  const int last_node = active_segment_nodes_.back();
-  if (static_cast<int>(msg->data) != last_node) return;
-  ROS_INFO_THROTTLE(1.0, "custom_planner: segment done (this_current_pose=%u == last drop node %d)",
-                    static_cast<unsigned>(msg->data), last_node);
-  advanceStateMachineAfterSegment();
+  const uint32_t seq = msg->data[0];
+  const uint32_t plan_index = msg->data[1];
+
+  if (!active_nav_plan_seq_valid_) {
+    active_nav_plan_seq_ = seq;
+    active_nav_plan_seq_valid_ = true;
+  }
+  if (seq != active_nav_plan_seq_) return;
+
+  const uint32_t consumed_count = plan_index + 1;
+  if (consumed_count <= consumed_nav_nodes_count_) return;
+  consumed_nav_nodes_count_ = consumed_count;
+  processTimelineLocked();
 }
 
 void CustomPlannerNode::startMission(const std::string& color_sequence) {
@@ -219,14 +221,63 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   last_color_sequence_ = color_sequence;
   const std::string manga_key = selectMangaKey(color_sequence);
   publishSpawnPose(manga_key);
-  std::vector<MissionSegment> segments = buildMissionSegments(color_sequence, manga_key);
-  pending_segments_.clear();
-  for (const auto& s : segments) pending_segments_.push_back(s);
-  if (pending_segments_.empty()) {
+  mission_timeline_tokens_.clear();
+  std::vector<int> nav_nodes;
+
+  if (!missions_root_.valid() || !missions_root_.hasMember(manga_key)) {
     setState(STATE_IDLE);
     return;
   }
-  publishCurrentSegment();
+  const XmlRpc::XmlRpcValue manga_cfg = missions_root_[manga_key];
+  const std::string robot_key = "robot_" + std::to_string(robot_id_);
+  if (!manga_cfg.hasMember(robot_key)) {
+    setState(STATE_IDLE);
+    return;
+  }
+  const XmlRpc::XmlRpcValue robot_cfg = manga_cfg[robot_key];
+  if (!robot_cfg.hasMember("targets")) {
+    setState(STATE_IDLE);
+    return;
+  }
+  const XmlRpc::XmlRpcValue targets = robot_cfg["targets"];
+  if (targets.getType() != XmlRpc::XmlRpcValue::TypeArray) {
+    setState(STATE_IDLE);
+    return;
+  }
+
+  for (int i = 0; i < targets.size(); ++i) {
+    std::vector<int> leg_nodes = resolveMissionLeg(targets[i], color_sequence, nullptr);
+    if (leg_nodes.empty()) continue;
+    for (int t : leg_nodes) {
+      mission_timeline_tokens_.push_back(t);
+      if (isPhysicalGraphNode(t)) nav_nodes.push_back(t);
+    }
+  }
+
+  if (nav_nodes.empty()) {
+    setState(STATE_IDLE);
+    return;
+  }
+
+  token_required_consumed_count_.clear();
+  token_required_consumed_count_.reserve(mission_timeline_tokens_.size());
+  uint32_t physical_before = 0;
+  for (int t : mission_timeline_tokens_) {
+    if (isPhysicalGraphNode(t)) {
+      ++physical_before;
+      token_required_consumed_count_.push_back(physical_before);
+    } else {
+      token_required_consumed_count_.push_back(physical_before);
+    }
+  }
+
+  timeline_cursor_ = 0;
+  consumed_nav_nodes_count_ = 0;
+  active_nav_plan_seq_ = 0;
+  active_nav_plan_seq_valid_ = false;
+  setState(STATE_NAVIGATING);
+  publishMissionRoute();
+  processTimelineLocked();
 }
 
 std::vector<CustomPlannerNode::MissionSegment> CustomPlannerNode::buildMissionSegments(
@@ -472,61 +523,82 @@ void CustomPlannerNode::collapseConsecutiveDuplicateNodes(std::vector<int>& node
   nodes.swap(out);
 }
 
-void CustomPlannerNode::publishCurrentSegment() {
-  if (pending_segments_.empty()) {
+void CustomPlannerNode::publishMissionRoute() {
+  std::vector<int> nav_nodes;
+  nav_nodes.reserve(mission_timeline_tokens_.size());
+  for (int t : mission_timeline_tokens_) {
+    if (isPhysicalGraphNode(t)) nav_nodes.push_back(t);
+  }
+  if (!validatePath(nav_nodes)) {
+    ROS_ERROR("custom_planner: invalid mission route.");
     setState(STATE_IDLE);
     return;
   }
-  MissionSegment current = pending_segments_.front();
-  pending_segments_.pop_front();
-  if (current.nodes.empty() && current.wait_after) {
-    setState(STATE_WAITING);
-    publishRadioWakeRequest(robot_id_);
-    return;
-  }
-  if (!validatePath(current.nodes)) {
-    ROS_ERROR("custom_planner: invalid segment path.");
-    active_segment_has_intrinsic_wait_ = false;
-    setState(STATE_IDLE);
-    return;
-  }
-  active_segment_nodes_ = current.nodes;
-  active_segment_has_intrinsic_wait_ = !current.pause_after_wp_index.empty();
 
+  // Disable legacy intrinsic pause path entirely.
   std_msgs::UInt32MultiArray pause_msg;
-  pause_msg.data.assign(current.pause_after_wp_index.begin(), current.pause_after_wp_index.end());
   nav_pause_after_wp_index_pub_.publish(pause_msg);
 
   std_msgs::Int32MultiArray path_msg;
-  path_msg.data.clear();
-  if (current.notify_robot_id != -2) {
-    path_msg.data.push_back(-900000000 - current.notify_robot_id);
-  }
-  path_msg.data.insert(path_msg.data.end(), active_segment_nodes_.begin(), active_segment_nodes_.end());
+  path_msg.data = nav_nodes;
   planned_paths_pub_.publish(path_msg);
-  setState(STATE_NAVIGATING);
-
-  if (current.wait_after && current.pause_after_wp_index.empty()) {
-    MissionSegment wait_marker;
-    wait_marker.wait_after = true;
-    pending_segments_.push_front(wait_marker);
-  }
-  // MSG_* radio pulse is deferred to plan_handler until navigation_controller consumes the target plan_index.
 }
 
-void CustomPlannerNode::advanceStateMachineAfterSegment() {
-  if (!pending_segments_.empty() && pending_segments_.front().nodes.empty() && pending_segments_.front().wait_after) {
-    pending_segments_.pop_front();
-    setState(STATE_WAITING);
-    publishRadioWakeRequest(robot_id_);
-    return;
+void CustomPlannerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
+  std_msgs::UInt32 tid;
+  tid.data = std::min(target_robot_id, 255u);
+  target_id_send_pub_.publish(tid);
+
+  std_msgs::Bool sw;
+  sw.data = true;
+  stop_waiting_send_pub_.publish(sw);
+
+  if (stop_waiting_reset_timer_) {
+    stop_waiting_reset_timer_.stop();
   }
-  if (!pending_segments_.empty()) {
-    publishCurrentSegment();
-    return;
+  stop_waiting_reset_timer_ = nh_.createTimer(
+      ros::Duration(0.12),
+      [this](const ros::TimerEvent&) {
+        std_msgs::Bool off;
+        off.data = false;
+        stop_waiting_send_pub_.publish(off);
+        stop_waiting_reset_timer_.stop();
+      },
+      true, true);
+}
+
+void CustomPlannerNode::processTimelineLocked() {
+  if (state_ == STATE_WAITING) return;
+
+  while (timeline_cursor_ < mission_timeline_tokens_.size()) {
+    if (timeline_cursor_ >= token_required_consumed_count_.size()) break;
+    if (consumed_nav_nodes_count_ < token_required_consumed_count_[timeline_cursor_]) break;
+
+    const int tok = mission_timeline_tokens_[timeline_cursor_];
+    if (isPhysicalGraphNode(tok)) {
+      ++timeline_cursor_;
+      continue;
+    }
+    if (isMsgLegToken(tok)) {
+      const uint32_t target = static_cast<uint32_t>(-1000 - tok);
+      publishRadioStopWaitingPulse(target);
+      ++timeline_cursor_;
+      continue;
+    }
+    if (tok == -1) {
+      setState(STATE_WAITING);
+      publishRadioWakeRequest(robot_id_);
+      ++timeline_cursor_;
+      return;
+    }
+    ++timeline_cursor_;
   }
-  active_segment_has_intrinsic_wait_ = false;
-  setState(STATE_IDLE);
+
+  if (timeline_cursor_ >= mission_timeline_tokens_.size()) {
+    setState(STATE_IDLE);
+  } else if (state_ == STATE_IDLE) {
+    setState(STATE_NAVIGATING);
+  }
 }
 
 void CustomPlannerNode::setState(MissionState new_state) {

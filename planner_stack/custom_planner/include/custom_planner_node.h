@@ -43,6 +43,7 @@ class CustomPlannerNode {
   void onWaitState(const std_msgs::Bool::ConstPtr& msg);
   void onThisCurrentPose(const std_msgs::UInt32::ConstPtr& msg);
   void onNavRoutePauseRequest(const std_msgs::Bool::ConstPtr& msg);
+  void onNavPlanWaypointConsumed(const std_msgs::UInt32MultiArray::ConstPtr& msg);
 
   bool loadMissions();
   std::string selectMangaKey(const std::string& color_sequence) const;
@@ -60,8 +61,9 @@ class CustomPlannerNode {
   void collapseConsecutiveDuplicateNodes(std::vector<int>& nodes) const;
 
   void startMission(const std::string& color_sequence);
-  void publishCurrentSegment();
-  void advanceStateMachineAfterSegment();
+  void publishMissionRoute();
+  void processTimelineLocked();
+  void publishRadioStopWaitingPulse(uint32_t target_robot_id);
   void setState(MissionState new_state);
 
   bool validatePath(const std::vector<int>& path) const;
@@ -75,12 +77,15 @@ class CustomPlannerNode {
   ros::Subscriber robot_identity_sub_;
   ros::Subscriber wait_state_sub_;
   ros::Subscriber this_pose_sub_;
+  ros::Subscriber nav_plan_waypoint_consumed_sub_;
   ros::Publisher planned_paths_pub_;
   ros::Publisher nav_pause_after_wp_index_pub_;
   ros::Subscriber nav_route_pause_request_sub_;
   ros::Publisher mission_state_pub_;
   ros::Publisher radio_wait_target_pub_;
   ros::Publisher wt_send_pub_;
+  ros::Publisher target_id_send_pub_;
+  ros::Publisher stop_waiting_send_pub_;
   ros::Publisher spawn_pose_pub_;
 
   std::string color_sequence_topic_;
@@ -91,16 +96,19 @@ class CustomPlannerNode {
   XmlRpc::XmlRpcValue missions_root_;
   std::vector<int> valid_node_ids_;
   std::unordered_map<int, int> color_input_node_by_index_;
-  std::deque<MissionSegment> pending_segments_;
-  std::vector<int> active_segment_nodes_;
-  /** True if active segment was published with non-empty pause_after_wp_index (mid-route wait, no re-publish). */
-  bool active_segment_has_intrinsic_wait_ = false;
+  std::vector<int> mission_timeline_tokens_;
+  std::vector<uint32_t> token_required_consumed_count_;
+  size_t timeline_cursor_ = 0;
+  uint32_t consumed_nav_nodes_count_ = 0;
+  uint32_t active_nav_plan_seq_ = 0;
+  bool active_nav_plan_seq_valid_ = false;
   std::string last_color_sequence_;
   std::string pending_color_sequence_;
   int robot_id_ = -1;
   MissionState state_ = STATE_IDLE;
   mutable std::mutex mtx_;
   bool debug_verbose_ = false;
+  ros::Timer stop_waiting_reset_timer_;
   /** Last /pi_pico_driver/wait_state from network (true = this robot waiting on radio). */
   bool last_pi_wait_state_ = false;
   /** After entering STATE_WAITING, ignore one edge cycle: re-baseline last_pi_wait_state_ so a stale
