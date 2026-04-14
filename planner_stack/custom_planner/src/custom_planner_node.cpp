@@ -248,7 +248,7 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   }
 
   for (int i = 0; i < targets.size(); ++i) {
-    std::vector<int> leg_nodes = resolveMissionLeg(targets[i], color_sequence, nullptr);
+    std::vector<int> leg_nodes = resolveMissionLeg(targets[i], color_sequence, nullptr, false);
     if (leg_nodes.empty()) continue;
     MissionTask task;
     for (int t : leg_nodes) {
@@ -357,7 +357,8 @@ std::vector<CustomPlannerNode::MissionSegment> CustomPlannerNode::buildMissionSe
 
 std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue& leg,
                                                       const std::string& color_sequence,
-                                                      std::vector<uint32_t>* leg_pause_out) const {
+                                                      std::vector<uint32_t>* leg_pause_out,
+                                                      bool collapse_duplicates) const {
   std::vector<int> out;
   std::vector<std::pair<int, int>> shelf_pick_wait_pairs;
   if (leg.getType() != XmlRpc::XmlRpcValue::TypeArray) return out;
@@ -396,7 +397,9 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
     int v = -1;
     if (tryReadInt(item, v)) out.push_back(v);
   }
-  collapseConsecutiveDuplicateNodes(out);
+  if (collapse_duplicates) {
+    collapseConsecutiveDuplicateNodes(out);
+  }
   if (leg_pause_out && !shelf_pick_wait_pairs.empty()) {
     size_t search_from = 0;
     for (const auto& pr : shelf_pick_wait_pairs) {

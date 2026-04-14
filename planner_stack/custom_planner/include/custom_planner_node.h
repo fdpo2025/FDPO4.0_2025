@@ -56,7 +56,8 @@ class CustomPlannerNode {
   std::vector<MissionSegment> buildMissionSegments(const std::string& color_sequence,
                                                    const std::string& manga_key) const;
   std::vector<int> resolveMissionLeg(const XmlRpc::XmlRpcValue& leg, const std::string& color_sequence,
-                                     std::vector<uint32_t>* leg_pause_out) const;
+                                     std::vector<uint32_t>* leg_pause_out,
+                                     bool collapse_duplicates = true) const;
   int resolveIndexedColorNode(const std::string& token, const std::string& color_sequence) const;
   bool parseColorWithWaitSuffix(const std::string& token, std::string& color_token_out,
                                 bool& wait_at_pick_out) const;
