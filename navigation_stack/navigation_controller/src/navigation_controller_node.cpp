@@ -1024,9 +1024,9 @@ void NavigationController::followLine() {
     if (followLineFsm.state == navigation::followLineStates::Approaching) state_str = "Approaching";
     else if (followLineFsm.state == navigation::followLineStates::Approaching_PickDrop) state_str = "Approaching_PickDrop";
     else if (followLineFsm.state == navigation::followLineStates::Approaching_process_PickDrop) state_str = "Approaching_process_PickDrop";
-    ROS_INFO("[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s | dist_da=%.3f", 
-             line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y, 
-             line_progress * 100, error_dist, state_str, param.dist_da);
+    ROS_INFO_THROTTLE(0.3, "[FOLLOW_LINE] Line: (%.2f,%.2f)->(%.2f,%.2f) | progress=%.0f%% | dist=%.3f | state=%s | dist_da=%.3f",
+                      line.pi.pose.x, line.pi.pose.y, line.pf.pose.x, line.pf.pose.y,
+                      line_progress * 100, error_dist, state_str, param.dist_da);
 
 }
 

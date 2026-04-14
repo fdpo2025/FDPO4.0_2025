@@ -90,6 +90,8 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   timeline_cursor_pub_ = nh_.advertise<std_msgs::UInt32>("/custom_planner/timeline_cursor", 10, true);
   active_task_nav_nodes_pub_ =
       nh_.advertise<std_msgs::Int32MultiArray>("/custom_planner/active_task_nav_nodes", 1, true);
+  last_executed_token_pub_ =
+      nh_.advertise<std_msgs::Int32MultiArray>("/custom_planner/last_executed_token", 10, true);
   spawn_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/custom_planner/spawn_pose", 1, true);
 
   setState(STATE_IDLE);
@@ -229,6 +231,8 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   pending_tasks_.clear();
   has_active_task_ = false;
   active_task_ = MissionTask();
+  last_executed_token_index_ = -1;
+  last_executed_token_value_ = 0;
   publishActiveTaskDebugLocked();
 
   if (!missions_root_.valid() || !missions_root_.hasMember(manga_key)) {
@@ -568,6 +572,7 @@ void CustomPlannerNode::publishMissionRoute(const std::vector<int>& nav_nodes) {
 void CustomPlannerNode::publishActiveTaskDebugLocked() {
   std_msgs::Int32MultiArray timeline_msg;
   std_msgs::Int32MultiArray nav_msg;
+  std_msgs::Int32MultiArray last_exec_msg;
   std_msgs::UInt32 cursor_msg;
 
   if (has_active_task_) {
@@ -583,6 +588,8 @@ void CustomPlannerNode::publishActiveTaskDebugLocked() {
   timeline_tokens_pub_.publish(timeline_msg);
   active_task_nav_nodes_pub_.publish(nav_msg);
   timeline_cursor_pub_.publish(cursor_msg);
+  last_exec_msg.data = {last_executed_token_index_, last_executed_token_value_};
+  last_executed_token_pub_.publish(last_exec_msg);
 }
 
 void CustomPlannerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
@@ -617,6 +624,9 @@ void CustomPlannerNode::processTimelineLocked() {
     if (consumed_nav_nodes_count_ < active_task_.token_required_consumed_count[timeline_cursor_]) break;
 
     const int tok = active_task_.timeline_tokens[timeline_cursor_];
+    const int32_t executed_idx = static_cast<int32_t>(timeline_cursor_);
+    last_executed_token_index_ = executed_idx;
+    last_executed_token_value_ = static_cast<int32_t>(tok);
     if (isPhysicalGraphNode(tok)) {
       ++timeline_cursor_;
       publishActiveTaskDebugLocked();
@@ -647,6 +657,8 @@ void CustomPlannerNode::processTimelineLocked() {
       return;
     }
     has_active_task_ = false;
+    last_executed_token_index_ = -1;
+    last_executed_token_value_ = 0;
     publishActiveTaskDebugLocked();
     setState(STATE_IDLE);
   } else if (state_ == STATE_IDLE) {
@@ -665,6 +677,8 @@ bool CustomPlannerNode::loadNextTaskLocked() {
   pending_tasks_.pop_front();
   has_active_task_ = true;
   timeline_cursor_ = 0;
+  last_executed_token_index_ = -1;
+  last_executed_token_value_ = 0;
   consumed_nav_nodes_count_ = 0;
   active_nav_plan_seq_ = 0;
   active_nav_plan_seq_valid_ = false;

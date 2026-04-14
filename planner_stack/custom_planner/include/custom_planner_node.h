@@ -98,6 +98,7 @@ class CustomPlannerNode {
   ros::Publisher timeline_tokens_pub_;
   ros::Publisher timeline_cursor_pub_;
   ros::Publisher active_task_nav_nodes_pub_;
+  ros::Publisher last_executed_token_pub_;
   ros::Publisher spawn_pose_pub_;
 
   std::string color_sequence_topic_;
@@ -112,6 +113,8 @@ class CustomPlannerNode {
   MissionTask active_task_;
   bool has_active_task_ = false;
   size_t timeline_cursor_ = 0;
+  int32_t last_executed_token_index_ = -1;
+  int32_t last_executed_token_value_ = 0;
   uint32_t consumed_nav_nodes_count_ = 0;
   uint32_t active_nav_plan_seq_ = 0;
   bool active_nav_plan_seq_valid_ = false;
