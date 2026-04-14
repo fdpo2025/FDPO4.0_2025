@@ -31,9 +31,8 @@ navigation_controller:
   # Após drop: rotação em sitio antes do segmento backwards até acumular este ângulo positivo. 0 = desliga.
   drop_magnet_wiggle_angle_deg: 5.0
   drop_magnet_wiggle_angular_vel: 1.5
-  # Publica /pick_box=false antecipadamente pela projeÃ§Ã£o do robÃ´ na linha antes do drop. <=0 desliga.
-  drop_pick_box_release_ratio_other: 0.1
-  drop_pick_box_release_ratio_process: 0.1
+  # Publica /pick_box=false antecipadamente quando a distancia ao alvo de drop no go-to-XY fica abaixo deste valor. <=0 desliga.
+  drop_pick_box_release_distance: 0.03
   k_approaching: 8.5
   gain_approaching_fwd: 1.0
   approaching_vel_normal: 0.07

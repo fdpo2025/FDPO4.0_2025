@@ -130,10 +130,8 @@ class NavigationController {
             double drop_magnet_wiggle_angle_deg = 25.0;
             /** ω em dropMagnetReleaseWiggle (rad/s), eixo Z; sinal = sentido. */
             double drop_magnet_wiggle_angular_vel = 0.8;
-            /** Publica /pick_box=false nesta percentagem da linha antes de um drop output. <=0 desliga. */
-            double drop_pick_box_release_ratio_other = 0.9;
-            /** Publica /pick_box=false nesta percentagem da linha antes de um drop process. <=0 desliga. */
-            double drop_pick_box_release_ratio_process = 0.9;
+            /** Publica /pick_box=false a esta distÃ¢ncia do alvo durante o go-to-XY de drop. <=0 desliga. */
+            double drop_pick_box_release_distance = 0.03;
 
         };
 
@@ -168,7 +166,6 @@ class NavigationController {
         void hardStop();
         void setTheta();
         void goToXY();
-        void maybePublishEarlyDropPickBoxRelease();
         /** Warehouse pick/drop (!align): go-to — 1) alinha v=0 até bearing_align_yaw_tol; 2) v (v_nom), w=0. */
         void goToXYProcessWarehouse();
         void followLine();
