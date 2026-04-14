@@ -29,10 +29,10 @@ navigation_controller:
   # Estado pickBoxForward após pick warehouse: módulo da velocidade (m/s); sinal com backwards do waypoint.
   pick_box_forward_vel: 0.2
   # Após drop: rotação em sitio antes do segmento backwards até acumular este ângulo positivo. 0 = desliga.
-  drop_magnet_wiggle_angle_deg: 5.0
-  drop_magnet_wiggle_angular_vel: 1.5
+  drop_magnet_wiggle_angle_deg: 0.0
+  drop_magnet_wiggle_angular_vel: 0.0
   # Publica /pick_box=false antecipadamente quando a distancia ao alvo de drop no go-to-XY fica abaixo deste valor. <=0 desliga.
-  drop_pick_box_release_distance: 0.03
+  drop_pick_box_release_distance: 0.15
   k_approaching: 8.5
   gain_approaching_fwd: 1.0
   approaching_vel_normal: 0.07
