@@ -701,8 +701,7 @@ std::vector<int> MultiPlannerNode::adaptPublishedPath(
     for (int i = 1; i < static_cast<int>(adapted.size()); ++i) {
         if (adapted[i - 1] == 7 && adapted[i] == 30)
             adapted[i] = 130;
-        if (adapted[i - 1] == 30 && adapted[i] == 38 &&
-            (i < 2 || path[i - 2] != 7))
+        if (adapted[i - 1] == 30 && adapted[i] == 138)
             adapted[i - 1] = 230;
     }
     return adapted;
