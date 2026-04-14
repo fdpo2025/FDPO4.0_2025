@@ -69,6 +69,7 @@ class CustomPlannerNode {
 
   void startMission(const std::string& color_sequence);
   void publishMissionRoute(const std::vector<int>& nav_nodes);
+  void publishActiveTaskDebugLocked();
   void processTimelineLocked();
   bool loadNextTaskLocked();
   void publishRadioStopWaitingPulse(uint32_t target_robot_id);
@@ -94,6 +95,9 @@ class CustomPlannerNode {
   ros::Publisher wt_send_pub_;
   ros::Publisher target_id_send_pub_;
   ros::Publisher stop_waiting_send_pub_;
+  ros::Publisher timeline_tokens_pub_;
+  ros::Publisher timeline_cursor_pub_;
+  ros::Publisher active_task_nav_nodes_pub_;
   ros::Publisher spawn_pose_pub_;
 
   std::string color_sequence_topic_;

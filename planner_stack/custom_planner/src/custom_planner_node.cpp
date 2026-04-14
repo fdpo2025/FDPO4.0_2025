@@ -86,6 +86,10 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   wt_send_pub_ = nh_.advertise<std_msgs::Bool>("/wt_send", 10, false);
   target_id_send_pub_ = nh_.advertise<std_msgs::UInt32>("/target_id_send", 10, false);
   stop_waiting_send_pub_ = nh_.advertise<std_msgs::Bool>("/stop_waiting_send", 10, false);
+  timeline_tokens_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/custom_planner/timeline_tokens", 1, true);
+  timeline_cursor_pub_ = nh_.advertise<std_msgs::UInt32>("/custom_planner/timeline_cursor", 10, true);
+  active_task_nav_nodes_pub_ =
+      nh_.advertise<std_msgs::Int32MultiArray>("/custom_planner/active_task_nav_nodes", 1, true);
   spawn_pose_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/custom_planner/spawn_pose", 1, true);
 
   setState(STATE_IDLE);
@@ -225,6 +229,7 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   pending_tasks_.clear();
   has_active_task_ = false;
   active_task_ = MissionTask();
+  publishActiveTaskDebugLocked();
 
   if (!missions_root_.valid() || !missions_root_.hasMember(manga_key)) {
     setState(STATE_IDLE);
@@ -552,6 +557,26 @@ void CustomPlannerNode::publishMissionRoute(const std::vector<int>& nav_nodes) {
   planned_paths_pub_.publish(path_msg);
 }
 
+void CustomPlannerNode::publishActiveTaskDebugLocked() {
+  std_msgs::Int32MultiArray timeline_msg;
+  std_msgs::Int32MultiArray nav_msg;
+  std_msgs::UInt32 cursor_msg;
+
+  if (has_active_task_) {
+    timeline_msg.data = active_task_.timeline_tokens;
+    nav_msg.data = active_task_.nav_nodes;
+    cursor_msg.data = static_cast<uint32_t>(timeline_cursor_);
+  } else {
+    timeline_msg.data.clear();
+    nav_msg.data.clear();
+    cursor_msg.data = 0;
+  }
+
+  timeline_tokens_pub_.publish(timeline_msg);
+  active_task_nav_nodes_pub_.publish(nav_msg);
+  timeline_cursor_pub_.publish(cursor_msg);
+}
+
 void CustomPlannerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
   std_msgs::UInt32 tid;
   tid.data = std::min(target_robot_id, 255u);
@@ -586,21 +611,25 @@ void CustomPlannerNode::processTimelineLocked() {
     const int tok = active_task_.timeline_tokens[timeline_cursor_];
     if (isPhysicalGraphNode(tok)) {
       ++timeline_cursor_;
+      publishActiveTaskDebugLocked();
       continue;
     }
     if (isMsgLegToken(tok)) {
       const uint32_t target = static_cast<uint32_t>(-1000 - tok);
       publishRadioStopWaitingPulse(target);
       ++timeline_cursor_;
+      publishActiveTaskDebugLocked();
       continue;
     }
     if (tok == -1) {
       setState(STATE_WAITING);
       publishRadioWakeRequest(robot_id_);
       ++timeline_cursor_;
+      publishActiveTaskDebugLocked();
       return;
     }
     ++timeline_cursor_;
+    publishActiveTaskDebugLocked();
   }
 
   if (timeline_cursor_ >= active_task_.timeline_tokens.size()) {
@@ -610,6 +639,7 @@ void CustomPlannerNode::processTimelineLocked() {
       return;
     }
     has_active_task_ = false;
+    publishActiveTaskDebugLocked();
     setState(STATE_IDLE);
   } else if (state_ == STATE_IDLE) {
     setState(STATE_NAVIGATING);
@@ -631,6 +661,7 @@ bool CustomPlannerNode::loadNextTaskLocked() {
   active_nav_plan_seq_ = 0;
   active_nav_plan_seq_valid_ = false;
   mission_route_published_ = false;
+  publishActiveTaskDebugLocked();
   return true;
 }
 
