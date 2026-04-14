@@ -13,10 +13,8 @@ std::string missionsRootKeyFromFleetSize(int num_robots) {
 }
 
 /** Override initial pose from /fdpo_missions/<missions_key>/<spawn_manga>/robot_spawns/robot_<id> (see run_ekf_localizer.launch). */
-bool tryLoadSpawnFromMissions(const ros::NodeHandle& nh, int robot_id, int num_robots, const std::string& spawn_manga,
+bool tryLoadSpawnFromMissions(bool use_missions_spawn, int robot_id, int num_robots, const std::string& spawn_manga,
                               double* out_x, double* out_y, double* out_theta) {
-  bool use_missions_spawn = true;
-  nh.param("use_missions_spawn", use_missions_spawn, true);
   if (!use_missions_spawn) return false;
 
   const std::string root = missionsRootKeyFromFleetSize(num_robots);
@@ -32,7 +30,7 @@ bool tryLoadSpawnFromMissions(const ros::NodeHandle& nh, int robot_id, int num_r
   *out_x = mx;
   *out_y = my;
   *out_theta = mtheta;
-  ROS_INFO("[LocalizerNode] Initial pose from missions.yaml: %s → x=%.3f y=%.3f theta=%.3f rad", base.c_str(), mx, my,
+  ROS_INFO("[LocalizerNode] Initial pose from missions.yaml: %s -> x=%.3f y=%.3f theta=%.3f rad", base.c_str(), mx, my,
            mtheta);
   return true;
 }
@@ -50,15 +48,19 @@ LocalizerNode::LocalizerNode(ros::NodeHandle& nh) : nh(nh), tf_buffer(ros::Durat
     nh.param("ekf_params/initial_pose/y", init_y, 0.0);
     nh.param("ekf_params/initial_pose/theta", init_theta, 0.0);
 
+    // Parâmetros do <node> no launch ficam no namespace privado (~); NodeHandle() resolve em / e não os encontra.
+    ros::NodeHandle pnh("~");
+    bool use_missions_spawn = true;
+    pnh.param("use_missions_spawn", use_missions_spawn, true);
     int robot_id = 0;
-    nh.param("robot_id", robot_id, 0);
+    pnh.param("robot_id", robot_id, 0);
     int num_robots = 2;
-    nh.param("num_robots", num_robots, 2);
+    pnh.param("num_robots", num_robots, 2);
     std::string spawn_manga = "manga_1";
-    nh.param("spawn_manga", spawn_manga, std::string("manga_1"));
+    pnh.param("spawn_manga", spawn_manga, std::string("manga_1"));
 
     double sx = 0.0, sy = 0.0, st = 0.0;
-    if (tryLoadSpawnFromMissions(nh, robot_id, num_robots, spawn_manga, &sx, &sy, &st)) {
+    if (tryLoadSpawnFromMissions(use_missions_spawn, robot_id, num_robots, spawn_manga, &sx, &sy, &st)) {
       init_x = sx;
       init_y = sy;
       init_theta = st;
@@ -73,7 +75,7 @@ LocalizerNode::LocalizerNode(ros::NodeHandle& nh) : nh(nh), tf_buffer(ros::Durat
     ros::param::set("/ekf_params/initial_pose/y", init_y);
     ros::param::set("/ekf_params/initial_pose/theta", init_theta);
     
-    ROS_INFO("[LocalizerNode] Initial pose: x=%.3f, y=%.3f, theta=%.3f rad (%.1f°)", 
+    ROS_INFO("[LocalizerNode] Initial pose: x=%.3f, y=%.3f, theta=%.3f rad (%.1f deg)",
              init_x, init_y, init_theta, init_theta * 180.0 / M_PI);
     
     odometry_sub = nh.subscribe("/odom", 10, &LocalizerNode::ekf_predict, this);
