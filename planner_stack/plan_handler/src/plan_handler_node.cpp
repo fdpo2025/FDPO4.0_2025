@@ -207,7 +207,12 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
             continue;
         }
 
-        int resolved_id = (value >= 100) ? value - 100 : value;
+        // +100: espelho lógico (ex.: 102 -> 2). +900 (908–911, 927–930): nós de fila auxiliar, não
+        // warehouse; não subtrair 100 senão 908 vira 808 e confunde logs / flags.
+        int resolved_id = value;
+        if (value >= 100 && !((value >= 908 && value <= 911) || (value >= 927 && value <= 930))) {
+            resolved_id = value - 100;
+        }
 
         ControllerPoint point;
 
