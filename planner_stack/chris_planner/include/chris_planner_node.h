@@ -20,6 +20,7 @@ private:
     void colorSequenceCallback(const std_msgs::String::ConstPtr& msg);
     std::vector<int> colorSequenceToBoxtypes(const std::string& seq) const;
     std::vector<int> resolveApproachSides(const std::vector<int>& path) const;
+    std::vector<int> adaptPublishedPath(const std::vector<int>& path) const;
 
     ros::NodeHandle& nh_;
     ros::Subscriber color_seq_sub_;

@@ -91,8 +91,8 @@ void ChrisPlannerNode::colorSequenceCallback(const std_msgs::String::ConstPtr& m
         ROS_INFO("Planning completed. High-level path length: %zu", result.high_level_path.size());
         ROS_INFO("Total cost: %.3f", result.total_cost);
 
-        auto final_path = resolveApproachSides(
-            planner_->convertPaths2Path(result.low_level_paths_compact));
+        auto final_path = adaptPublishedPath(resolveApproachSides(
+            planner_->convertPaths2Path(result.low_level_paths_compact)));
 
         ROS_INFO("Final path length: %zu", final_path.size());
 
@@ -114,13 +114,30 @@ std::vector<int> ChrisPlannerNode::resolveApproachSides(const std::vector<int>& 
     auto result = path;
     for (int idx = 0; idx < static_cast<int>(result.size()); ++idx) {
         if (!warehouse_nodes_.count(result[idx])) continue;
-        if (idx < 2) continue;
 
         int wh = result[idx];
+        // Igual a MultiPlannerNode::determineApproachSideNode: sem pred+neighbor → lado +100
+        if (idx < 2) {
+            result[idx] = wh + 100;
+            continue;
+        }
+
         int neighbor = result[idx - 1];
         int pred = result[idx - 2];
         bool right = approach_topology_.isRightApproach(wh, neighbor, pred);
         result[idx] = right ? wh : wh + 100;
     }
     return result;
+}
+
+std::vector<int> ChrisPlannerNode::adaptPublishedPath(const std::vector<int>& path) const
+{
+    auto adapted = path;
+    for (int i = 1; i < static_cast<int>(adapted.size()); ++i) {
+        if (adapted[i - 1] == 7 && adapted[i] == 30)
+            adapted[i] = 130;
+        if (adapted[i - 1] == 30 && adapted[i] == 138)
+            adapted[i - 1] = 230;
+    }
+    return adapted;
 }

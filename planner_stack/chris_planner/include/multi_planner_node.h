@@ -27,6 +27,7 @@ struct RobotState {
     bool waiting_replan = false;
     std::string task_type;
     int reserved_pickup_node = -1;
+    int held_published_last_node = -1;
 };
 
 class MultiPlannerNode {
@@ -52,10 +53,14 @@ private:
     std::vector<int> compactExistingPath(const std::vector<int>& path) const;
     double pathCost(const std::vector<int>& path) const;
     std::vector<int> extendPathWithPreviousNode(const std::vector<int>& path) const;
+    std::vector<int> dropFirstNodeUnlessStart31(const std::vector<int>& path) const;
+    std::vector<int> adaptPublishedPath(const std::vector<int>& path) const;
 
     // Reservation system
     bool reserveBoxAtPlanning(const std::string& robot_id, int pickup_node);
     void reservePath(const std::string& robot_id, const std::vector<int>& path, int goal);
+    void releaseHeldPublishedLastNode(const std::string& robot_id);
+    void holdPublishedLastNode(const std::string& robot_id, const std::vector<int>& published_path);
     bool releaseNode(const std::string& robot_id, int node);
     bool releaseNodesBefore(const std::string& robot_id, int current_node);
     bool releaseAllPathNodesExceptCurrent(const std::string& robot_id, int current_node);
@@ -132,7 +137,7 @@ private:
 
     WarehouseApproachTopology approach_topology_;
 
-   
+    bool isNodeReservedOrBlockedIndirectly(int node) const;
     bool isDirect11To27GloballyForbidden() const;
     bool isDirect11To27ReservedConsecutively() const;
 };

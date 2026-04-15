@@ -139,6 +139,7 @@ void MultiPlannerNode::sequenceCb(const std_msgs::String::ConstPtr& msg)
         r.waiting_replan = false;
         r.task_type.clear();
         r.reserved_pickup_node = -1;
+        r.held_published_last_node = -1;
     }
 
     ROS_WARN("Initial boxes set");
@@ -200,6 +201,39 @@ std::vector<int> MultiPlannerNode::sequenceToBoxtypes(const std::string& seq) co
 bool MultiPlannerNode::planForRobot(const std::string& robot_id)
 {
     auto& r = robots_[robot_id];
+    auto formatVector = [](const std::vector<int>& values) {
+        std::ostringstream ss;
+        ss << "[";
+        for (size_t i = 0; i < values.size(); ++i) {
+            if (i > 0) ss << ", ";
+            ss << values[i];
+        }
+        ss << "]";
+        return ss.str();
+    };
+    auto formatSet = [](const std::unordered_set<int>& values) {
+        std::vector<int> sorted(values.begin(), values.end());
+        std::sort(sorted.begin(), sorted.end());
+        std::ostringstream ss;
+        ss << "[";
+        for (size_t i = 0; i < sorted.size(); ++i) {
+            if (i > 0) ss << ", ";
+            ss << sorted[i];
+        }
+        ss << "]";
+        return ss.str();
+    };
+    auto dumpBoxes = [this]() {
+        std::ostringstream ss;
+        ss << "[";
+        const auto& special_nodes = planner_->factory.special_nodes;
+        for (size_t i = 0; i < special_nodes.size() && i < boxes_.size(); ++i) {
+            if (i > 0) ss << ", ";
+            ss << special_nodes[i] << ":" << boxes_[i];
+        }
+        ss << "]";
+        return ss.str();
+    };
 
     if (r.busy) {
         ROS_INFO("%s is already busy", robot_id.c_str());
@@ -227,8 +261,17 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
     if (r.box != EMPTY)
         filtered = applyOutputWarehouseRule(filtered);
 
+    ROS_INFO("[%s][DEBUG] valid_nodes=%s unavailable_pickups=%s filtered=%s reserved_goals=%zu boxes=%s",
+             robot_id.c_str(),
+             formatVector(valid_nodes).c_str(),
+             formatSet(unavailable).c_str(),
+             formatVector(filtered).c_str(),
+             reserved_goals_.size(),
+             dumpBoxes().c_str());
+
     if (filtered.empty()) {
         ROS_WARN("No valid nodes for %s", robot_id.c_str());
+        ROS_WARN("[%s][DEBUG] planning failed: no valid nodes after filtering", robot_id.c_str());
         r.waiting_replan = true;
         publishStateSnapshot(robot_id, "planning failed - no valid nodes", state);
         return false;
@@ -243,12 +286,23 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
     std::unordered_set<int> blocked = reserved_by_other;
     blocked.insert(extra.begin(), extra.end());
 
+    ROS_INFO("[%s][DEBUG] reserved_by_other=%s extra_blocked=%s blocked=%s",
+             robot_id.c_str(),
+             formatSet(reserved_by_other).c_str(),
+             formatSet(extra).c_str(),
+             formatSet(blocked).c_str());
+
     // Candidate groups
     std::vector<std::vector<int>> candidate_groups;
     if (r.box == EMPTY)
         candidate_groups = splitPickupCandidatesByPriority(robot_id, filtered);
     else
         candidate_groups = {filtered};
+
+    for (size_t i = 0; i < candidate_groups.size(); ++i) {
+        ROS_INFO("[%s][DEBUG] candidate_group[%zu]=%s",
+                 robot_id.c_str(), i, formatVector(candidate_groups[i]).c_str());
+    }
 
     std::vector<int> best_path;
     int best_goal = -1;
@@ -275,9 +329,15 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
             }
 
             auto path = shortestPathAvoiding(robot_node, node, blocked);
-            if (path.empty()) continue;
+            if (path.empty()) {
+                ROS_INFO("[%s][DEBUG] candidate node %d rejected: no path from %d with blocked=%s",
+                         robot_id.c_str(), node, robot_node, formatSet(blocked).c_str());
+                continue;
+            }
 
             double cost = pathCost(path);
+            ROS_INFO("[%s][DEBUG] candidate node %d path=%s cost=%.3f",
+                     robot_id.c_str(), node, formatVector(path).c_str(), cost);
             if (cost < local_best_cost) {
                 local_best_cost = cost;
                 local_best_path = path;
@@ -294,6 +354,12 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
 
     if (best_path.empty()) {
         ROS_WARN("No collision free path for %s", robot_id.c_str());
+        ROS_WARN("[%s][DEBUG] planning failed: robot_node=%d filtered=%s blocked=%s boxes=%s",
+                 robot_id.c_str(),
+                 robot_node,
+                 formatVector(filtered).c_str(),
+                 formatSet(blocked).c_str(),
+                 dumpBoxes().c_str());
         r.waiting_replan = true;
         publishStateSnapshot(robot_id, "planning failed - no path", state);
         return false;
@@ -312,8 +378,10 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
         ROS_INFO("[%s] pickup_plan_count = %d", robot_id.c_str(), pickup_plan_count_);
     }
 
-    auto full_path = extendPathWithPreviousNode(best_path);
-    auto compact_path = extendPathWithPreviousNode(compactExistingPath(best_path));
+    auto full_path = dropFirstNodeUnlessStart31(extendPathWithPreviousNode(best_path));
+    auto compact_path = adaptPublishedPath(
+        dropFirstNodeUnlessStart31(
+            extendPathWithPreviousNode(compactExistingPath(best_path))));
 
     if (isWarehouseNode(best_goal)) {
         int side_node = determineApproachSideNode(best_path, best_goal);
@@ -322,8 +390,10 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
                  robot_id.c_str(), best_goal, side_node);
     }
 
+    releaseHeldPublishedLastNode(robot_id);
     reservePath(robot_id, full_path, best_goal);
     publishPath(robot_id, compact_path);
+    holdPublishedLastNode(robot_id, compact_path);
 
     r.path = full_path;
     r.compact_path = compact_path;
@@ -371,6 +441,32 @@ void MultiPlannerNode::reservePath(const std::string& robot_id,
         reserved_nodes_[n] = robot_id;
     }
     reserved_goals_[goal] = robot_id;
+}
+
+void MultiPlannerNode::releaseHeldPublishedLastNode(const std::string& robot_id)
+{
+    auto& r = robots_[robot_id];
+    if (r.held_published_last_node < 0) return;
+
+    auto it = reserved_nodes_.find(r.held_published_last_node);
+    if (it != reserved_nodes_.end() && it->second == robot_id)
+        reserved_nodes_.erase(it);
+
+    r.held_published_last_node = -1;
+}
+
+void MultiPlannerNode::holdPublishedLastNode(
+    const std::string& robot_id, const std::vector<int>& published_path)
+{
+    auto& r = robots_[robot_id];
+    if (published_path.empty()) {
+        r.held_published_last_node = -1;
+        return;
+    }
+
+    int held_node = resolveWarehouseId(published_path.back());
+    reserved_nodes_[held_node] = robot_id;
+    r.held_published_last_node = held_node;
 }
 
 void MultiPlannerNode::publishPath(const std::string& robot_id,
@@ -426,8 +522,11 @@ void MultiPlannerNode::goalReached(const std::string& robot_id)
     auto& r = robots_[robot_id];
     int goal = r.goal;
     std::string task_type = r.task_type;
+    int published_last_node = r.held_published_last_node;
 
     releaseAllPathNodesExceptCurrent(robot_id, goal);
+    if (published_last_node >= 0)
+        reserved_nodes_[published_last_node] = robot_id;
 
     ROS_INFO("%s reached goal %d with task_type=%s", robot_id.c_str(), goal, task_type.c_str());
 
@@ -586,6 +685,28 @@ std::vector<int> MultiPlannerNode::extendPathWithPreviousNode(
     return extended;
 }
 
+std::vector<int> MultiPlannerNode::dropFirstNodeUnlessStart31(
+    const std::vector<int>& path) const
+{
+    if (path.size() <= 1) return path;
+    if (path.front() == 31) return path;
+
+    return std::vector<int>(path.begin() + 1, path.end());
+}
+
+std::vector<int> MultiPlannerNode::adaptPublishedPath(
+    const std::vector<int>& path) const
+{
+    auto adapted = path;
+    for (int i = 1; i < static_cast<int>(adapted.size()); ++i) {
+        if (adapted[i - 1] == 7 && adapted[i] == 30)
+            adapted[i] = 130;
+        if (adapted[i - 1] == 30 && adapted[i] == 138)
+            adapted[i - 1] = 230;
+    }
+    return adapted;
+}
+
 // =====================================================================
 // Warehouse approach-side determination
 // =====================================================================
@@ -714,16 +835,10 @@ std::unordered_set<int> MultiPlannerNode::getExtraBlockedNodes(
     const std::string& robot_id) const
 {
     std::unordered_set<int> blocked;
-
-    std::unordered_set<int> reserved_by_other;
-    for (auto& [n, owner] : reserved_nodes_)
-        if (owner != robot_id) reserved_by_other.insert(n);
-
-    for (int node : reserved_by_other) {
-        if (special_block_nodes_.count(node)) {
-            for (auto& [neigh, _w] : planner_->factory.graph.neighbors(node))
-                blocked.insert(neigh);
-        }
+    if (isNodeReservedOrBlockedIndirectly(30)) {
+        blocked.insert(29);
+        ROS_INFO("[%s] global block: node 29 blocked because node 30 is reserved or indirectly blocked",
+                 robot_id.c_str());
     }
 
     // Regra global:
@@ -752,38 +867,43 @@ std::vector<int> MultiPlannerNode::applyOutputWarehouseRule(
 
     if (output_candidates.empty()) return valid_nodes;
 
-    bool output_has_box = false;
-    for (int node : output_nodes_) {
-        auto it = planner_->factory.index_of.find(node);
-        if (it != planner_->factory.index_of.end()) {
-            if (boxes_[it->second] != EMPTY) {
-                output_has_box = true;
-                break;
-            }
-        }
-    }
-
-    bool output_has_reserved_dropoff = false;
-    for (auto& [other_id, other] : robots_) {
+    std::unordered_set<int> committed_outputs;
+    for (const auto& [other_id, other] : robots_) {
         if (other.goal >= 0 && other.task_type == "dropoff" &&
             output_nodes_.count(other.goal)) {
-            output_has_reserved_dropoff = true;
-            break;
+            committed_outputs.insert(other.goal);
         }
     }
 
-    if (!output_has_box && !output_has_reserved_dropoff) {
-        std::unordered_set<int> allowed_output = {36, 37};
+    for (int node : output_nodes_) {
+        auto it = planner_->factory.index_of.find(node);
+        if (it != planner_->factory.index_of.end() && boxes_[it->second] != EMPTY)
+            committed_outputs.insert(node);
+    }
+
+    auto restrict_to_output = [&](int target_output, const char* reason) {
+        if (std::find(output_candidates.begin(), output_candidates.end(), target_output) ==
+            output_candidates.end()) {
+            ROS_INFO("[OUTPUT_RULE] target output %d unavailable for %s, keeping all valid outputs",
+                     target_output, reason);
+            return valid_nodes;
+        }
         std::vector<int> filtered;
         for (int n : valid_nodes) {
-            if (!output_nodes_.count(n) || allowed_output.count(n))
+            if (!output_nodes_.count(n) || n == target_output)
                 filtered.push_back(n);
         }
-        ROS_INFO("[OUTPUT_RULE] output empty, restricting to 36/37");
+        ROS_INFO("[OUTPUT_RULE] forcing output node %d for %s", target_output, reason);
         return filtered;
-    }
+    };
 
-    ROS_INFO("[OUTPUT_RULE] output active, all output nodes available");
+    if (committed_outputs.empty())
+        return restrict_to_output(36, "first blue box");
+
+    if (committed_outputs.size() == 1 && committed_outputs.count(36))
+        return restrict_to_output(37, "second blue after first blue went to 36");
+
+    ROS_INFO("[OUTPUT_RULE] no special blue-output rule applies, keeping all valid outputs");
     return valid_nodes;
 }
 
@@ -932,12 +1052,24 @@ bool MultiPlannerNode::isDirect11To27ReservedConsecutively() const
     return false;
 }
 
+bool MultiPlannerNode::isNodeReservedOrBlockedIndirectly(int node) const
+{
+    if (reserved_nodes_.count(node)) return true;
+
+    if (node == 12 && reserved_nodes_.count(13)) return true;
+    if (node == 26 && reserved_nodes_.count(25)) return true;
+    if (node == 29 && reserved_nodes_.count(30)) return true;
+
+    return false;
+}
+
 bool MultiPlannerNode::isDirect11To27GloballyForbidden() const
 {
     // Se 12 ou 26 estiverem reservados por qualquer robô,
     // então o troço direto 11 <-> 27 fica proibido globalmente.
-    if (reserved_nodes_.count(12) || reserved_nodes_.count(26)) {
-        ROS_INFO("Global rule active: direct edge 11<->27 forbidden because 12 or 26 is reserved");
+    if (isNodeReservedOrBlockedIndirectly(12) ||
+        isNodeReservedOrBlockedIndirectly(26)) {
+        ROS_INFO("Global rule active: direct edge 11<->27 forbidden because 12/26 are reserved or indirectly blocked by 13/25");
         return true;
     }
 
