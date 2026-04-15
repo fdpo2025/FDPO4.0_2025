@@ -126,6 +126,7 @@ class NavigationController {
             double k_approaching_pickdrop;     // Ganhos estado Approaching_PickDrop
             double gain_approaching_fwd_pickdrop;
             double approaching_vel_pickdrop;   // Vel. ref. na lei quadrática em |w_d| (PickDrop)
+            double pick_box_forward_vel;       // Velocidade no estado pickBoxForward
             double approaching_colinear_angle_rad;  // Se |Δθ| entre linha atual e pf→warehouse < isto, não entra em Approaching
             double k_approaching_process;
             double gain_approaching_fwd_process;
