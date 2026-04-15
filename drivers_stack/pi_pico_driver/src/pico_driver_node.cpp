@@ -5,6 +5,7 @@
 
 #include <pi_pico_driver/RadioNetworkTable.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/Empty.h>
 
 /*
  * Serial protocol (ROS1 <-> Pico):
@@ -51,6 +52,7 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   rawSerialPub_ = nh.advertise<std_msgs::String>("/pi_pico_driver/raw_serial", 50);
   networkTablePub_ = nh.advertise<pi_pico_driver::RadioNetworkTable>("/pi_pico_driver/network_table", 10);
   waitStatePub_ = nh.advertise<std_msgs::Bool>("/pi_pico_driver/wait_state", 10, true);
+  peerWaitReleasePub_ = nh.advertise<std_msgs::Empty>("/pi_pico_driver/peer_wait_release", 20, false);
   colorSequencePub_ = nh.advertise<std_msgs::String>("/color_sequence", 10, true);
   commTimer = nh.createTimer(ros::Duration(0.02), &PiPicoDriver::commTick, this);
 
@@ -331,6 +333,19 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
   messageToReceive.np_all = parseUIntList(np_start, (msg.c_str() + wt_idx) - np_start);
   messageToReceive.wt_all = parseUIntList(wt_start, msg.c_str() + msg.size() - wt_start);
 
+  const size_t pr_idx = msg.find(";PR:");
+  int pr_field = 0;
+  if (pr_idx != std::string::npos) {
+    const char* prp = msg.c_str() + pr_idx + 4;
+    if (*prp == '1') pr_field = 1;
+    else if (*prp == '0') pr_field = 0;
+  }
+  if (pr_field == 1 && last_pr_field_ == 0) {
+    std_msgs::Empty e;
+    peerWaitReleasePub_.publish(e);
+  }
+  last_pr_field_ = pr_field;
+
   updateReducedStateFromArrays();
 
   std_msgs::UInt32 cp_msg;
@@ -354,6 +369,7 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
       handshake_ok_ = true;
       con_state.missed = 0;
       con_state.link_ok = true;
+      last_pr_field_ = 0;
       // Pico resets color state on REQ:INIT; allow the same /color_sequence to be sent again.
       last_color_from_pico_.clear();
       last_color_sent_to_pico_.clear();

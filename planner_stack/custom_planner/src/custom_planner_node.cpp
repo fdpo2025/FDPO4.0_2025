@@ -70,11 +70,14 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
 
   nh_.param<std::string>("color_sequence_topic", color_sequence_topic_, "/color_sequence");
   nh_.param<std::string>("wait_state_topic", wait_state_topic_, "/pi_pico_driver/wait_state");
+  nh_.param<std::string>("peer_wait_release_topic", peer_wait_release_topic_, "/pi_pico_driver/peer_wait_release");
   nh_.param<std::string>("this_current_pose_topic", this_current_pose_topic_, "/this_current_pose");
 
   mission_color_sub_ = nh_.subscribe(color_sequence_topic_, 1, &CustomPlannerNode::onMissionColorSequence, this);
   robot_identity_sub_ = nh_.subscribe("/robot_identity", 1, &CustomPlannerNode::onRobotIdentity, this);
   wait_state_sub_ = nh_.subscribe(wait_state_topic_, 20, &CustomPlannerNode::onWaitState, this);
+  peer_wait_release_sub_ =
+      nh_.subscribe(peer_wait_release_topic_, 50, &CustomPlannerNode::onPeerWaitRelease, this);
   this_pose_sub_ = nh_.subscribe(this_current_pose_topic_, 50, &CustomPlannerNode::onThisCurrentPose, this);
 
   planned_paths_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/planned_paths", 100, true);
@@ -113,9 +116,9 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
 
   ROS_INFO(
       "custom_planner ready: identity via /robot_identity (pi_pico_driver após INIT) ou param "
-      "initial_robot_id; topics %s, %s, %s (num_robots=%d)",
+      "initial_robot_id; topics %s, %s, %s, %s (num_robots=%d)",
       color_sequence_topic_.c_str(), wait_state_topic_.c_str(), this_current_pose_topic_.c_str(),
-      num_robots_);
+      peer_wait_release_topic_.c_str(), num_robots_);
 }
 
 bool CustomPlannerNode::loadMissions() {
@@ -186,6 +189,14 @@ void CustomPlannerNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& msg) {
   applyRobotIdentity(msg->data);
 }
 
+void CustomPlannerNode::onPeerWaitRelease(const std_msgs::Empty::ConstPtr& msg) {
+  (void)msg;
+  std::lock_guard<std::mutex> lock(mtx_);
+  pending_peer_releases_.push_back(1u);
+  ROS_INFO_THROTTLE(0.5, "custom_planner: buffered peer wait release (FIFO size=%zu)",
+                    pending_peer_releases_.size());
+}
+
 void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {
   std::lock_guard<std::mutex> lock(mtx_);
   // wait_state mirrors network "waiting" for this robot_id (CMD wt_send + radio).
@@ -245,6 +256,7 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   last_color_sequence_ = color_sequence;
   const std::string manga_key = selectMangaKey(color_sequence);
   publishSpawnPose(manga_key);
+  pending_peer_releases_.clear();
   pending_tasks_.clear();
   has_active_task_ = false;
   active_task_ = MissionTask();
@@ -673,6 +685,16 @@ void CustomPlannerNode::processTimelineLocked() {
       continue;
     }
     if (tok == -1) {
+      if (!pending_peer_releases_.empty()) {
+        pending_peer_releases_.pop_front();
+        ++timeline_cursor_;
+        publishActiveTaskDebugLocked();
+        ROS_INFO(
+            "custom_planner: timeline -1 consumed from buffered peer release (remaining FIFO=%zu)",
+            pending_peer_releases_.size());
+        processTimelineLocked();
+        return;
+      }
       setState(STATE_WAITING);
       publishRadioWakeRequest(robot_id_);
       ++timeline_cursor_;

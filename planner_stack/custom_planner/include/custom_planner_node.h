@@ -3,6 +3,7 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <ros/ros.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/Empty.h>
 #include <std_msgs/Int32.h>
 #include <std_msgs/Int32MultiArray.h>
 #include <std_msgs/String.h>
@@ -56,6 +57,7 @@ class CustomPlannerNode {
   void onThisCurrentPose(const std_msgs::UInt32::ConstPtr& msg);
   void onNavRoutePauseRequest(const std_msgs::Bool::ConstPtr& msg);
   void onNavPlanWaypointConsumed(const std_msgs::UInt32MultiArray::ConstPtr& msg);
+  void onPeerWaitRelease(const std_msgs::Empty::ConstPtr& msg);
 
   bool loadMissions();
   std::string selectMangaKey(const std::string& color_sequence) const;
@@ -95,6 +97,7 @@ class CustomPlannerNode {
   ros::Subscriber mission_color_sub_;
   ros::Subscriber robot_identity_sub_;
   ros::Subscriber wait_state_sub_;
+  ros::Subscriber peer_wait_release_sub_;
   ros::Subscriber this_pose_sub_;
   ros::Subscriber nav_plan_waypoint_consumed_sub_;
   ros::Publisher planned_paths_pub_;
@@ -113,6 +116,7 @@ class CustomPlannerNode {
 
   std::string color_sequence_topic_;
   std::string wait_state_topic_;
+  std::string peer_wait_release_topic_;
   std::string this_current_pose_topic_;
   int num_robots_ = 2;
 
@@ -141,5 +145,10 @@ class CustomPlannerNode {
   /** After entering STATE_WAITING, ignore one edge cycle: re-baseline last_pi_wait_state_ so a stale
    *  True→False from before this wait cannot immediately release (fixes leading "W" skipped). */
   bool wait_state_resync_armed_ = false;
+  /**
+   * FIFO: peer stop_waiting (radio) arrived before this robot reached timeline token -1.
+   * Consumed one-for-one when processing -1 (skip WAITING if non-empty). See firmware ;PR: in POS.
+   */
+  std::deque<uint8_t> pending_peer_releases_;
 };
 

@@ -21,6 +21,7 @@
 #include <std_msgs/Int32MultiArray.h>
 #include <vector>
 #include <std_msgs/UInt32.h>
+#include <std_msgs/Empty.h>
 
 struct Pose {
 
@@ -126,6 +127,8 @@ class PiPicoDriver {
         ros::Publisher rawSerialPub_;
         ros::Publisher networkTablePub_;
         ros::Publisher waitStatePub_;
+        /** Rising edge on POS ;PR:1 — peer sent stop_waiting for this robot (buffer in custom_planner). */
+        ros::Publisher peerWaitReleasePub_;
         ros::Publisher colorSequencePub_;
         /** Latched; id from Pico INIT line after handshake (fleet index 0-based). */
         ros::Publisher robot_identity_pub_;
@@ -156,5 +159,8 @@ class PiPicoDriver {
 
         bool wait_state_initialized_{false};
         bool last_published_wait_state_{false};
+
+        /** Last ;PR: field from POS (0/1) for edge detection. */
+        int last_pr_field_{0};
 
 };
