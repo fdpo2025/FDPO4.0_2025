@@ -125,6 +125,26 @@ void NavigationController::onRouteWaypointConsumedForPauseCheck(const WayPoint& 
         consumed.plan_index, consumed.plan_index + 1);
 }
 
+void NavigationController::transitionAfterDropWarehouse(const char* trace_tag) {
+    const WayPoint consumed = route.front();
+    route.pop_front();
+    onRouteWaypointConsumedForPauseCheck(consumed);
+    updateDesiredPose();
+
+    followLineFsm.new_state = navigation::followLineStates::Follow_Line;
+    if (trace_tag) {
+        ROS_WARN("%s", trace_tag);
+    }
+    followLineFsm.set_state();
+    completion_feedback_sent = false;
+
+    if (route.empty()) {
+        navigationFsm.new_state = navigation::states::idle;
+    } else {
+        navigationFsm.new_state = navigation::states::done;
+    }
+}
+
 void NavigationController::reconfigCb(navigation_controller::NavigationConfig &cfg, uint32_t) {
     param.v_nom        = cfg.v_nom;
     param.w_nom        = cfg.w_nom;
@@ -1107,22 +1127,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
                     in_pick_box_forward = true;
                     ROS_INFO("NavigationController: Completed line to pick warehouse, entering pickBoxForward state");
                 } else {
-                    const WayPoint consumed = route.front();
-                    route.pop_front();
-                    onRouteWaypointConsumedForPauseCheck(consumed);
-                    updateDesiredPose();
-                    
-                    followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-                    ROS_WARN("followline 3");
-                    followLineFsm.set_state();
-                    
-                    completion_feedback_sent = false;
-                    
-                    if(route.empty()) {
-                        navigationFsm.new_state = navigation::states::idle;
-                    } else {
-                        navigationFsm.new_state = navigation::states::done;
-                    }
+                    transitionAfterDropWarehouse("followline 3");
                 }
             }
         }
@@ -1142,22 +1147,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             pick_box_forward_start_time = ros::Time::now();
             in_pick_box_forward = true;
         } else {
-            const WayPoint consumed = route.front();
-            route.pop_front();
-            onRouteWaypointConsumedForPauseCheck(consumed);
-            updateDesiredPose();
-
-            followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-            ROS_WARN("followline process goto pop");
-            followLineFsm.set_state();
-
-            completion_feedback_sent = false;
-
-            if (route.empty()) {
-                navigationFsm.new_state = navigation::states::idle;
-            } else {
-                navigationFsm.new_state = navigation::states::done;
-            }
+            transitionAfterDropWarehouse("followline process goto pop");
         }
     }
 
@@ -1190,21 +1180,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
             in_pick_box_forward = true;
             ROS_INFO("NavigationController: Completed turnToFinalYaw at pick warehouse, entering pickBoxForward state");
         } else {
-            const WayPoint consumed = route.front();
-            route.pop_front();
-            onRouteWaypointConsumedForPauseCheck(consumed);
-            completion_feedback_sent = false;
-            updateDesiredPose();
-            
-            followLineFsm.new_state = navigation::followLineStates::Follow_Line;
-            ROS_WARN("followline 4");
-            followLineFsm.set_state();
-            
-            if(route.empty()) {
-                navigationFsm.new_state = navigation::states::idle;
-            } else {
-                navigationFsm.new_state = navigation::states::done;
-            }
+            transitionAfterDropWarehouse("followline 4");
         }
 
     }

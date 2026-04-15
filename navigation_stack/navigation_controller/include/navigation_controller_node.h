@@ -212,6 +212,8 @@ class NavigationController {
         void navPauseAfterWpIndexCb(const std_msgs::UInt32MultiArray::ConstPtr& msg);
         ros::Publisher nav_route_pause_request_pub_;
         void onRouteWaypointConsumedForPauseCheck(const WayPoint& consumed);
+        /** Pop consumed waypoint after non-pick warehouse and preserve consumed/pause callbacks. */
+        void transitionAfterDropWarehouse(const char* trace_tag);
         /** Monotonic id from NavPlan.header.seq when route loaded from /nav_plan (plan_handler). */
         uint32_t loaded_nav_plan_seq_{0};
         ros::Publisher nav_plan_waypoint_consumed_pub_;
