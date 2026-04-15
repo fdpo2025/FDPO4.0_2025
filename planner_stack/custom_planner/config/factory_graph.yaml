@@ -46,5 +46,26 @@ points_map:
   "37": {x: 0.570, y: -0.470, links: [29], type: "output"}
   "38": {x: 0.700, y: -0.463, links: [30], type: "output"}
 
+  # Nós espelhados (+100) para entrada alternativa no mesmo armazém/lane.
+  # Mantêm links/type do nó base (id-100). Coordenadas são placeholders.
+  "100": {x: -0.682, y: 0.461, links: [8], type: "input"}
+  "101": {x: -0.537, y: 0.466, links: [9], type: "input"}
+  "102": {x: -0.397, y: 0.468, links: [10], type: "input"}
+  "103": {x: -0.245, y: 0.468, links: [11], type: "input"}
+  "113": {x: 0.320, y: 0.11, links: [12], type: "proc_in"}
+  "114": {x: 0.380, y: 0.18, links: [15], type: "proc_out"}
+  "117": {x: -0.430, y: -0.03, links: [16], type: "proc_in"}
+  "118": {x: -0.310, y: 0.014, links: [19], type: "proc_out"}
+  "120": {x: 0.320, y: -0.03, links: [19], type: "proc_in"}
+  "121": {x: 0.380, y: 0.03, links: [22], type: "proc_out"}
+  "124": {x: -0.443, y: -0.17, links: [23], type: "proc_in"}
+  "125": {x: -0.310, y: -0.128, links: [26], type: "proc_out"}
+  "130": {x: 0.700, y: -0.255, links: [22, 29, 38]}
+  "135": {x: 0.250, y: -0.471, links: [27], type: "output"}
+  "136": {x: 0.398, y: -0.471, links: [28], type: "output"}
+  "137": {x: 0.570, y: -0.470, links: [29], type: "output"}
+  "138": {x: 0.700, y: -0.463, links: [30], type: "output"}
+  "230": {x: 0.700, y: -0.255, links: [22, 29, 38]}
+
 forced_keep_nodes: [8, 19, 30]
 
