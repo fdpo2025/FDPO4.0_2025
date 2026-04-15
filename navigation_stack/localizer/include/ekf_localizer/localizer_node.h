@@ -60,7 +60,9 @@ class LocalizerNode {
 
         ros::Publisher pose_pub;
         void publishLogPose();
-        
+
+        int odom_skip_count_ = 0;
+        int odom_skip_remaining_ = 0;
 };
 
 

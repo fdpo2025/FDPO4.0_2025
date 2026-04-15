@@ -17,7 +17,11 @@ LocalizerNode::LocalizerNode(ros::NodeHandle& nh) : nh(nh), tf_buffer(ros::Durat
     
     ROS_INFO("[LocalizerNode] Initial pose: x=%.3f, y=%.3f, theta=%.3f rad (%.1f°)", 
              init_x, init_y, init_theta, init_theta * 180.0 / M_PI);
-    
+
+    nh.param("ekf_params/odom_skip_count", odom_skip_count_, 50);
+    odom_skip_remaining_ = odom_skip_count_;
+    ROS_INFO("[LocalizerNode] Will skip first %d /odom messages to let Pico stabilize", odom_skip_count_);
+
     odometry_sub = nh.subscribe("/odom", 10, &LocalizerNode::ekf_predict, this);
     beacon_sub = nh.subscribe("/beacon_estimation", 10, &LocalizerNode::ekf_update, this);
     pose_pub = nh.advertise<nav_msgs::Odometry>("/odometry/filtered", 10);
@@ -93,14 +97,21 @@ double LocalizerNode::normalizeAngle(double theta) {
 
 
 void LocalizerNode::ekf_predict(const nav_msgs::Odometry::ConstPtr& msg) {
-    
-    // Dt update
-    if (odom_stamp.isZero()) {     // 1st message   
+
+    if (odom_skip_remaining_ > 0) {
+        --odom_skip_remaining_;
+        if (odom_skip_remaining_ == 0) {
+            ROS_INFO("[LocalizerNode] Skipped %d /odom msgs — EKF starting now", odom_skip_count_);
+        }
+        return;
+    }
+
+    if (odom_stamp.isZero()) {
         odom_stamp = msg->header.stamp;
         last_state_stamp_ = msg->header.stamp;
         publishMapToOdomTF_();
         publishLogPose();
-        return;                     
+        return;
     }
     const ros::Time last_stamp = odom_stamp;
     odom_stamp = msg->header.stamp;
@@ -137,6 +148,8 @@ void LocalizerNode::ekf_predict(const nav_msgs::Odometry::ConstPtr& msg) {
 }
 
 void LocalizerNode::ekf_update(const localizer::BeaconMatch::ConstPtr& msg) {
+
+    if (odom_skip_remaining_ > 0 || odom_stamp.isZero()) return;
 
     last_state_stamp_ = msg->header.stamp;
 

@@ -14,6 +14,10 @@ ekf_params:
     position_y: 0.5      # Initial covariance for Y position (m²)  
     orientation: 0.5     # Initial covariance for orientation (rad²)
   
+  # Number of initial /odom messages to discard before starting EKF.
+  # Allows the Pico odometry to stabilize after serial open.
+  odom_skip_count: 50
+
   # Process covariance matrix Q (model noise for [v, w] inputs)
   process_covariance:
     velocity_linear: 0.0005   # Process covariance for linear velocity (m²/s²)
