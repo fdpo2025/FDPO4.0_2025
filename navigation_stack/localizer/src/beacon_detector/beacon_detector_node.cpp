@@ -129,26 +129,10 @@ void BeaconDetector::updateRobotFrameBeacons(const ros::Time& stamp) {
     geometry_msgs::TransformStamped T_robot_map;
 
     try {
-        // tenta no timestamp da medição
         T_robot_map = tf_buffer->lookupTransform("base_link", "map", stamp, ros::Duration(0.2));
-    } catch (const tf2::ExtrapolationException& ex) {
-        ROS_WARN_THROTTLE(1.0,
-          "TF extrapolation (base_link<-map) em t=%.3f; a usar latest. %s",
-          stamp.toSec(), ex.what());
-        try {
-            // fallback: última disponível
-            T_robot_map = tf_buffer->lookupTransform("base_link", "map",
-                                                     ros::Time(0));
-        } catch (const tf2::TransformException& ex2) {
-            ROS_WARN_THROTTLE(1.0, "Falha também no latest TF: %s", ex2.what());
-            return;
-        }
     } catch (const tf2::TransformException& ex) {
-        // No arranque o frame "map" pode ainda não existir (EKF não publicou); não avisar
-        const std::string msg = ex.what();
-        if (msg.find("does not exist") == std::string::npos) {
-            ROS_WARN_THROTTLE(1.0, "TF lookup falhou (base_link<-map): %s", ex.what());
-        }
+        ROS_WARN_THROTTLE(1.0, "TF base_link<-map indisponivel em t=%.3f, scan descartado: %s",
+                          stamp.toSec(), ex.what());
         return;
     }
 
