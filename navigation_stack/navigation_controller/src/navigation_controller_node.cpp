@@ -1222,7 +1222,7 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
     }
 
     if (navigationFsm.new_state == navigation::states::driveToGoal && enable && !route.empty()
-        && route.front().is_warehouse && route.front().is_process_warehouse && !route.front().align) {
+        && route.front().is_warehouse && !route.front().align) {
         navigationFsm.new_state = navigation::states::processWarehouseGoToXY;
     }
 
