@@ -1136,6 +1136,15 @@ void NavigationController::navigationFsmRunner(const ros::TimerEvent&) {
 
     else if (navigationFsm.state == navigation::states::processWarehouseGoToXY && enable && isPositionArrived()) {
 
+        // Keep plan_handler plan_stack in sync for warehouse go-to waypoints.
+        // Without this completion feedback, /pick_box may never be published for pick/drop.
+        plan_handler::CompletionFeedback feedback;
+        feedback.x = route.front().pose.x;
+        feedback.y = route.front().pose.y;
+        navCompletionFeedbackPub.publish(feedback);
+        ROS_INFO("NavigationController: Published completion feedback (processWarehouseGoToXY) for waypoint (%.3f, %.3f)",
+                 feedback.x, feedback.y);
+
         previousWaypoint = route.front();
         publishCurrentNode(previousWaypoint.node_id);
 
