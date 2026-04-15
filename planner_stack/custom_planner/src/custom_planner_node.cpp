@@ -401,6 +401,12 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
                                                       bool collapse_duplicates) const {
   std::vector<int> out;
   std::vector<std::pair<int, int>> shelf_pick_wait_pairs;
+  auto lastPhysicalNode = [&out]() -> int {
+    for (auto it = out.rbegin(); it != out.rend(); ++it) {
+      if (isPhysicalGraphNode(*it)) return *it;
+    }
+    return -1;
+  };
   if (leg.getType() != XmlRpc::XmlRpcValue::TypeArray) return out;
   for (int i = 0; i < leg.size(); ++i) {
     const XmlRpc::XmlRpcValue& item = leg[i];
@@ -420,17 +426,21 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
       if (parseColorWithWaitSuffix(token, color_token, wait_pick)) {
         const int input = resolveIndexedColorNode(color_token, color_sequence);
         if (input >= 0) {
-          appendWarehousePickupTraversal(input, out, wait_pick);
+          const int previous_node = lastPhysicalNode();
+          const int target_shelf = (previous_node == 8) ? (input + 100) : input;
+          appendWarehousePickupTraversal(input, target_shelf, out, wait_pick);
           if (wait_pick) {
             const int ap = approachNodeForInputShelf(input);
-            if (ap >= 0) shelf_pick_wait_pairs.push_back(std::make_pair(input, ap));
+            if (ap >= 0) shelf_pick_wait_pairs.push_back(std::make_pair(target_shelf, ap));
           }
         }
         continue;
       }
       const int input = resolveIndexedColorNode(token, color_sequence);
       if (input >= 0) {
-        appendWarehousePickupTraversal(input, out, false);
+        const int previous_node = lastPhysicalNode();
+        const int target_shelf = (previous_node == 8) ? (input + 100) : input;
+        appendWarehousePickupTraversal(input, target_shelf, out, false);
         continue;
       }
     }
@@ -551,15 +561,15 @@ bool CustomPlannerNode::tryReadInt(const XmlRpc::XmlRpcValue& item, int& value) 
   return false;
 }
 
-void CustomPlannerNode::appendWarehousePickupTraversal(int input_shelf_node, std::vector<int>& out,
-                                                       bool wait_at_pick) const {
-  const int approach = approachNodeForInputShelf(input_shelf_node);
+void CustomPlannerNode::appendWarehousePickupTraversal(int approach_source_shelf_node, int target_shelf_node,
+                                                       std::vector<int>& out, bool wait_at_pick) const {
+  const int approach = approachNodeForInputShelf(approach_source_shelf_node);
   if (approach < 0) {
-    out.push_back(input_shelf_node);
+    out.push_back(target_shelf_node);
     return;
   }
   out.push_back(approach);
-  out.push_back(input_shelf_node);
+  out.push_back(target_shelf_node);
   if (wait_at_pick) {
     // _W semantics: pause exactly after consuming the shelf node.
     out.push_back(-1);

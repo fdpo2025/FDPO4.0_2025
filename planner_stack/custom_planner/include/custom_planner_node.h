@@ -70,7 +70,8 @@ class CustomPlannerNode {
   bool parseMessageToken(const XmlRpc::XmlRpcValue& item, int& target_robot_id) const;
   bool isWaitToken(const XmlRpc::XmlRpcValue& item) const;
   bool tryReadInt(const XmlRpc::XmlRpcValue& item, int& value) const;
-  void appendWarehousePickupTraversal(int input_shelf_node, std::vector<int>& out, bool wait_at_pick) const;
+  void appendWarehousePickupTraversal(int approach_source_shelf_node, int target_shelf_node,
+                                      std::vector<int>& out, bool wait_at_pick) const;
   void collapseConsecutiveDuplicateNodes(std::vector<int>& nodes) const;
 
   void startMission(const std::string& color_sequence);
