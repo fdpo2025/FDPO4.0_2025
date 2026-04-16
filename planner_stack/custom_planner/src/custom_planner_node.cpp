@@ -428,6 +428,8 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
                                                       bool collapse_duplicates) const {
   std::vector<int> out;
   std::vector<std::pair<int, int>> shelf_pick_wait_pairs;
+  // Context from original mission leg (before token expansion). Used for +100 mirror selection.
+  int last_source_physical_node = -1;
   if (leg.getType() != XmlRpc::XmlRpcValue::TypeArray) return out;
   for (int i = 0; i < leg.size(); ++i) {
     const XmlRpc::XmlRpcValue& item = leg[i];
@@ -450,7 +452,7 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
         const int input = resolveIndexedColorNode(color_token, color_sequence);
         if (input >= 0) {
           const int approach = approachNodeForInputShelf(input);
-          const int target_shelf = (approach == 8) ? (input + 100) : input;
+          const int target_shelf = (last_source_physical_node == 8) ? (input + 100) : input;
 
           // Build the legacy traversal first: approach -> shelf -> (W) -> approach
           std::vector<int> base;
@@ -477,13 +479,16 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
       const int input = resolveIndexedColorNode(token, color_sequence);
       if (input >= 0) {
         const int approach = approachNodeForInputShelf(input);
-        const int target_shelf = (approach == 8) ? (input + 100) : input;
+        const int target_shelf = (last_source_physical_node == 8) ? (input + 100) : input;
         appendWarehousePickupTraversal(input, target_shelf, out, false);
         continue;
       }
     }
     int v = -1;
-    if (tryReadInt(item, v)) out.push_back(v);
+    if (tryReadInt(item, v)) {
+      out.push_back(v);
+      last_source_physical_node = v;
+    }
   }
   if (collapse_duplicates) {
     collapseConsecutiveDuplicateNodes(out);
