@@ -22,6 +22,21 @@ int approachNodeForInputShelf(int shelf) {
   }
 }
 
+int approach900NodeForApproach(int approach_normal) {
+  switch (approach_normal) {
+    case 8:
+      return 908;
+    case 9:
+      return 909;
+    case 10:
+      return 910;
+    case 11:
+      return 911;
+    default:
+      return -1;
+  }
+}
+
 /** Mission leg tokens from YAML: MSG_* encoded as -1000 - robot_id (see parseMessageToken). */
 bool isMsgLegToken(int v) { return v <= -1000 && v >= -1000 - 255; }
 
@@ -413,12 +428,6 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
                                                       bool collapse_duplicates) const {
   std::vector<int> out;
   std::vector<std::pair<int, int>> shelf_pick_wait_pairs;
-  auto lastPhysicalNode = [&out]() -> int {
-    for (auto it = out.rbegin(); it != out.rend(); ++it) {
-      if (isPhysicalGraphNode(*it)) return *it;
-    }
-    return -1;
-  };
   if (leg.getType() != XmlRpc::XmlRpcValue::TypeArray) return out;
   for (int i = 0; i < leg.size(); ++i) {
     const XmlRpc::XmlRpcValue& item = leg[i];
@@ -435,23 +444,40 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
       std::string token = static_cast<std::string>(item);
       std::string color_token;
       bool wait_pick = false;
-      if (parseColorWithWaitSuffix(token, color_token, wait_pick)) {
+      bool use_900 = false;
+      bool end_on_900 = false;
+      if (parseColorWith900Suffix(token, color_token, wait_pick, use_900, end_on_900)) {
         const int input = resolveIndexedColorNode(color_token, color_sequence);
         if (input >= 0) {
-          const int previous_node = lastPhysicalNode();
-          const int target_shelf = (previous_node == 8) ? (input + 100) : input;
-          appendWarehousePickupTraversal(input, target_shelf, out, wait_pick);
+          const int approach = approachNodeForInputShelf(input);
+          const int target_shelf = (approach == 8) ? (input + 100) : input;
+
+          // Build the legacy traversal first: approach -> shelf -> (W) -> approach
+          std::vector<int> base;
+          base.reserve(wait_pick ? 4 : 3);
+          appendWarehousePickupTraversal(input, target_shelf, base, wait_pick);
+
+          // Then, if requested, add the +900 auxiliary approach before (and optionally after).
+          if (use_900) {
+            const int approach900 = approach900NodeForApproach(approach);
+            if (approach900 >= 0) out.push_back(approach900);
+          }
+          out.insert(out.end(), base.begin(), base.end());
+          if (use_900 && end_on_900) {
+            const int approach900 = approach900NodeForApproach(approach);
+            if (approach900 >= 0) out.push_back(approach900);
+          }
+
           if (wait_pick) {
-            const int ap = approachNodeForInputShelf(input);
-            if (ap >= 0) shelf_pick_wait_pairs.push_back(std::make_pair(target_shelf, ap));
+            if (approach >= 0) shelf_pick_wait_pairs.push_back(std::make_pair(target_shelf, approach));
           }
         }
         continue;
       }
       const int input = resolveIndexedColorNode(token, color_sequence);
       if (input >= 0) {
-        const int previous_node = lastPhysicalNode();
-        const int target_shelf = (previous_node == 8) ? (input + 100) : input;
+        const int approach = approachNodeForInputShelf(input);
+        const int target_shelf = (approach == 8) ? (input + 100) : input;
         appendWarehousePickupTraversal(input, target_shelf, out, false);
         continue;
       }
@@ -534,6 +560,57 @@ bool CustomPlannerNode::parseColorWithWaitSuffix(const std::string& token, std::
   return true;
 }
 
+bool CustomPlannerNode::parseColorWith900Suffix(const std::string& token, std::string& color_token_out,
+                                                bool& wait_at_pick_out,
+                                                bool& use_900_approach_out,
+                                                bool& end_on_900_out) const {
+  // Supported:
+  // - "1B_900"
+  // - "1B_W_900"
+  // - "1B_900f" (no _W variant)
+  // - "1B_W" (legacy; use_900=false)
+  // - "1B" (not handled here)
+  wait_at_pick_out = false;
+  use_900_approach_out = false;
+  end_on_900_out = false;
+
+  std::string u;
+  u.reserve(token.size());
+  for (char c : token) u.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+
+  auto ends_with = [&](const std::string& suf) -> bool {
+    return u.size() >= suf.size() && u.compare(u.size() - suf.size(), suf.size(), suf) == 0;
+  };
+
+  if (ends_with("_W_900F")) {
+    // Explicitly not supported per requirement: no wait variants for 900f.
+    return false;
+  }
+  if (ends_with("_900F")) {
+    use_900_approach_out = true;
+    end_on_900_out = true;
+    color_token_out = token.substr(0, token.size() - 5);  // strip "_900f"
+    return !color_token_out.empty();
+  }
+  if (ends_with("_W_900")) {
+    use_900_approach_out = true;
+    wait_at_pick_out = true;
+    color_token_out = token.substr(0, token.size() - 6);  // strip "_W_900"
+    return !color_token_out.empty();
+  }
+  if (ends_with("_900")) {
+    use_900_approach_out = true;
+    color_token_out = token.substr(0, token.size() - 4);  // strip "_900"
+    return !color_token_out.empty();
+  }
+  // Fall back to legacy "_W"
+  if (parseColorWithWaitSuffix(token, color_token_out, wait_at_pick_out)) {
+    use_900_approach_out = false;
+    return true;
+  }
+  return false;
+}
+
 bool CustomPlannerNode::parseMessageToken(const XmlRpc::XmlRpcValue& item, int& target_robot_id) const {
   if (item.getType() != XmlRpc::XmlRpcValue::TypeString) return false;
   std::string token = static_cast<std::string>(item);
@@ -588,6 +665,7 @@ void CustomPlannerNode::appendWarehousePickupTraversal(int approach_source_shelf
   }
   out.push_back(approach);
 }
+
 
 void CustomPlannerNode::collapseConsecutiveDuplicateNodes(std::vector<int>& nodes) const {
   std::vector<int> out;

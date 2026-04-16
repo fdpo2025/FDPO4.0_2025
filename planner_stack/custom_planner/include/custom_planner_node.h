@@ -69,6 +69,8 @@ class CustomPlannerNode {
   int resolveIndexedColorNode(const std::string& token, const std::string& color_sequence) const;
   bool parseColorWithWaitSuffix(const std::string& token, std::string& color_token_out,
                                 bool& wait_at_pick_out) const;
+  bool parseColorWith900Suffix(const std::string& token, std::string& color_token_out, bool& wait_at_pick_out,
+                               bool& use_900_approach_out, bool& end_on_900_out) const;
   bool parseMessageToken(const XmlRpc::XmlRpcValue& item, int& target_robot_id) const;
   bool isWaitToken(const XmlRpc::XmlRpcValue& item) const;
   bool tryReadInt(const XmlRpc::XmlRpcValue& item, int& value) const;
