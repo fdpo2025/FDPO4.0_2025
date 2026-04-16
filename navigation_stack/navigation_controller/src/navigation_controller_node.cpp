@@ -56,6 +56,7 @@ in_pick_box_forward(false), last_vel_before_approaching_(0.0), approaching_brake
     lineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_lines", 1, true);  // latch=true para RViz ver imediatamente
     virtualLineMarkerPub = nh.advertise<visualization_msgs::Marker>("navigation_virtual_line", 1, true);
     navCompletionFeedbackPub = nh.advertise<plan_handler::CompletionFeedback>("/nav_completion_feedback", 10);
+    pickBoxPub = nh.advertise<std_msgs::Bool>("/pick_box", 10);
 
     // =========================
     // PUBLICAR NÓ ATUAL
@@ -170,6 +171,7 @@ void NavigationController::loadRouteFromParameters(){
     if(!nh.getParam("waypoints", waypoints)) return;
 
     route.clear();
+    drop_pick_box_release_published_for_node_id_ = -1;
     
     // Inicializar previousWaypoint com posição atual do robô
     // Isto define o ponto inicial da primeira linha
@@ -294,6 +296,7 @@ void NavigationController::loadNavigationParams() {
     nh_fl.param("k_approaching_process", param.k_approaching_process, param.k_approaching_pickdrop);
     nh_fl.param("gain_approaching_fwd_process", param.gain_approaching_fwd_process, param.gain_approaching_fwd_pickdrop);
     nh_fl.param("approaching_vel_process", param.approaching_vel_process, param.approaching_vel_pickdrop);
+    nh_fl.param("drop_pick_box_release_distance", param.drop_pick_box_release_distance, 0.0);
 
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f (follow_line from /follow_line/navigation_controller)", 
              param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
@@ -637,6 +640,7 @@ void NavigationController::rvizGoalCallBack(const geometry_msgs::PoseStamped::Co
 
     if(!rvizGoalAppend) {
         route.clear();
+        drop_pick_box_release_published_for_node_id_ = -1;
         previousWaypoint.id = 0;
         previousWaypoint.pose.x = poseCurr.x;
         previousWaypoint.pose.y = poseCurr.y;
@@ -759,6 +763,23 @@ void NavigationController::goToXYProcessWarehouse() {
         v_d = 0.0;
         w_d = 0.0;
         return;
+    }
+
+    // Early drop release: publish /pick_box=false before reaching drop warehouse target.
+    if (route.front().is_warehouse && !route.front().pick_box) {
+        const double release_distance = param.drop_pick_box_release_distance;
+        if (release_distance > 0.0 &&
+            drop_pick_box_release_published_for_node_id_ != route.front().node_id &&
+            position_error <= release_distance) {
+            std_msgs::Bool pick_box_msg;
+            pick_box_msg.data = false;
+            pickBoxPub.publish(pick_box_msg);
+            drop_pick_box_release_published_for_node_id_ = route.front().node_id;
+            ROS_INFO("NavigationController: Early /pick_box=false for drop node_id=%d at dist=%.3f m (threshold=%.3f m)",
+                     route.front().node_id, position_error, release_distance);
+        }
+    } else {
+        drop_pick_box_release_published_for_node_id_ = -1;
     }
 
     if (!process_warehouse_goto_align_done_) {
@@ -1394,6 +1415,7 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     last_published_np_node_id_ = -999;
 
     route.clear();
+    drop_pick_box_release_published_for_node_id_ = -1;
     route_execution_pause_hold_ = false;
     {
         std::lock_guard<std::mutex> lk(nav_pause_mtx_);
