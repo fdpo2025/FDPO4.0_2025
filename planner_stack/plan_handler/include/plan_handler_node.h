@@ -24,6 +24,7 @@ struct PlanHandlerFollowLineConfig {
     double vel_lin_nom_warehouse_pick = 0.06;
     /** Vel. nominal na linha até warehouse de drop não-process (output). */
     double vel_lin_nom_warehouse_other = 0.06;
+    double line_switch_ratio_nine = 0.75;
     double line_switch_before_pick = 0.95;
     double line_switch_plan_stack_before_pick = 1.0;
     double line_switch_drop_process = 0.95;
