@@ -72,8 +72,10 @@ bool CustomPlannerNode::isWarehouseCoordinate(int node_id) {
 CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   nh_.param("debug_verbose", debug_verbose_, false);
   nh_.param("num_robots", num_robots_, 2);
+  nh_.param("radio_stop_waiting_retries", radio_stop_waiting_retries_, 1);
   if (num_robots_ < 2) num_robots_ = 2;
   if (num_robots_ > 3) num_robots_ = 3;
+  if (radio_stop_waiting_retries_ < 1) radio_stop_waiting_retries_ = 1;
 
   color_input_node_by_index_[0] = 0;
   color_input_node_by_index_[1] = 1;
@@ -131,9 +133,9 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
 
   ROS_INFO(
       "custom_planner ready: identity via /robot_identity (pi_pico_driver após INIT) ou param "
-      "initial_robot_id; topics %s, %s, %s, %s (num_robots=%d)",
+      "initial_robot_id; topics %s, %s, %s, %s (num_robots=%d, radio_stop_waiting_retries=%d)",
       color_sequence_topic_.c_str(), wait_state_topic_.c_str(), this_current_pose_topic_.c_str(),
-      peer_wait_release_topic_.c_str(), num_robots_);
+      peer_wait_release_topic_.c_str(), num_robots_, radio_stop_waiting_retries_);
 }
 
 bool CustomPlannerNode::loadMissions() {
@@ -732,8 +734,11 @@ void CustomPlannerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
   if (stop_waiting_reset_timer_) {
     stop_waiting_reset_timer_.stop();
   }
+  const double kPicoCommPeriodS = 0.02;
+  const double hold_s =
+      std::max(0.12, static_cast<double>(radio_stop_waiting_retries_) * kPicoCommPeriodS);
   stop_waiting_reset_timer_ = nh_.createTimer(
-      ros::Duration(0.12),
+      ros::Duration(hold_s),
       [this](const ros::TimerEvent&) {
         std_msgs::Bool off;
         off.data = false;

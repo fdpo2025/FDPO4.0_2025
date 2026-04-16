@@ -121,6 +121,7 @@ class CustomPlannerNode {
   std::string peer_wait_release_topic_;
   std::string this_current_pose_topic_;
   int num_robots_ = 2;
+  int radio_stop_waiting_retries_ = 1;
 
   XmlRpc::XmlRpcValue missions_root_;
   std::vector<int> valid_node_ids_;
