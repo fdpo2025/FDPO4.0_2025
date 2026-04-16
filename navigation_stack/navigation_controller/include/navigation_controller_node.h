@@ -131,6 +131,8 @@ class NavigationController {
             double k_approaching_process;
             double gain_approaching_fwd_process;
             double approaching_vel_process;
+            /** Early drop: publish /pick_box=false when dist(go-to-XY target) <= this. <=0 disables. */
+            double drop_pick_box_release_distance;
 
         };
 
@@ -176,6 +178,10 @@ class NavigationController {
 
         ros::Publisher velPub;
         void publishVel();
+
+        /** Optional early release trigger for drop warehouses (go-to-XY). */
+        ros::Publisher pickBoxPub;
+        int drop_pick_box_release_published_for_node_id_{-1};
         
         ros::Publisher lineMarkerPub;
         ros::Publisher virtualLineMarkerPub;
