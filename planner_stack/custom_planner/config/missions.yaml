@@ -21,7 +21,7 @@
 #   - "W" / "WAIT"
 #   - "MSG_0", "MSG_1", "MSG_2", "MSG_ALL" (MSG_ALL -> 255)
 
-radio_stop_waiting_retries: 50
+radio_stop_waiting_retries: 1
 
 ###############################################################
 #                                                             #
