@@ -63,6 +63,7 @@ plan_handler:
   line_switch_after_warehouse_process: 1.0
   line_switch_after_warehouse: 0.9
   line_switch_normal: 0.75
+  line_switch_ratio_nine: 0.9 # pontos 9xx
 
   # Primeira perna depois de sair da warehouse (backwards). Legacy: vel_lin_nom_after_warehouse ainda é lido como fallback.
   vel_lin_nom_backwards_after_warehouse: 0.25

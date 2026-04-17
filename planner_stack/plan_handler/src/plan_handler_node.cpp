@@ -14,6 +14,9 @@ uint32_t decodeMsgTargetRobotId(int32_t v) {
   if (decoded < 0 || decoded > 255) return 255u;
   return static_cast<uint32_t>(decoded);
 }
+bool isNineQueueNode(int32_t v) {
+  return (v >= 908 && v <= 911) || (v >= 927 && v <= 930);
+}
 }  // namespace
 
 PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_) : nh(nh_)
@@ -25,13 +28,14 @@ PlanHandlerNode::PlanHandlerNode(ros::NodeHandle& nh_) : nh(nh_)
     nh_fl.param("vel_lin_nom_warehouse_process", fl_.vel_lin_nom_warehouse_process, 0.025);
     nh_fl.param("vel_lin_nom_warehouse_pick", fl_.vel_lin_nom_warehouse_pick, 0.06);
     nh_fl.param("vel_lin_nom_warehouse_other", fl_.vel_lin_nom_warehouse_other, 0.06);
+    nh_fl.param("line_switch_normal", fl_.line_switch_normal, 0.75);
+    nh_fl.param("line_switch_ratio_nine", fl_.line_switch_ratio_nine, fl_.line_switch_normal);
     nh_fl.param("line_switch_before_pick", fl_.line_switch_before_pick, 0.95);
     nh_fl.param("line_switch_plan_stack_before_pick", fl_.line_switch_plan_stack_before_pick, 1.0);
     nh_fl.param("line_switch_drop_process", fl_.line_switch_drop_process, 0.95);
     nh_fl.param("line_switch_drop_other", fl_.line_switch_drop_other, 0.60);
     nh_fl.param("line_switch_after_warehouse_process", fl_.line_switch_after_warehouse_process, 1.0);
     nh_fl.param("line_switch_after_warehouse", fl_.line_switch_after_warehouse, 0.7);
-    nh_fl.param("line_switch_normal", fl_.line_switch_normal, 0.75);
     {
         double legacy_after = 0.1;
         nh_fl.param("vel_lin_nom_after_warehouse", legacy_after, 0.1);
@@ -289,6 +293,18 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
                 }
                 if (!plan_stack.empty()) {
                     plan_stack.back().line_switch_ratio = drop_switch_ratio;
+                }
+            }
+
+            if (control_points.size() >= 2 && plan_stack.size() >= 2) {
+                const ControllerPoint& prev_prev = control_points[control_points.size() - 2];
+                const ControllerPoint& prev = control_points.back();
+                const bool prev_is_normal = !prev.is_warehouse && !isNineQueueNode(prev.node_id);
+                if (isNineQueueNode(prev_prev.node_id) && prev_is_normal) {
+                    control_points[control_points.size() - 2].line_switch_ratio = fl_.line_switch_ratio_nine;
+                    plan_stack[plan_stack.size() - 2].line_switch_ratio = fl_.line_switch_ratio_nine;
+                    ROS_INFO("PlanHandlerNode: Set line_switch_ratio=%.2f for 9xx point %d before pattern %d -> %d",
+                             fl_.line_switch_ratio_nine, prev_prev.node_id, prev.node_id, value);
                 }
             }
 
