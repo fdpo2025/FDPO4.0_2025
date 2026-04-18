@@ -30,6 +30,7 @@ class SdpoDriverLaser2D {
   bool ang_range_check_ = false;
   float ang_min_;
   float ang_max_;
+  float scan_freq_hz_ = 0.0f;
 
   std::string serial_port_name_;
   int baud_rate_;
