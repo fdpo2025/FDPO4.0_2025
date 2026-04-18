@@ -74,7 +74,7 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   nh_.param("num_robots", num_robots_, 2);
   nh_.param("radio_stop_waiting_retries", radio_stop_waiting_retries_, 1);
   if (num_robots_ < 2) num_robots_ = 2;
-  if (num_robots_ > 3) num_robots_ = 3;
+  if (num_robots_ > 4) num_robots_ = 4;
   if (radio_stop_waiting_retries_ < 1) radio_stop_waiting_retries_ = 1;
 
   color_input_node_by_index_[0] = 0;

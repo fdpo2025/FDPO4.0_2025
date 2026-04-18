@@ -2,7 +2,7 @@
   <arg name="node_name" default="custom_planner_node" />
   <arg name="debug_verbose" default="true" />
   <arg name="color_sequence_topic" default="/color_sequence" />
-  <arg name="num_robots" default="2" doc="2 or 3 robots in this run (missions_2 / missions_3)" />
+  <arg name="num_robots" default="2" doc="2, 3 ou 4 robôs nesta execução (missions_2 / missions_3 / missions_4)" />
   <arg name="initial_robot_id" default="-1" doc="-1: usar só /robot_identity (pi_pico_driver após INIT). &gt;=0: sim sem Pico" />
 
   <node name="$(arg node_name)" pkg="custom_planner" type="custom_planner_node" output="screen">
