@@ -17,7 +17,7 @@
 	<arg name="planning_method" default="astar" doc="Planning method for chris_planner: closest, onebyone, greedy_h, or astar"/>
 	<arg name="use_wifi" default="true" />
 	<arg name="planner_type" default="chris" doc="chris ou multi"/>
-	<arg name="robot_id" default="1" doc="ID do robo para comunicacoes (1 ou 2)"/>
+	<arg name="robot_id" default="1" doc="ID do robo para comunicacoes (1, 2, 3 ou 4)"/>
 
 	<!-- HAL: Hardware Abstraction Layer (LiDAR, etc) -->
 	<include if="$(arg use_hal)" file="$(find conf)/system/hal.xml">
