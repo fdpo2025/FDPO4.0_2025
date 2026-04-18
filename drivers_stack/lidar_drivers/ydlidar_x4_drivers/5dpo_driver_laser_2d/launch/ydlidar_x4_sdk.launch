@@ -1,0 +1,48 @@
+<launch>
+
+    <!-- Argumento para escolher o driver: "hlds" ou "ydlidar" -->
+    <arg name="lidar_driver" default="ydlidar"/>
+    
+    <!-- Frame ID comum para ambos os drivers -->
+    <arg name="frame_id" default="laser"/>
+
+    
+    <!-- ============================================ -->
+    <!-- Driver YDLidar X4 (SDK novo, estilo Sdpo) -->
+    <!-- ============================================ -->
+    <group if="$(eval lidar_driver == 'ydlidar')">
+        <arg name="serial_port_ydlidar" default="/dev/ttyUSB0"/>
+        <arg name="baud_rate_ydlidar" default="128000"/>
+
+        <node pkg="sdpo_driver_laser_2d"
+              type="ydlidar_x4_sdk_node"
+              name="ydlidar_x4"
+              clear_params="true"
+              output="screen">
+
+            <!-- Ligação -->
+            <param name="port" value="$(arg serial_port_ydlidar)"/>
+            <param name="baudrate" value="$(arg baud_rate_ydlidar)"/>
+
+            <!-- Frames (IGUAL AO SDPO DRIVER) -->
+            <param name="base_frame_id"  value="base_link"/>
+            <param name="laser_frame_id" value="$(arg frame_id)"/>
+
+            <!-- Extrínsecos do laser (METROS + GRAUS) -->
+            <param name="laser_pose_x" value="0.0"/>
+            <param name="laser_pose_y" value="0.0"/>
+            <param name="laser_pose_z" value="0.0"/>
+
+            <!-- YDLidar X4 normalmente está virado para trás -->
+            <param name="laser_pose_yaw"   value="180.0"/>
+            <param name="laser_pose_pitch" value="0.0"/>
+            <param name="laser_pose_roll"  value="0.0"/>
+
+            <!-- Filtros -->
+            <param name="dist_min" value="0.12"/>
+            <param name="dist_max" value="10.0"/>
+
+        </node>
+    </group>
+
+</launch>

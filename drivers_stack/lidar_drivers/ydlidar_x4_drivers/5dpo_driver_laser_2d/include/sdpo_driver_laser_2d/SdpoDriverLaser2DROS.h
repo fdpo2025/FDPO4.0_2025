@@ -19,6 +19,8 @@ class SdpoDriverLaser2DROS {
   ros::Publisher pub_laser_;
   tf::TransformBroadcaster tf_broad_;
 
+  ros::Time sample_time_;
+
   dynamic_reconfigure::Server<sdpo_driver_laser_2d::LaserExtrinsicParamConfig>
       cfg_server_;
 
@@ -39,6 +41,7 @@ class SdpoDriverLaser2DROS {
   float dist_max_;
   float ang_min_;
   float ang_max_;
+
  public:
   SdpoDriverLaser2DROS();
   ~SdpoDriverLaser2DROS() = default;

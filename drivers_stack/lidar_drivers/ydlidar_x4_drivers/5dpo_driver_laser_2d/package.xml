@@ -42,7 +42,6 @@
   <depend>dynamic_reconfigure</depend>
   <depend>sdpo_ros_serial_port</depend>
   <depend>sensor_msgs</depend>
-  <depend>std_msgs</depend>
   <depend>tf</depend>
 
 

@@ -11,4 +11,3 @@ laser_pose_pitch: 0.0
 laser_pose_roll: 0.0
 dist_min: 0.12
 dist_max: 10.0
-# Frequência de rotação (Hz) quando o dispositivo não a reporta no protocolo; usada para laser_scan_frequency e compensação de distorção

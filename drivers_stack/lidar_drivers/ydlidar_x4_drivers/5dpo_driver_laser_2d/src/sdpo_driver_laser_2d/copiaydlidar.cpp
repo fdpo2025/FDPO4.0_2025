@@ -8,9 +8,7 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud.h>
-#include <tf2_ros/transform_broadcaster.h>
-#include <geometry_msgs/TransformStamped.h>
-#include <tf2/LinearMath/Quaternion.h>
+#include <tf/transform_broadcaster.h>
 #include <std_srvs/Empty.h>
 
 #include <cmath>
@@ -21,7 +19,6 @@
 #include "CYdLidar.h"
 #include "core/common/ydlidar_def.h"
 #include "core/common/ydlidar_datatype.h"
-
 
 static inline float normAngRad(float a) {
   // Normaliza para [-pi, pi)
@@ -34,8 +31,6 @@ static inline float normAngRad(float a) {
 class YDLidarX4SdkNode {
 public:
   YDLidarX4SdkNode() : nh_(), pnh_("~") {
-    ROS_WARN("YDLIDAR_X4: cheguei aqui");
-
     // Params do teu nó original
     pnh_.param<std::string>("port", port_, std::string("/dev/ttyUSB0"));
     pnh_.param<int>("baudrate", baudrate_, 128000);
@@ -112,12 +107,6 @@ public:
     // Serviço para “recarregar” extrínsecos/frames sem recompilar (substitui dynamic_reconfigure)
     srv_reload_ = pnh_.advertiseService("reload_params", &YDLidarX4SdkNode::reloadParamsCb, this);
 
-    /*
-    tf_timer_ = nh_.createTimer(
-      ros::Duration(0.02),   // 50 Hz
-      &YDLidarX4SdkNode::publishTfOnly,
-      this);
-    */
     setupSdk();
   }
 
@@ -128,41 +117,18 @@ public:
     } catch (...) {}
   }
 
-  void publishTfOnly(const ros::TimerEvent&) {
-    geometry_msgs::TransformStamped t;
-    t.header.stamp = ros::Time::now();
-    t.header.frame_id = base_frame_id_;
-    t.child_frame_id = laser_frame_id_;
-
-    t.transform.translation.x = laser_pose_x_;
-    t.transform.translation.y = laser_pose_y_;
-    t.transform.translation.z = laser_pose_z_;
-
-    tf2::Quaternion q;
-    q.setRPY(extr_roll_rad_, extr_pitch_rad_, extr_yaw_rad_);
-    t.transform.rotation.x = q.x();
-    t.transform.rotation.y = q.y();
-    t.transform.rotation.z = q.z();
-    t.transform.rotation.w = q.w();
-
-    tf_broadcaster_.sendTransform(t);
-
-    ROS_WARN_THROTTLE(1.0, "TF SENT: %s -> %s", base_frame_id_.c_str(), laser_frame_id_.c_str());
-  }
-
-
   void spin() {
-    LaserScan scan;
-    ros::Rate rate(20);
+    LaserScan scan; // tipo do SDK
+    ros::Rate rate(20); // loop rápido; scan chega à freq do lidar
 
     while (ros::ok()) {
       if (lidar_.doProcessSimple(scan)) {
         publishPointCloudAndTf(scan);
       }
+      ros::spinOnce();
       rate.sleep();
     }
   }
-
 
 private:
   void setupSdk() {
@@ -266,32 +232,21 @@ private:
       if (!anglePass(a)) continue;
       if (!distPass(r)) continue;
 
-    
       geometry_msgs::Point32 pt;
       pt.x = r * std::cos(a);
-      pt.y = - r * std::sin(a);
+      pt.y = r * std::sin(a);
       pt.z = 0.0f;
       msg.points.push_back(pt);
     }
-    
-    // TF base -> laser COM O MESMO STAMP DA CLOUD (evita falhas no RViz)
-    geometry_msgs::TransformStamped t;
-    t.header.stamp = msg.header.stamp;
-    t.header.frame_id = base_frame_id_;
-    t.child_frame_id  = laser_frame_id_;
 
-    t.transform.translation.x = laser_pose_x_;
-    t.transform.translation.y = laser_pose_y_;
-    t.transform.translation.z = laser_pose_z_;
-
-    tf2::Quaternion q;
-    q.setRPY(extr_roll_rad_, extr_pitch_rad_, extr_yaw_rad_);
-    t.transform.rotation.x = q.x();
-    t.transform.rotation.y = q.y();
-    t.transform.rotation.z = q.z();
-    t.transform.rotation.w = q.w();
-
-    tf_broadcaster_.sendTransform(t);
+    // TF base -> laser (igual ao SdpoDriver)
+    tf::StampedTransform laser2base_tf;
+    laser2base_tf.setOrigin(tf::Vector3(laser_pose_x_, laser_pose_y_, laser_pose_z_));
+    laser2base_tf.setRotation(tf::createQuaternionFromRPY(extr_roll_rad_, extr_pitch_rad_, extr_yaw_rad_));
+    laser2base_tf.stamp_ = msg.header.stamp;
+    laser2base_tf.frame_id_ = base_frame_id_;
+    laser2base_tf.child_frame_id_ = laser_frame_id_;
+    tf_broadcaster_.sendTransform(laser2base_tf);
 
     pub_cloud_.publish(msg);
   }
@@ -302,10 +257,7 @@ private:
 
   ros::Publisher pub_cloud_;
   ros::ServiceServer srv_reload_;
-  tf2_ros::TransformBroadcaster tf_broadcaster_;
-
-
-  ros::Timer tf_timer_;
+  tf::TransformBroadcaster tf_broadcaster_;
 
   CYdLidar lidar_;
 
@@ -333,12 +285,7 @@ private:
 int main(int argc, char** argv) {
   ros::init(argc, argv, "ydlidar_x4_sdk_node");
 
-  ros::AsyncSpinner spinner(2);  // timers/callbacks numa thread separada
-  spinner.start();
-
   YDLidarX4SdkNode node;
   node.spin();
-
   return 0;
 }
-
