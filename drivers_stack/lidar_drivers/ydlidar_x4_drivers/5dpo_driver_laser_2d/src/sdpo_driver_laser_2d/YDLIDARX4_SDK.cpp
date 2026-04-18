@@ -110,11 +110,11 @@ void YDLIDARX4_SDK::loop() {
       for (size_t i = 0; i < n; ++i) {
         const auto &p = scan.points[i];
 
-        // No SDK do YDLidar, tipicamente:
-        // - p.range em METROS
-        // - p.angle em GRAUS
+        // No SDK do YDLidar (struct LaserPoint):
+        // - p.range em METROS  (unit:m)
+        // - p.angle em RADIANOS (unit:rad)
         const float dist_m = static_cast<float>(p.range);
-        const float ang_rad = static_cast<float>(p.angle) * M_PIf32 / 180.0f;
+        const float ang_rad = static_cast<float>(p.angle);
 
         // Mantém a convenção do teu driver antigo (ângulo normalizado)
         dist_data[data_count] = dist_m;
