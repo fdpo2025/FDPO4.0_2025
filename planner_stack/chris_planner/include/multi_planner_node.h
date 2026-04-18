@@ -82,7 +82,11 @@ private:
         const std::string& robot_id, const std::vector<int>& valid_nodes) const;
 
     // Warehouse approach-side (+100) helpers
-    static int resolveWarehouseId(int id) { return id >= 100 ? id - 100 : id; }
+    static int resolveWarehouseId(int id) {
+        if (id >= 200) return id - 200;
+        if (id >= 100) return id - 100;
+        return id;
+    }
     bool isWarehouseNode(int id) const { return warehouse_nodes_.count(id) != 0; }
     int determineApproachSideNode(const std::vector<int>& full_path, int warehouse_node) const;
 
