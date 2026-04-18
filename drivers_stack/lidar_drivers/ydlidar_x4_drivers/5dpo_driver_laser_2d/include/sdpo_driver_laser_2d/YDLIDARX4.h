@@ -41,7 +41,7 @@ class YDLIDARX4 : public SdpoDriverLaser2D {
   // USB / motor settle, then stop-before-start and repeated scan (like SDK retries)
   int start_settle_ms_ = 300;
   int after_stop_ms_ = 100;
-  int start_attempts_ = 3;
+  int start_attempts_ = 5;
   int between_start_ms_ = 250;
 
  public:

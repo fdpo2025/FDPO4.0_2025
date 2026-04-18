@@ -151,7 +151,7 @@ void SdpoDriverLaser2DROS::readParam() {
   if (model_ == kSdpoDriverLaser2DYDLIDARXStr) {
     int settle_ms = 300;
     int after_stop_ms = 100;
-    int attempts = 3;
+    int attempts = 5;
     int between_ms = 250;
     print_is_default_param_set("ydlidar_start_settle_ms");
     print_is_default_param_set("ydlidar_after_stop_ms");
@@ -159,7 +159,7 @@ void SdpoDriverLaser2DROS::readParam() {
     print_is_default_param_set("ydlidar_between_start_attempts_ms");
     nh_private.param("ydlidar_start_settle_ms", settle_ms, 300);
     nh_private.param("ydlidar_after_stop_ms", after_stop_ms, 100);
-    nh_private.param("ydlidar_start_attempts", attempts, 3);
+    nh_private.param("ydlidar_start_attempts", attempts, 5);
     nh_private.param("ydlidar_between_start_attempts_ms", between_ms, 250);
     laser_->configureScanStart(settle_ms, after_stop_ms, attempts, between_ms);
     ROS_INFO("[sdpo_driver_laser_2d] YDLidar X4 scan start: settle=%d ms, "
