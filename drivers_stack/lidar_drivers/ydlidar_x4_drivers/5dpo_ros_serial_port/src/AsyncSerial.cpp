@@ -35,6 +35,9 @@
 #include <mutex>
 #include <boost/bind.hpp>
 #include <boost/shared_array.hpp>
+#ifndef __APPLE__
+#include <termios.h>
+#endif
 
 #define termios asmtermios
 #define termio asmtermio
@@ -592,6 +595,13 @@ void CallbackAsyncSerial::setCustomBaudRate(unsigned int baud_rate) {
         "[AsyncSerial.cpp] CallbackAsyncSerial::setCustomBaudRate: "
         "error when calling the ioctl function to set the port settings"));
   }
+}
+
+void CallbackAsyncSerial::flushBuffers() {
+#ifndef __APPLE__
+  boost::asio::serial_port::native_handle_type fd = pimpl->port.native_handle();
+  ::tcflush(fd, TCIOFLUSH);
+#endif
 }
 
 CallbackAsyncSerial::~CallbackAsyncSerial()

@@ -48,6 +48,11 @@
             <param name="dist_min" value="0.12"/>
             <param name="dist_max" value="10.0"/>
             <param name="default_scan_freq_hz" value="$(arg default_scan_freq_hz)"/>
+            <!-- Opcional: arranque fiável do X4 (settle, stop antes de scan, repetições tipo SDK) -->
+            <!-- <param name="ydlidar_start_settle_ms" value="400"/> -->
+            <!-- <param name="ydlidar_after_stop_ms" value="150"/> -->
+            <!-- <param name="ydlidar_start_attempts" value="3"/> -->
+            <!-- <param name="ydlidar_between_start_attempts_ms" value="300"/> -->
         </node>
     </group> 
     

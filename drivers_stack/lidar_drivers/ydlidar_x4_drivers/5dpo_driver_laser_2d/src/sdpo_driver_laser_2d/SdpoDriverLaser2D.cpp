@@ -16,6 +16,7 @@ bool SdpoDriverLaser2D::openSerial(const bool dbg) {
     serial_async_->setCallback(
         std::bind(&SdpoDriverLaser2D::rcvSerialData, this,
                   std::placeholders::_1, std::placeholders::_2));
+    serial_async_->flushBuffers();
     return true;
   } catch (boost::system::system_error& e) {
     serial_async_ = nullptr;
@@ -81,6 +82,14 @@ void SdpoDriverLaser2D::setAngRangeCheck(
 void SdpoDriverLaser2D::setPubLaserData(
     const std::function<void()>& pubLaserDataFunction) {
   pubLaserData = pubLaserDataFunction;
+}
+
+void SdpoDriverLaser2D::configureScanStart(int settle_ms, int after_stop_ms,
+    int start_attempts, int between_attempts_ms) {
+  (void)settle_ms;
+  (void)after_stop_ms;
+  (void)start_attempts;
+  (void)between_attempts_ms;
 }
 
 void SdpoDriverLaser2D::rcvSerialData(const char *data, unsigned int len) {

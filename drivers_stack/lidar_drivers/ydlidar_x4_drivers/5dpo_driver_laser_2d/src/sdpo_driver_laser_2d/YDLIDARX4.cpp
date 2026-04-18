@@ -1,5 +1,9 @@
 #include "sdpo_driver_laser_2d/YDLIDARX4.h"
 
+#include <algorithm>
+#include <chrono>
+#include <thread>
+
 #include "sdpo_driver_laser_2d/utils.h"
 
 namespace sdpo_driver_laser_2d {
@@ -16,12 +20,44 @@ YDLIDARX4::~YDLIDARX4() {
   closeSerial();
 }
 
+void YDLIDARX4::configureScanStart(int settle_ms, int after_stop_ms,
+    int start_attempts, int between_attempts_ms) {
+  start_settle_ms_ = std::max(0, settle_ms);
+  after_stop_ms_ = std::max(0, after_stop_ms);
+  start_attempts_ = std::max(1, start_attempts);
+  between_start_ms_ = std::max(0, between_attempts_ms);
+}
+
 void YDLIDARX4::start() {
+  if (!serial_async_) {
+    return;
+  }
+
+  serial_async_->flushBuffers();
+
+  if (start_settle_ms_ > 0) {
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(start_settle_ms_));
+  }
+
+  stop();
+
+  if (after_stop_ms_ > 0) {
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(after_stop_ms_));
+  }
+
   char start_scan_cmd[2];
   start_scan_cmd[0] = (char) 0xA5;
   start_scan_cmd[1] = (char) 0x60;
 
-  serial_async_->write(start_scan_cmd, 2);
+  for (int attempt = 0; attempt < start_attempts_; ++attempt) {
+    serial_async_->write(start_scan_cmd, 2);
+    if (attempt + 1 < start_attempts_ && between_start_ms_ > 0) {
+      std::this_thread::sleep_for(
+          std::chrono::milliseconds(between_start_ms_));
+    }
+  }
 }
 
 void YDLIDARX4::stop() {

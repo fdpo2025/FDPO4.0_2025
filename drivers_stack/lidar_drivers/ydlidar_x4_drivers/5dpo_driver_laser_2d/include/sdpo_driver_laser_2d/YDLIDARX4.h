@@ -38,9 +38,19 @@ class YDLIDARX4 : public SdpoDriverLaser2D {
 
   uint32_t raw_dist_data_[kLaserScanMaxNumSamplesYDLIDARX4];
 
+  // USB / motor settle, then stop-before-start and repeated scan (like SDK retries)
+  int start_settle_ms_ = 300;
+  int after_stop_ms_ = 100;
+  int start_attempts_ = 3;
+  int between_start_ms_ = 250;
+
  public:
   YDLIDARX4();
   ~YDLIDARX4() override;
+
+  void configureScanStart(int settle_ms, int after_stop_ms,
+                            int start_attempts,
+                            int between_attempts_ms) override;
 
   void start() override;
   void stop() override;
