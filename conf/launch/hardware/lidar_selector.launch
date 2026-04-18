@@ -29,12 +29,11 @@
         <arg name="serial_port_ydlidar" default="/dev/ttyUSB0"/>
         <arg name="baud_rate_ydlidar" default="128000"/>
         <!-- Frequência de rotação (Hz) quando o dispositivo não a reporta; usada para laser_scan_frequency e compensação de distorção -->
-        <arg name="default_scan_freq_hz" default="10.0"/>
         
         <node pkg="sdpo_driver_laser_2d" type="sdpo_driver_laser_2d_node"
             name="sdpo_driver_laser_2d" clear_params="true" output="screen">
             <!-- Parâmetros configurados diretamente para compatibilidade FDPO -->
-            <param name="model" value="ydlidarx4_legacy"/>
+            <param name="model" value="ydlidarx4"/>
             <param name="serial_port_name" value="$(arg serial_port_ydlidar)"/>
             <param name="baud_rate" value="$(arg baud_rate_ydlidar)"/>
             <param name="base_frame_id" value="base_link"/>
@@ -47,7 +46,6 @@
             <param name="laser_pose_roll" value="0.0"/>
             <param name="dist_min" value="0.12"/>
             <param name="dist_max" value="10.0"/>
-            <param name="default_scan_freq_hz" value="$(arg default_scan_freq_hz)"/>
         </node>
     </group> 
     

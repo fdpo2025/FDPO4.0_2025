@@ -5,7 +5,7 @@
 #include "sdpo_driver_laser_2d/utils.h"
 #include "sdpo_driver_laser_2d/RPLIDARS2.h"
 #include "sdpo_driver_laser_2d/YDLIDARX4.h"
-#include "sdpo_driver_laser_2d/YDLIDARX4SDK.h"
+#include "sdpo_driver_laser_2d/YDLIDARX4_SDK.h"
 
 namespace sdpo_driver_laser_2d {
 
@@ -15,9 +15,7 @@ SdpoDriverLaser2DROS::SdpoDriverLaser2DROS() {
     laser_->setSerialPortParam(serial_port_name_, baud_rate_);
     laser_->setPubLaserData(
         std::bind(&SdpoDriverLaser2DROS::pubLaserData, this));
-    if (!laser_->connect()) {
-      throw std::runtime_error("failed to connect laser device");
-    }
+    laser_->openSerial();
   } catch (std::exception& e) {
     ROS_FATAL("[sdpo_driver_laser_2d] Error reading the node parameters (%s)",
               e.what());
@@ -26,19 +24,10 @@ SdpoDriverLaser2DROS::SdpoDriverLaser2DROS() {
 
   pub_laser_ = nh.advertise<sensor_msgs::PointCloud>(
       "laser_scan_point_cloud", 1);
-  pub_scan_freq_ = nh.advertise<std_msgs::Float32>(
-      "laser_scan_frequency", 1, true);
 }
 
 void SdpoDriverLaser2DROS::start() {
   laser_->start();
-}
-
-void SdpoDriverLaser2DROS::stop() {
-  if (laser_) {
-    laser_->stop();
-    laser_->disconnect();
-  }
 }
 
 void SdpoDriverLaser2DROS::readParam() {
@@ -64,9 +53,7 @@ void SdpoDriverLaser2DROS::readParam() {
   ROS_INFO("[sdpo_driver_laser_2d] Model of the 2D laser scanner: %s",
            model_.c_str());
   if (model_ == kSdpoDriverLaser2DYDLIDARXStr) {
-    laser_.reset(new YDLIDARX4SDK());
-  } else if (model_ == kSdpoDriverLaser2DYDLIDARXLegacyStr) {
-    laser_.reset(new YDLIDARX4());
+    laser_.reset(new YDLIDARX4_SDK());
   } else if (model_ == kSdpoDriverLaser2DRPLIDARS2Str) {
     laser_.reset(new RPLIDARS2());
   } else {
@@ -154,12 +141,6 @@ void SdpoDriverLaser2DROS::readParam() {
     ROS_INFO("[sdpo_driver_laser_2d] Angle range not defined");
   }
 
-  print_is_default_param_set("default_scan_freq_hz");
-  nh_private.param<float>("default_scan_freq_hz", default_scan_freq_hz_, 10.0f);
-  if (default_scan_freq_hz_ <= 0.0f) default_scan_freq_hz_ = 10.0f;
-  ROS_INFO("[sdpo_driver_laser_2d] Default scan frequency (fallback): %.1f Hz",
-           default_scan_freq_hz_);
-
   // Dynamic reconfigure
   dynamic_reconfigure::Server<sdpo_driver_laser_2d::LaserExtrinsicParamConfig>::CallbackType
       callback;
@@ -212,13 +193,6 @@ void SdpoDriverLaser2DROS::pubLaserData() {
   tf_broad_.sendTransform(laser2base_tf);
 
   pub_laser_.publish(msg);
-
-  // Publish scan frequency (Hz): use value from protocol or fallback default
-  float f_hz = laser_->getScanFrequencyHz();
-  if (f_hz <= 0.0f) f_hz = default_scan_freq_hz_;
-  std_msgs::Float32 f_msg;
-  f_msg.data = f_hz;
-  pub_scan_freq_.publish(f_msg);
 }
 
 } // namespace sdpo_driver_laser_2d

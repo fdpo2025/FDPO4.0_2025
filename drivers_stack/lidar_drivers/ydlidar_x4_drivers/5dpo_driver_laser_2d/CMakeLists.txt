@@ -16,7 +16,6 @@ find_package(catkin REQUIRED COMPONENTS
   dynamic_reconfigure
   sdpo_ros_serial_port
   sensor_msgs
-  std_msgs
   tf
 )
 
@@ -112,6 +111,7 @@ catkin_package(
   INCLUDE_DIRS include
   LIBRARIES
     ${PROJECT_NAME}_YDLIDARX4
+    ${PROJECT_NAME}_YDLIDARX4_SDK
     ${PROJECT_NAME}_RPLIDARS2
   CATKIN_DEPENDS
     roscpp
@@ -119,7 +119,6 @@ catkin_package(
     dynamic_reconfigure
     sdpo_ros_serial_port
     sensor_msgs
-    std_msgs
     tf
 #   DEPENDS system_lib
 )
@@ -141,18 +140,14 @@ include_directories(
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME}_YDLIDARX4
-  include/${PROJECT_NAME}/SdpoDriverLaser2D.h
-  include/${PROJECT_NAME}/YDLIDARX4.h
-  include/${PROJECT_NAME}/YDLIDARX4SDK.h
-  include/${PROJECT_NAME}/utils.h
   src/${PROJECT_NAME}/SdpoDriverLaser2D.cpp
   src/${PROJECT_NAME}/YDLIDARX4.cpp
-  src/${PROJECT_NAME}/YDLIDARX4SDK.cpp
+)
+add_library(${PROJECT_NAME}_YDLIDARX4_SDK
+  src/${PROJECT_NAME}/SdpoDriverLaser2D.cpp
+  src/${PROJECT_NAME}/YDLIDARX4_SDK.cpp
 )
 add_library(${PROJECT_NAME}_RPLIDARS2
-  include/${PROJECT_NAME}/SdpoDriverLaser2D.h
-  include/${PROJECT_NAME}/RPLIDARS2.h
-  include/${PROJECT_NAME}/utils.h
   src/${PROJECT_NAME}/SdpoDriverLaser2D.cpp
   src/${PROJECT_NAME}/RPLIDARS2.cpp
 )
@@ -161,6 +156,11 @@ add_library(${PROJECT_NAME}_RPLIDARS2
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
 add_dependencies(${PROJECT_NAME}_YDLIDARX4
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
+  ${catkin_EXPORTED_TARGETS}
+)
+add_dependencies(${PROJECT_NAME}_YDLIDARX4_SDK
   ${${PROJECT_NAME}_EXPORTED_TARGETS}
   ${PROJECT_NAME}_gencfg
   ${catkin_EXPORTED_TARGETS}
@@ -196,11 +196,16 @@ add_dependencies(${PROJECT_NAME}_node
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}_node
   ${catkin_LIBRARIES}
+  ${PROJECT_NAME}_YDLIDARX4_SDK
   ${PROJECT_NAME}_YDLIDARX4
   ${PROJECT_NAME}_RPLIDARS2
 )
 
 target_link_libraries(${PROJECT_NAME}_YDLIDARX4
+  ${catkin_LIBRARIES}
+)
+
+target_link_libraries(${PROJECT_NAME}_YDLIDARX4_SDK
   ${catkin_LIBRARIES}
   ydlidar_sdk
   pthread
@@ -208,6 +213,22 @@ target_link_libraries(${PROJECT_NAME}_YDLIDARX4
 
 target_link_libraries(${PROJECT_NAME}_RPLIDARS2
   ${catkin_LIBRARIES}
+)
+
+add_executable(ydlidar_x4_sdk_node
+  src/sdpo_driver_laser_2d/ydlidar_x4_sdk_node.cpp
+)
+
+add_dependencies(ydlidar_x4_sdk_node
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${PROJECT_NAME}_gencfg
+  ${catkin_EXPORTED_TARGETS}
+)
+
+target_link_libraries(ydlidar_x4_sdk_node
+  ${catkin_LIBRARIES}
+  ydlidar_sdk
+  pthread
 )
 
 #############

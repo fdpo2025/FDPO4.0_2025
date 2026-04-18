@@ -6,7 +6,6 @@ namespace sdpo_driver_laser_2d {
 
 const size_t kLaserScanMaxNumSamplesYDLIDARX4 = 4096;
 const std::string kSdpoDriverLaser2DYDLIDARXStr = "ydlidarx4";
-const std::string kSdpoDriverLaser2DYDLIDARXLegacyStr = "ydlidarx4_legacy";
 
 enum class YDLIDARX4State {
   kPH1,

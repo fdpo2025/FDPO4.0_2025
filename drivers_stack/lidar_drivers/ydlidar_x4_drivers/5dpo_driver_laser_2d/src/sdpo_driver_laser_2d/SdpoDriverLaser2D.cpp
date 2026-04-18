@@ -4,14 +4,6 @@ namespace sdpo_driver_laser_2d{
 
 SdpoDriverLaser2D::SdpoDriverLaser2D() : serial_async_(nullptr) { }
 
-bool SdpoDriverLaser2D::connect(const bool dbg) {
-  return openSerial(dbg);
-}
-
-void SdpoDriverLaser2D::disconnect(const bool dbg) {
-  closeSerial(dbg);
-}
-
 bool SdpoDriverLaser2D::openSerial(const bool dbg) {
   try {
     serial_async_ = new CallbackAsyncSerial(

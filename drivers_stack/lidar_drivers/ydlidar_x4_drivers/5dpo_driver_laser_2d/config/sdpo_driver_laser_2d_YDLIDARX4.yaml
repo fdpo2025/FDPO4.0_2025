@@ -1,4 +1,4 @@
-model: "ydlidarx4_legacy"
+model: "ydlidarx4"
 serial_port_name: "/dev/ttyUSB0"
 baud_rate: 128000
 base_frame_id: $(arg robot_id)/base_footprint
@@ -12,4 +12,3 @@ laser_pose_roll: 0.0
 dist_min: 0.12
 dist_max: 10.0
 # Frequência de rotação (Hz) quando o dispositivo não a reporta no protocolo; usada para laser_scan_frequency e compensação de distorção
-default_scan_freq_hz: 10.0
