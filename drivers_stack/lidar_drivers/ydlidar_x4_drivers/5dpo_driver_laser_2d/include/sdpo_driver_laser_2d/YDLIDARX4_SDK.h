@@ -41,7 +41,7 @@ private:
   // guardas locais para config
   std::string port_;
   int baud_{128000};
-  float scan_freq_{5.0f};
+  float scan_freq_{10.0f};
 };
 
 } // namespace sdpo_driver_laser_2d
