@@ -107,6 +107,16 @@ void YDLIDARX4_SDK::loop() {
   while (running_) {
     // doProcessSimple devolve um scan completo
     if (lidar_.doProcessSimple(scan)) {
+      // Frequência REAL do scan, calculada pelo SDK a partir do tempo
+      // total da volta. Cobre desvios em relação ao valor configurado
+      // (ex.: o motor não consegue atingir o setpoint).
+      // Fallback para o valor configurado se vier inválido.
+      if (scan.config.scan_time > 1e-6f) {
+        scan_freq_hz_ = 1.0f / scan.config.scan_time;
+      } else {
+        scan_freq_hz_ = scan_freq_;
+      }
+
       // Copiar para buffers esperados pelo SdpoDriverLaser2DROS
       const size_t n = std::min(scan.points.size(), dist_data.size());
 
