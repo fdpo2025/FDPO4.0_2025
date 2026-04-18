@@ -5,6 +5,7 @@
 #include <ros/ros.h>
 #include <dynamic_reconfigure/server.h>
 #include <sensor_msgs/PointCloud.h>
+#include <std_msgs/Float32.h>
 #include <tf/transform_broadcaster.h>
 
 #include "sdpo_driver_laser_2d/LaserExtrinsicParamConfig.h"
@@ -17,6 +18,7 @@ class SdpoDriverLaser2DROS {
   ros::NodeHandle nh;
 
   ros::Publisher pub_laser_;
+  ros::Publisher pub_scan_freq_;
   tf::TransformBroadcaster tf_broad_;
 
   ros::Time sample_time_;

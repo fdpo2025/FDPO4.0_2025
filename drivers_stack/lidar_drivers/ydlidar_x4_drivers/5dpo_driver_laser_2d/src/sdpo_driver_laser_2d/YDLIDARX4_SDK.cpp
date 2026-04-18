@@ -53,6 +53,10 @@ void YDLIDARX4_SDK::openSerial() {
   // Frequência (ajusta para o que tu queres; 5Hz é “seguro”)
   lidar_.setlidaropt(LidarPropScanFrequency, &scan_freq_, sizeof(float));
 
+  // Expor para o ROS wrapper (publicado em /laser_scan_frequency e usado
+  // pelo motion_distortion_compensator).
+  scan_freq_hz_ = scan_freq_;
+
   // (Opcional) se o teu X4 for “intensity off”, não mexas.
   // (Opcional) podes ligar/desligar “fixed resolution” aqui se existir na tua versão.
 
