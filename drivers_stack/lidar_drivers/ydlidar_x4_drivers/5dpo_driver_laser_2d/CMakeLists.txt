@@ -37,6 +37,7 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK
+  ${CMAKE_CURRENT_BINARY_DIR}/third_party/YDLidar-SDK
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK/src
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK/core
 )
