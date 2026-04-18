@@ -15,6 +15,8 @@ public:
   YDLIDARX4_SDK();
   virtual ~YDLIDARX4_SDK();
 
+  bool connect(const bool dbg = false) override;
+  void disconnect(const bool dbg = false) override;
   // API principal do teu driver
   void openSerial();     // sem override para evitar mismatch
   void closeSerial();    // idem

@@ -25,6 +25,17 @@ YDLIDARX4_SDK::~YDLIDARX4_SDK() {
   } catch (...) {}
 }
 
+bool YDLIDARX4_SDK::connect(const bool dbg) {
+  (void)dbg;
+  openSerial();
+  return true;
+}
+
+void YDLIDARX4_SDK::disconnect(const bool dbg) {
+  (void)dbg;
+  closeSerial();
+}
+
 void YDLIDARX4_SDK::openSerial() {
   // O SdpoDriverLaser2DROS chama: setSerialPortParam(port, baud)
   // Por isso aqui vamos buscar o que foi guardado pela base.

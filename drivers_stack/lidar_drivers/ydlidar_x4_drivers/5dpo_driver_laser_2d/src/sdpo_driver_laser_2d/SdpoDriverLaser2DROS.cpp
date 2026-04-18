@@ -15,7 +15,9 @@ SdpoDriverLaser2DROS::SdpoDriverLaser2DROS() {
     laser_->setSerialPortParam(serial_port_name_, baud_rate_);
     laser_->setPubLaserData(
         std::bind(&SdpoDriverLaser2DROS::pubLaserData, this));
-    laser_->openSerial();
+    if (!laser_->connect()) {
+      throw std::runtime_error("failed to connect laser device");
+    }
   } catch (std::exception& e) {
     ROS_FATAL("[sdpo_driver_laser_2d] Error reading the node parameters (%s)",
               e.what());
