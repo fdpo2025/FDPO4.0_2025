@@ -6,6 +6,7 @@ int main(int argc, char* argv[]) {
   sdpo_driver_laser_2d::SdpoDriverLaser2DROS laser_driver;
   laser_driver.start();
   ros::spin();
+  laser_driver.stop();
 
   return 0;
 }

@@ -5,6 +5,7 @@
 #include "sdpo_driver_laser_2d/utils.h"
 #include "sdpo_driver_laser_2d/RPLIDARS2.h"
 #include "sdpo_driver_laser_2d/YDLIDARX4.h"
+#include "sdpo_driver_laser_2d/YDLIDARX4SDK.h"
 
 namespace sdpo_driver_laser_2d {
 
@@ -14,7 +15,9 @@ SdpoDriverLaser2DROS::SdpoDriverLaser2DROS() {
     laser_->setSerialPortParam(serial_port_name_, baud_rate_);
     laser_->setPubLaserData(
         std::bind(&SdpoDriverLaser2DROS::pubLaserData, this));
-    laser_->openSerial();
+    if (!laser_->connect()) {
+      throw std::runtime_error("failed to connect laser device");
+    }
   } catch (std::exception& e) {
     ROS_FATAL("[sdpo_driver_laser_2d] Error reading the node parameters (%s)",
               e.what());
@@ -29,6 +32,13 @@ SdpoDriverLaser2DROS::SdpoDriverLaser2DROS() {
 
 void SdpoDriverLaser2DROS::start() {
   laser_->start();
+}
+
+void SdpoDriverLaser2DROS::stop() {
+  if (laser_) {
+    laser_->stop();
+    laser_->disconnect();
+  }
 }
 
 void SdpoDriverLaser2DROS::readParam() {
@@ -54,6 +64,8 @@ void SdpoDriverLaser2DROS::readParam() {
   ROS_INFO("[sdpo_driver_laser_2d] Model of the 2D laser scanner: %s",
            model_.c_str());
   if (model_ == kSdpoDriverLaser2DYDLIDARXStr) {
+    laser_.reset(new YDLIDARX4SDK());
+  } else if (model_ == kSdpoDriverLaser2DYDLIDARXLegacyStr) {
     laser_.reset(new YDLIDARX4());
   } else if (model_ == kSdpoDriverLaser2DRPLIDARS2Str) {
     laser_.reset(new RPLIDARS2());

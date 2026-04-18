@@ -1,15 +1,11 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(sdpo_driver_laser_2d)
 
-file(GLOB_RECURSE PROGRAM_SOURCES RELATIVE ${PROJECT_SOURCE_DIR}
-  "src/sdpo_driver_laser_2d/*.cpp"
-)
-file(GLOB_RECURSE PROGRAM_HEADERS RELATIVE ${PROJECT_SOURCE_DIR}
-  "include/sdpo_driver_laser_2d/*.h"
-)
-
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11)
+set(BUILD_EXAMPLES OFF CACHE BOOL "Disable YDLidar-SDK examples in catkin build" FORCE)
+set(BUILD_TEST OFF CACHE BOOL "Disable YDLidar-SDK tests in catkin build" FORCE)
+add_subdirectory(third_party/YDLidar-SDK)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -137,15 +133,21 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK
+  ${CMAKE_CURRENT_BINARY_DIR}/third_party/YDLidar-SDK
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/YDLidar-SDK/core
 )
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME}_YDLIDARX4
   include/${PROJECT_NAME}/SdpoDriverLaser2D.h
   include/${PROJECT_NAME}/YDLIDARX4.h
+  include/${PROJECT_NAME}/YDLIDARX4SDK.h
   include/${PROJECT_NAME}/utils.h
   src/${PROJECT_NAME}/SdpoDriverLaser2D.cpp
   src/${PROJECT_NAME}/YDLIDARX4.cpp
+  src/${PROJECT_NAME}/YDLIDARX4SDK.cpp
 )
 add_library(${PROJECT_NAME}_RPLIDARS2
   include/${PROJECT_NAME}/SdpoDriverLaser2D.h
@@ -173,8 +175,7 @@ add_dependencies(${PROJECT_NAME}_RPLIDARS2
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}_node
-  ${PROGRAM_SOURCES}
-  ${PROGRAM_HEADERS}
+  src/${PROJECT_NAME}/SdpoDriverLaser2DROS.cpp
   src/main.cpp
 )
 
@@ -194,6 +195,18 @@ add_dependencies(${PROJECT_NAME}_node
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}_node
+  ${catkin_LIBRARIES}
+  ${PROJECT_NAME}_YDLIDARX4
+  ${PROJECT_NAME}_RPLIDARS2
+)
+
+target_link_libraries(${PROJECT_NAME}_YDLIDARX4
+  ${catkin_LIBRARIES}
+  ydlidar_sdk
+  pthread
+)
+
+target_link_libraries(${PROJECT_NAME}_RPLIDARS2
   ${catkin_LIBRARIES}
 )
 

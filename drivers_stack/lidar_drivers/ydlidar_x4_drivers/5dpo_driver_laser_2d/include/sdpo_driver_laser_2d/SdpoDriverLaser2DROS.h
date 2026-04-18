@@ -51,6 +51,7 @@ class SdpoDriverLaser2DROS {
   ~SdpoDriverLaser2DROS() = default;
 
   void start();
+  void stop();
 
  private:
   void readParam();
