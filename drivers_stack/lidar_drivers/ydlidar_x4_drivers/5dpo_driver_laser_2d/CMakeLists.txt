@@ -3,6 +3,8 @@ project(sdpo_driver_laser_2d)
 
 add_compile_options(-std=c++11)
 
+set(BUILD_EXAMPLES OFF CACHE BOOL "Disable YDLidar-SDK examples in catkin build" FORCE)
+set(BUILD_TEST OFF CACHE BOOL "Disable YDLidar-SDK tests in catkin build" FORCE)
 add_subdirectory(third_party/YDLidar-SDK)
 
 find_package(catkin REQUIRED COMPONENTS
