@@ -1,4 +1,4 @@
-model: "ydlidarx4"
+model: "ydlidarx4_legacy"
 serial_port_name: "/dev/ttyUSB0"
 baud_rate: 128000
 base_frame_id: $(arg robot_id)/base_footprint

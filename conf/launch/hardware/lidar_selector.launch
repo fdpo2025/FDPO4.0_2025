@@ -34,7 +34,7 @@
         <node pkg="sdpo_driver_laser_2d" type="sdpo_driver_laser_2d_node"
             name="sdpo_driver_laser_2d" clear_params="true" output="screen">
             <!-- Parâmetros configurados diretamente para compatibilidade FDPO -->
-            <param name="model" value="ydlidarx4"/>
+            <param name="model" value="ydlidarx4_legacy"/>
             <param name="serial_port_name" value="$(arg serial_port_ydlidar)"/>
             <param name="baud_rate" value="$(arg baud_rate_ydlidar)"/>
             <param name="base_frame_id" value="base_link"/>
