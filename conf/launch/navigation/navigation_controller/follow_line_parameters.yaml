@@ -12,8 +12,8 @@ navigation_controller:
 
 #  k_line: 8.5
 #  gain_fwd: 1.55
-  k_line: 8.0
-  gain_fwd: 1.3
+  k_line: 8.1
+  gain_fwd: 1.5
   vel_lin_nom: 0.3
   dist_da: 0.20
   tol_findist: 0.15

@@ -379,9 +379,8 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
     }
 
     auto full_path = dropFirstNodeUnlessStart31(extendPathWithPreviousNode(best_path));
-    auto compact_path = adaptPublishedPath(
-        dropFirstNodeUnlessStart31(
-            extendPathWithPreviousNode(compactExistingPath(best_path))));
+    auto compact_path = dropFirstNodeUnlessStart31(
+        extendPathWithPreviousNode(compactExistingPath(best_path)));
 
     if (isWarehouseNode(best_goal)) {
         int side_node = determineApproachSideNode(best_path, best_goal);
@@ -389,6 +388,8 @@ bool MultiPlannerNode::planForRobot(const std::string& robot_id)
         ROS_INFO("[%s] Warehouse %d approach-side resolved to %d",
                  robot_id.c_str(), best_goal, side_node);
     }
+
+    compact_path = adaptPublishedPath(compact_path);
 
     releaseHeldPublishedLastNode(robot_id);
     reservePath(robot_id, full_path, best_goal);
@@ -698,11 +699,27 @@ std::vector<int> MultiPlannerNode::adaptPublishedPath(
     const std::vector<int>& path) const
 {
     auto adapted = path;
+    int last_special_base_node = -1;
+    if (!adapted.empty()) {
+        int first_base_node = resolveWarehouseId(adapted.front());
+        if (planner_->factory.special_set.count(first_base_node))
+            last_special_base_node = first_base_node;
+    }
     for (int i = 1; i < static_cast<int>(adapted.size()); ++i) {
         if (adapted[i - 1] == 7 && adapted[i] == 30)
             adapted[i] = 130;
         if (adapted[i - 1] == 30 && adapted[i] == 138)
             adapted[i - 1] = 230;
+
+        int current_base_node = resolveWarehouseId(adapted[i]);
+        if (adapted[i] == 8 &&
+            (last_special_base_node == 17 || last_special_base_node == 117)) {
+            adapted[i] = 208;
+            current_base_node = 8;
+        }
+
+        if (planner_->factory.special_set.count(current_base_node))
+            last_special_base_node = current_base_node;
     }
     return adapted;
 }

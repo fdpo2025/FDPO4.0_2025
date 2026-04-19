@@ -133,11 +133,33 @@ std::vector<int> ChrisPlannerNode::resolveApproachSides(const std::vector<int>& 
 std::vector<int> ChrisPlannerNode::adaptPublishedPath(const std::vector<int>& path) const
 {
     auto adapted = path;
+    auto publishedToBaseNode = [](int node) {
+        if (node >= 200) return node - 200;
+        if (node >= 100) return node - 100;
+        return node;
+    };
+
+    int last_special_base_node = -1;
+    if (!adapted.empty()) {
+        int first_base_node = publishedToBaseNode(adapted.front());
+        if (planner_->factory.special_set.count(first_base_node))
+            last_special_base_node = first_base_node;
+    }
     for (int i = 1; i < static_cast<int>(adapted.size()); ++i) {
         if (adapted[i - 1] == 7 && adapted[i] == 30)
             adapted[i] = 130;
         if (adapted[i - 1] == 30 && adapted[i] == 138)
             adapted[i - 1] = 230;
+
+        int current_base_node = publishedToBaseNode(adapted[i]);
+        if (adapted[i] == 8 &&
+            (last_special_base_node == 17 || last_special_base_node == 117)) {
+            adapted[i] = 208;
+            current_base_node = 8;
+        }
+
+        if (planner_->factory.special_set.count(current_base_node))
+            last_special_base_node = current_base_node;
     }
     return adapted;
 }
