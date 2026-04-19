@@ -1496,7 +1496,21 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
     // Se o plano tiver pelo menos 2 pontos, arrancar a seguir já o segmento
     // entre o primeiro e o segundo ponto do plano (em vez de ir primeiro da
     // pose atual do robô até ao primeiro ponto).
-    if (route.size() >= 2 && !route.front().align) {
+    //
+    // Excepções em que NÃO se pode saltar o primeiro ponto:
+    //  - align==true: é um waypoint de alinhamento (warehouse), tem de ser
+    //    executado;
+    //  - backwards==true: o primeiro ponto representa a saída em marcha-atrás
+    //    de um warehouse implícito (que o plan_handler descartou por ser o
+    //    primeiro nó de /planned_paths). O segmento da pose actual até este
+    //    ponto É o segmento de marcha-atrás; saltá-lo faria o robô ir em
+    //    frente do warehouse para o ponto seguinte;
+    //  - is_warehouse / is_process_warehouse: defensivo, embora o
+    //    plan_handler normalmente não emita o primeiro ponto como warehouse.
+    const bool first_is_align = route.front().align;
+    const bool first_is_backwards = route.front().backwards;
+    const bool first_is_warehouse = route.front().is_warehouse || route.front().is_process_warehouse;
+    if (route.size() >= 2 && !first_is_align && !first_is_backwards && !first_is_warehouse) {
         const WayPoint consumed = route.front();
         previousWaypoint = consumed;
         publishCurrentNode(previousWaypoint.node_id);
@@ -1505,6 +1519,9 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
         ROS_INFO("First plan point set as previousWaypoint: id=%d node_id=%d x=%.2f y=%.2f (following segment to next point)",
                  previousWaypoint.id, previousWaypoint.node_id,
                  previousWaypoint.pose.x, previousWaypoint.pose.y);
+    } else if (route.size() >= 2) {
+        ROS_INFO("Keeping initial leg pose -> first plan point (first point: align=%d backwards=%d warehouse=%d)",
+                 first_is_align ? 1 : 0, first_is_backwards ? 1 : 0, first_is_warehouse ? 1 : 0);
     }
 
     updateDesiredPose();
