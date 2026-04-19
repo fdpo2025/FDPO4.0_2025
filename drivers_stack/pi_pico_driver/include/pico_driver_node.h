@@ -21,6 +21,7 @@
 #include <std_msgs/Int32MultiArray.h>
 #include <vector>
 #include <std_msgs/UInt32.h>
+#include <std_msgs/UInt8.h>
 #include <std_msgs/Empty.h>
 
 struct Pose {
@@ -42,6 +43,7 @@ namespace Communication {
             bool waiting_send;
             uint32_t target_id_send;
             bool stop_waiting_send;
+            uint8_t stop_wait_seq_send;
 
         };
 
@@ -118,6 +120,7 @@ class PiPicoDriver {
         ros::Subscriber wtSendSub;
         ros::Subscriber targetIdSendSub;
         ros::Subscriber stopWaitingSendSub;
+        ros::Subscriber stopWaitSeqSub_;
         ros::Subscriber colorSequenceSub_;
         ros::Subscriber thisCurrentPoseForCpSub_;
 
@@ -138,6 +141,7 @@ class PiPicoDriver {
         void wtSendCallBack(const std_msgs::Bool::ConstPtr& msg);
         void targetIdSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
         void stopWaitingSendCallBack(const std_msgs::Bool::ConstPtr& msg);
+        void stopWaitSeqCallBack(const std_msgs::UInt8::ConstPtr& msg);
         void thisCurrentPoseForCpSendCb(const std_msgs::UInt32::ConstPtr& msg);
         void colorSequenceCallBack(const std_msgs::String::ConstPtr& msg);
 

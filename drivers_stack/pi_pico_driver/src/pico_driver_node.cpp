@@ -6,11 +6,12 @@
 #include <pi_pico_driver/RadioNetworkTable.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Empty.h>
+#include <std_msgs/UInt8.h>
 
 /*
  * Serial protocol (ROS1 <-> Pico):
  *   Handshake: REQ:INIT -> INIT:id,num_robots,crc8 -> ACK:OK
- *   CMD:v,w,iman,my_cp,my_np,my_waiting,target_id,stop_waiting
+ *   CMD:v,w,iman,my_cp,my_np,my_waiting,target_id,stop_waiting,stop_wait_seq
  *   Optional: COLOR:RRRR (4 chars R|G|B) before POS; Pi4 ACK_COLOR:OK
  *   POS:x,y,theta,v,w;CP:...;NP:...;WT:...
  */
@@ -24,6 +25,7 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   messageToSend.waiting_send = false;
   messageToSend.target_id_send = 255;
   messageToSend.stop_waiting_send = false;
+  messageToSend.stop_wait_seq_send = 0;
 
   messageToReceive.odom_pos = {0.0, 0.0, 0.0};
   messageToReceive.v_linear = 0.0;
@@ -39,6 +41,7 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   wtSendSub = nh.subscribe("/wt_send", 10, &PiPicoDriver::wtSendCallBack, this);
   targetIdSendSub = nh.subscribe("/target_id_send", 10, &PiPicoDriver::targetIdSendCallBack, this);
   stopWaitingSendSub = nh.subscribe("/stop_waiting_send", 10, &PiPicoDriver::stopWaitingSendCallBack, this);
+  stopWaitSeqSub_ = nh.subscribe("/stop_wait_seq_send", 10, &PiPicoDriver::stopWaitSeqCallBack, this);
   colorSequenceSub_ = nh.subscribe("/color_sequence", 10, &PiPicoDriver::colorSequenceCallBack, this);
   if (mirror_this_current_pose_to_cp_send_) {
     thisCurrentPoseForCpSub_ =
@@ -392,7 +395,7 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
   }
 
   const int off = std::snprintf(cmd_buf_, sizeof(cmd_buf_),
-                                "CMD:%.4f,%.4f,%u,%u,%u,%u,%u,%u",
+                                "CMD:%.4f,%.4f,%u,%u,%u,%u,%u,%u,%u",
                                 messageToSend.v_d,
                                 messageToSend.w_d,
                                 messageToSend.iman ? 1U : 0U,
@@ -400,7 +403,8 @@ void PiPicoDriver::commTick(const ros::TimerEvent&) {
                                 messageToSend.np_send,
                                 messageToSend.waiting_send ? 1U : 0U,
                                 messageToSend.target_id_send,
-                                messageToSend.stop_waiting_send ? 1U : 0U);
+                                messageToSend.stop_waiting_send ? 1U : 0U,
+                                static_cast<unsigned>(messageToSend.stop_wait_seq_send));
   const std::string cmd(cmd_buf_, off > 0 ? off : 0);
 
   if (debug_comm_) {
@@ -448,6 +452,10 @@ void PiPicoDriver::targetIdSendCallBack(const std_msgs::UInt32::ConstPtr& msg) {
 
 void PiPicoDriver::stopWaitingSendCallBack(const std_msgs::Bool::ConstPtr& msg) {
   messageToSend.stop_waiting_send = msg->data;
+}
+
+void PiPicoDriver::stopWaitSeqCallBack(const std_msgs::UInt8::ConstPtr& msg) {
+  messageToSend.stop_wait_seq_send = msg->data;
 }
 
 void PiPicoDriver::thisCurrentPoseForCpSendCb(const std_msgs::UInt32::ConstPtr& msg) {
