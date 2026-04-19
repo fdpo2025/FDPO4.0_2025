@@ -232,6 +232,13 @@ public:
      */
     void setCustomBaudRate(unsigned int baud_rate);
 
+    /**
+     * Discard unread data and untransmitted output (tcflush TCIOFLUSH).
+     * Helps after open or before sending commands so stale bytes do not
+     * desynchronize the protocol parser.
+     */
+    void flushBuffers();
+
     virtual ~CallbackAsyncSerial();
 };
 

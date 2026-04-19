@@ -56,6 +56,14 @@ class SdpoDriverLaser2D {
 
   float getScanFrequencyHz() const { return scan_freq_hz_; }
 
+  /**
+   * Optional startup tuning (YDLidar X4: settle delay, stop-before-start,
+   * repeated scan commands). Default implementation does nothing.
+   */
+  virtual void configureScanStart(int settle_ms, int after_stop_ms,
+                                  int start_attempts,
+                                  int between_attempts_ms);
+
   virtual void start() = 0;
   virtual void stop() = 0;
   virtual void restart() = 0;
