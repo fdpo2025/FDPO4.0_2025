@@ -202,6 +202,19 @@ void PlanHandlerNode::plannedPathsCallback(const std_msgs::Int32MultiArray::Cons
         ++idx;
     }
 
+    // Per-path reset: is_last_warehouse / is_current_warehouse must not carry over from the
+    // previous /planned_paths callback. If the previous NavPlan ended on a non-warehouse node and
+    // this path starts with a leading warehouse (skipped) followed by the retreat approach, a
+    // stale is_last_warehouse==false makes fe_warehouse_coordinate false on that approach →
+    // backwards=0 in NavPlan → navigation_controller aligns as if driving forward to a point
+    // behind the robot → spin in place instead of reversing out of the shelf.
+    // (has_box is intentionally NOT reset here: it toggles pick/drop at process warehouses within
+    // the mission and may still be correct across segments.)
+    is_last_warehouse = false;
+    is_current_warehouse = false;
+    fe_warehouse_coordinate = false;
+    was_last_warehouse_process = false;
+
     for (; idx < msg->data.size(); ++idx) {
         const int32_t value = msg->data[idx];
 
