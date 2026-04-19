@@ -4,12 +4,18 @@
   <arg name="color_sequence_topic" default="/color_sequence" />
   <arg name="num_robots" default="2" doc="Fleet size 2–4 → missions_2 / missions_3 / missions_4" />
   <arg name="initial_robot_id" default="-1" doc="-1: usar só /robot_identity (pi_pico_driver após INIT). &gt;=0: sim sem Pico" />
+  <arg name="stop_waiting_max_hold_s" default="1.0" doc="Teto (s) do pulso stop_waiting; fim antes se network_table mostrar release"/>
+  <arg name="network_table_topic" default="/pi_pico_driver/network_table" />
+  <arg name="stop_wait_seq_topic" default="/stop_wait_seq_send" />
 
   <node name="$(arg node_name)" pkg="custom_planner" type="custom_planner_node" output="screen">
     <param name="debug_verbose" value="$(arg debug_verbose)"/>
     <param name="color_sequence_topic" value="$(arg color_sequence_topic)"/>
     <param name="num_robots" value="$(arg num_robots)"/>
     <param name="initial_robot_id" value="$(arg initial_robot_id)"/>
+    <param name="stop_waiting_max_hold_s" value="$(arg stop_waiting_max_hold_s)"/>
+    <param name="network_table_topic" value="$(arg network_table_topic)"/>
+    <param name="stop_wait_seq_topic" value="$(arg stop_wait_seq_topic)"/>
     <rosparam command="load" file="$(find custom_planner)/config/factory_graph.yaml" />
     <rosparam command="load" file="$(find custom_planner)/config/missions.yaml" />
   </node>

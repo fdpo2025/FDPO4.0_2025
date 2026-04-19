@@ -9,6 +9,9 @@
 #include <std_msgs/String.h>
 #include <std_msgs/UInt32.h>
 #include <std_msgs/UInt32MultiArray.h>
+#include <std_msgs/UInt8.h>
+
+#include <pi_pico_driver/RadioNetworkTable.h>
 #include <xmlrpcpp/XmlRpcValue.h>
 
 #include <deque>
@@ -59,6 +62,14 @@ class CustomPlannerNode {
   void onNavPlanWaypointConsumed(const std_msgs::UInt32MultiArray::ConstPtr& msg);
   void onPeerWaitRelease(const std_msgs::Empty::ConstPtr& msg);
 
+  std::string network_table_topic_;
+  double stop_waiting_max_hold_s_ = 1.0;
+  std::string stop_wait_seq_topic_;
+  bool stop_waiting_pulse_active_ = false;
+  uint32_t pulse_target_id_ = 255;
+  uint8_t pulse_seq_ = 0;
+  uint8_t stop_wait_tx_seq_ = 0;
+
   bool loadMissions();
   std::string selectMangaKey(const std::string& color_sequence) const;
   std::vector<MissionSegment> buildMissionSegments(const std::string& color_sequence,
@@ -84,6 +95,10 @@ class CustomPlannerNode {
   void processTimelineLocked();
   bool loadNextTaskLocked();
   void publishRadioStopWaitingPulse(uint32_t target_robot_id);
+  /** Call with mtx_ held. Publishes stop_waiting false and seq 0; stops max-hold timer. */
+  void endStopWaitingPulseLocked();
+  void onNetworkTable(const pi_pico_driver::RadioNetworkTable::ConstPtr& msg);
+  void onStopWaitingMaxHoldTimer(const ros::TimerEvent& ev);
   void setState(MissionState new_state);
 
   bool validatePath(const std::vector<int>& path) const;
@@ -100,6 +115,7 @@ class CustomPlannerNode {
   ros::Subscriber robot_identity_sub_;
   ros::Subscriber wait_state_sub_;
   ros::Subscriber peer_wait_release_sub_;
+  ros::Subscriber network_table_sub_;
   ros::Subscriber this_pose_sub_;
   ros::Subscriber nav_plan_waypoint_consumed_sub_;
   ros::Publisher planned_paths_pub_;
@@ -110,6 +126,7 @@ class CustomPlannerNode {
   ros::Publisher wt_send_pub_;
   ros::Publisher target_id_send_pub_;
   ros::Publisher stop_waiting_send_pub_;
+  ros::Publisher stop_wait_seq_pub_;
   ros::Publisher timeline_tokens_pub_;
   ros::Publisher timeline_cursor_pub_;
   ros::Publisher active_task_nav_nodes_pub_;
@@ -121,7 +138,6 @@ class CustomPlannerNode {
   std::string peer_wait_release_topic_;
   std::string this_current_pose_topic_;
   int num_robots_ = 2;
-  int radio_stop_waiting_retries_ = 1;
 
   XmlRpc::XmlRpcValue missions_root_;
   std::vector<int> valid_node_ids_;
@@ -142,11 +158,7 @@ class CustomPlannerNode {
   MissionState state_ = STATE_IDLE;
   mutable std::mutex mtx_;
   bool debug_verbose_ = false;
-  ros::Timer stop_waiting_reset_timer_;
-  /** True while a stop_waiting pulse is in-flight (between publish=true and timer reset to false).
-   *  Used to serialize consecutive MSG_* tokens so a second target_id cannot overwrite the first
-   *  before the Pico has had a chance to TX it on radio. */
-  bool stop_waiting_pulse_active_ = false;
+  ros::Timer stop_waiting_max_hold_timer_;
   /** Last /pi_pico_driver/wait_state from network (true = this robot waiting on radio). */
   bool last_pi_wait_state_ = false;
   /** After entering STATE_WAITING, ignore one edge cycle: re-baseline last_pi_wait_state_ so a stale

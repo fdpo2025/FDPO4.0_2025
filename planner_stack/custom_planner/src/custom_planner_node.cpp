@@ -72,10 +72,8 @@ bool CustomPlannerNode::isWarehouseCoordinate(int node_id) {
 CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   nh_.param("debug_verbose", debug_verbose_, false);
   nh_.param("num_robots", num_robots_, 2);
-  nh_.param("radio_stop_waiting_retries", radio_stop_waiting_retries_, 1);
   if (num_robots_ < 2) num_robots_ = 2;
   if (num_robots_ > 4) num_robots_ = 4;
-  if (radio_stop_waiting_retries_ < 1) radio_stop_waiting_retries_ = 1;
 
   color_input_node_by_index_[0] = 0;
   color_input_node_by_index_[1] = 1;
@@ -89,12 +87,18 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   nh_.param<std::string>("wait_state_topic", wait_state_topic_, "/pi_pico_driver/wait_state");
   nh_.param<std::string>("peer_wait_release_topic", peer_wait_release_topic_, "/pi_pico_driver/peer_wait_release");
   nh_.param<std::string>("this_current_pose_topic", this_current_pose_topic_, "/this_current_pose");
+  nh_.param("stop_waiting_max_hold_s", stop_waiting_max_hold_s_, 1.0);
+  if (stop_waiting_max_hold_s_ < 0.05) stop_waiting_max_hold_s_ = 0.05;
+  nh_.param<std::string>("network_table_topic", network_table_topic_, "/pi_pico_driver/network_table");
+  nh_.param<std::string>("stop_wait_seq_topic", stop_wait_seq_topic_, "/stop_wait_seq_send");
 
   mission_color_sub_ = nh_.subscribe(color_sequence_topic_, 1, &CustomPlannerNode::onMissionColorSequence, this);
   robot_identity_sub_ = nh_.subscribe("/robot_identity", 1, &CustomPlannerNode::onRobotIdentity, this);
   wait_state_sub_ = nh_.subscribe(wait_state_topic_, 20, &CustomPlannerNode::onWaitState, this);
   peer_wait_release_sub_ =
       nh_.subscribe(peer_wait_release_topic_, 50, &CustomPlannerNode::onPeerWaitRelease, this);
+  network_table_sub_ =
+      nh_.subscribe(network_table_topic_, 20, &CustomPlannerNode::onNetworkTable, this);
   this_pose_sub_ = nh_.subscribe(this_current_pose_topic_, 50, &CustomPlannerNode::onThisCurrentPose, this);
 
   planned_paths_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/planned_paths", 100, true);
@@ -115,6 +119,7 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
   wt_send_pub_ = nh_.advertise<std_msgs::Bool>("/wt_send", 10, false);
   target_id_send_pub_ = nh_.advertise<std_msgs::UInt32>("/target_id_send", 10, false);
   stop_waiting_send_pub_ = nh_.advertise<std_msgs::Bool>("/stop_waiting_send", 10, false);
+  stop_wait_seq_pub_ = nh_.advertise<std_msgs::UInt8>(stop_wait_seq_topic_, 10, false);
   timeline_tokens_pub_ = nh_.advertise<std_msgs::Int32MultiArray>("/custom_planner/timeline_tokens", 1, true);
   timeline_cursor_pub_ = nh_.advertise<std_msgs::UInt32>("/custom_planner/timeline_cursor", 10, true);
   active_task_nav_nodes_pub_ =
@@ -133,9 +138,10 @@ CustomPlannerNode::CustomPlannerNode(ros::NodeHandle& nh) : nh_(nh) {
 
   ROS_INFO(
       "custom_planner ready: identity via /robot_identity (pi_pico_driver após INIT) ou param "
-      "initial_robot_id; topics %s, %s, %s, %s (num_robots=%d, radio_stop_waiting_retries=%d)",
+      "initial_robot_id; topics %s, %s, %s, %s (num_robots=%d); stop_waiting max_hold=%.3fs net=%s seq=%s",
       color_sequence_topic_.c_str(), wait_state_topic_.c_str(), this_current_pose_topic_.c_str(),
-      peer_wait_release_topic_.c_str(), num_robots_, radio_stop_waiting_retries_);
+      peer_wait_release_topic_.c_str(), num_robots_, stop_waiting_max_hold_s_,
+      network_table_topic_.c_str(), stop_wait_seq_topic_.c_str());
 }
 
 bool CustomPlannerNode::loadMissions() {
@@ -305,6 +311,9 @@ void CustomPlannerNode::onNavPlanWaypointConsumed(const std_msgs::UInt32MultiArr
 
 void CustomPlannerNode::startMission(const std::string& color_sequence) {
   std::lock_guard<std::mutex> lock(mtx_);
+  if (stop_waiting_pulse_active_) {
+    endStopWaitingPulseLocked();
+  }
   if (robot_id_ < 0) {
     pending_color_sequence_ = color_sequence;
     ROS_WARN("custom_planner: robot identity unknown, mission queued.");
@@ -780,8 +789,20 @@ void CustomPlannerNode::publishActiveTaskDebugLocked() {
 }
 
 void CustomPlannerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
+  if (stop_waiting_pulse_active_) {
+    endStopWaitingPulseLocked();
+  }
+
+  ++stop_wait_tx_seq_;
+  if (stop_wait_tx_seq_ == 0) {
+    ++stop_wait_tx_seq_;
+  }
+  pulse_seq_ = stop_wait_tx_seq_;
+  pulse_target_id_ = std::min(target_robot_id, 255u);
+  stop_waiting_pulse_active_ = true;
+
   std_msgs::UInt32 tid;
-  tid.data = std::min(target_robot_id, 255u);
+  tid.data = pulse_target_id_;
   target_id_send_pub_.publish(tid);
 
   std_msgs::Bool sw;
@@ -789,25 +810,78 @@ void CustomPlannerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
   stop_waiting_send_pub_.publish(sw);
   stop_waiting_pulse_active_ = true;
 
-  if (stop_waiting_reset_timer_) {
-    stop_waiting_reset_timer_.stop();
+  std_msgs::UInt8 sq;
+  sq.data = pulse_seq_;
+  stop_wait_seq_pub_.publish(sq);
+
+  stop_waiting_max_hold_timer_.stop();
+  stop_waiting_max_hold_timer_ =
+      nh_.createTimer(ros::Duration(stop_waiting_max_hold_s_), &CustomPlannerNode::onStopWaitingMaxHoldTimer, this,
+                      true, true);
+}
+
+void CustomPlannerNode::endStopWaitingPulseLocked() {
+  if (!stop_waiting_pulse_active_) {
+    return;
   }
-  const double kPicoCommPeriodS = 0.02;
-  const double hold_s =
-      std::max(0.12, static_cast<double>(radio_stop_waiting_retries_) * kPicoCommPeriodS);
-  stop_waiting_reset_timer_ = nh_.createTimer(
-      ros::Duration(hold_s),
-      [this](const ros::TimerEvent&) {
-        std_msgs::Bool off;
-        off.data = false;
-        stop_waiting_send_pub_.publish(off);
-        std::lock_guard<std::mutex> lock(mtx_);
-        stop_waiting_pulse_active_ = false;
-        stop_waiting_reset_timer_.stop();
-        // Drain any MSG_* tokens that were deferred while this pulse was active.
-        processTimelineLocked();
-      },
-      true, true);
+  stop_waiting_pulse_active_ = false;
+  stop_waiting_max_hold_timer_.stop();
+  std_msgs::Bool off;
+  off.data = false;
+  stop_waiting_send_pub_.publish(off);
+  std_msgs::UInt8 z;
+  z.data = 0;
+  stop_wait_seq_pub_.publish(z);
+  // Preserve MSG serialization semantics: if processTimelineLocked() had deferred on a consecutive
+  // MSG_* while this pulse was active, resume now that the pulse ended.
+  processTimelineLocked();
+}
+
+void CustomPlannerNode::onNetworkTable(const pi_pico_driver::RadioNetworkTable::ConstPtr& msg) {
+  std::lock_guard<std::mutex> lock(mtx_);
+  if (!stop_waiting_pulse_active_) {
+    return;
+  }
+  if (robot_id_ < 0) {
+    return;
+  }
+  const size_t n = msg->waiting.size();
+  if (n == 0) {
+    return;
+  }
+  if (pulse_target_id_ == 255) {
+    for (size_t i = 0; i < n; ++i) {
+      if (static_cast<int>(i) == robot_id_) {
+        continue;
+      }
+      if (msg->waiting[i]) {
+        return;
+      }
+    }
+  } else {
+    if (pulse_target_id_ >= n) {
+      endStopWaitingPulseLocked();
+      return;
+    }
+    if (msg->waiting[pulse_target_id_]) {
+      return;
+    }
+  }
+  CP_DBG("custom_planner: stop_waiting pulse ended (network_table release, target=%u seq=%u)",
+         static_cast<unsigned>(pulse_target_id_), static_cast<unsigned>(pulse_seq_));
+  endStopWaitingPulseLocked();
+}
+
+void CustomPlannerNode::onStopWaitingMaxHoldTimer(const ros::TimerEvent& ev) {
+  (void)ev;
+  std::lock_guard<std::mutex> lock(mtx_);
+  if (!stop_waiting_pulse_active_) {
+    return;
+  }
+  CP_DBG("custom_planner: stop_waiting pulse ended (max_hold %.3fs, target=%u seq=%u)",
+         stop_waiting_max_hold_s_, static_cast<unsigned>(pulse_target_id_),
+         static_cast<unsigned>(pulse_seq_));
+  endStopWaitingPulseLocked();
 }
 
 void CustomPlannerNode::processTimelineLocked() {
