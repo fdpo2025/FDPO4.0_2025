@@ -2,7 +2,7 @@
   
   <arg name="planned_paths_topic" default="/planned_paths" doc="Topic to subscribe for planned paths (Int32MultiArray)"/>
   <arg name="queue_size" default="100" doc="Queue size for subscriber"/>
-  <arg name="robot_id" default="0" doc="Índice 0-based; usa factory_coordinates_robot0/1/2.yaml"/>
+  <arg name="robot_id" default="0" doc="Índice 0-based; factory_coordinates_robot0.yaml … robot3.yaml"/>
   <!-- Caminho base para seleção por robot_id 0-based -->
   <arg name="factory_coords_yaml_base" value="$(find plan_handler)/config/factory_coordinates_robot"/>
 
