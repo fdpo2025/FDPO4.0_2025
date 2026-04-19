@@ -1493,6 +1493,20 @@ void NavigationController::loadRouteFromNavPlan(const plan_handler::NavPlan::Con
         route.push_back(waypoint_temp);
     }
 
+    // Se o plano tiver pelo menos 2 pontos, arrancar a seguir já o segmento
+    // entre o primeiro e o segundo ponto do plano (em vez de ir primeiro da
+    // pose atual do robô até ao primeiro ponto).
+    if (route.size() >= 2 && !route.front().align) {
+        const WayPoint consumed = route.front();
+        previousWaypoint = consumed;
+        publishCurrentNode(previousWaypoint.node_id);
+        route.pop_front();
+        onRouteWaypointConsumedForPauseCheck(consumed);
+        ROS_INFO("First plan point set as previousWaypoint: id=%d node_id=%d x=%.2f y=%.2f (following segment to next point)",
+                 previousWaypoint.id, previousWaypoint.node_id,
+                 previousWaypoint.pose.x, previousWaypoint.pose.y);
+    }
+
     updateDesiredPose();
     
     if (!route.empty()) {
