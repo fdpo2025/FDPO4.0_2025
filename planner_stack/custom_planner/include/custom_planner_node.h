@@ -143,6 +143,10 @@ class CustomPlannerNode {
   mutable std::mutex mtx_;
   bool debug_verbose_ = false;
   ros::Timer stop_waiting_reset_timer_;
+  /** True while a stop_waiting pulse is in-flight (between publish=true and timer reset to false).
+   *  Used to serialize consecutive MSG_* tokens so a second target_id cannot overwrite the first
+   *  before the Pico has had a chance to TX it on radio. */
+  bool stop_waiting_pulse_active_ = false;
   /** Last /pi_pico_driver/wait_state from network (true = this robot waiting on radio). */
   bool last_pi_wait_state_ = false;
   /** After entering STATE_WAITING, ignore one edge cycle: re-baseline last_pi_wait_state_ so a stale
@@ -153,5 +157,20 @@ class CustomPlannerNode {
    * Consumed one-for-one when processing -1 (skip WAITING if non-empty). See firmware ;PR: in POS.
    */
   std::deque<uint8_t> pending_peer_releases_;
+  /**
+   * Count of peer_wait_release events received while THIS robot was in STATE_WAITING. They are the
+   * direct cause of the current wait being released (peer just sent stop_waiting). We do NOT
+   * buffer them in pending_peer_releases_ (that would create a ghost that silently consumes the
+   * NEXT `-1` token, e.g. an `_W`). The wait_state falling edge consumes / clears them en bloc.
+   */
+  int peer_releases_during_wait_ = 0;
+  /**
+   * Defensive against ROS callback reordering: if onWaitState fires the falling edge BEFORE the
+   * matching onPeerWaitRelease (anomaly — pi_pico_driver publishes peer_wait_release first), arm
+   * a short window in which the next incoming peer_wait_release is dropped instead of becoming a
+   * ghost in pending_peer_releases_.
+   */
+  int extra_peer_release_drops_ = 0;
+  ros::Time extra_peer_release_drops_until_;
 };
 

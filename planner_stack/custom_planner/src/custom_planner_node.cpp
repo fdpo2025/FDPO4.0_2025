@@ -209,8 +209,32 @@ void CustomPlannerNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& msg) {
 void CustomPlannerNode::onPeerWaitRelease(const std_msgs::Empty::ConstPtr& msg) {
   (void)msg;
   std::lock_guard<std::mutex> lock(mtx_);
+  // Anti-ghost rule #1 (count, do not buffer): while we are STILL in WAITING, this release is the
+  // cause of the current wait. The wait_state falling edge will transition us to NAVIGATING and
+  // clear the count. Buffering here would create a ghost that consumes the NEXT timeline -1.
+  if (state_ == STATE_WAITING) {
+    ++peer_releases_during_wait_;
+    ROS_INFO_THROTTLE(0.5,
+                      "custom_planner: peer_wait_release counted during WAITING (count=%d)",
+                      peer_releases_during_wait_);
+    return;
+  }
+  // Anti-ghost rule #2 (absorb window, defensive): wait_state falling edge already moved us out
+  // of WAITING and recorded that no peer_wait_release had arrived; this one is the lagging match.
+  if (extra_peer_release_drops_ > 0 && ros::Time::now() < extra_peer_release_drops_until_) {
+    --extra_peer_release_drops_;
+    ROS_INFO_THROTTLE(0.5,
+                      "custom_planner: peer_wait_release absorbed (post-WAIT window, drops left=%d)",
+                      extra_peer_release_drops_);
+    return;
+  }
+  if (extra_peer_release_drops_ > 0 && ros::Time::now() >= extra_peer_release_drops_until_) {
+    extra_peer_release_drops_ = 0;
+  }
+  // True early release: peer fired stop_waiting before we reached our next -1. Buffer it so that
+  // the next timeline -1 consumes it and skips WAITING.
   pending_peer_releases_.push_back(1u);
-  ROS_INFO_THROTTLE(0.5, "custom_planner: buffered peer wait release (FIFO size=%zu)",
+  ROS_INFO_THROTTLE(0.5, "custom_planner: buffered peer_wait_release (FIFO size=%zu)",
                     pending_peer_releases_.size());
 }
 
@@ -228,6 +252,17 @@ void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {
   // Require falling edge: was waiting on the wire, peer cleared us via stop_waiting.
   if (!prev || msg->data) return;
   setState(STATE_NAVIGATING);
+  if (peer_releases_during_wait_ > 0) {
+    // Normal flow (pi_pico_driver publishes peer_wait_release before wait_state). All releases
+    // received during this WAIT were the cause of this transition; drop them en bloc so they
+    // never reach pending_peer_releases_.
+    peer_releases_during_wait_ = 0;
+  } else {
+    // Anomaly: wait_state edge fired before the matching peer_wait_release. Arm a short absorb
+    // window so the lagging release is dropped instead of becoming a ghost on a future -1.
+    extra_peer_release_drops_ = 1;
+    extra_peer_release_drops_until_ = ros::Time::now() + ros::Duration(0.30);
+  }
   processTimelineLocked();
 }
 
@@ -274,6 +309,19 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   const std::string manga_key = selectMangaKey(color_sequence);
   publishSpawnPose(manga_key);
   pending_peer_releases_.clear();
+  extra_peer_release_drops_ = 0;
+  peer_releases_during_wait_ = 0;
+  // Cancel any in-flight stop_waiting pulse from the previous mission so the new mission can
+  // immediately fire MSG_* tokens.
+  if (stop_waiting_reset_timer_) {
+    stop_waiting_reset_timer_.stop();
+  }
+  if (stop_waiting_pulse_active_) {
+    std_msgs::Bool off;
+    off.data = false;
+    stop_waiting_send_pub_.publish(off);
+    stop_waiting_pulse_active_ = false;
+  }
   pending_tasks_.clear();
   has_active_task_ = false;
   active_task_ = MissionTask();
@@ -475,6 +523,10 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
           if (wait_pick) {
             if (approach >= 0) shelf_pick_wait_pairs.push_back(std::make_pair(target_shelf, approach));
           }
+          // Mirror selection (+100) for any subsequent token must consider the LAST physical node
+          // we appended (the approach we leave on) — not the integer literal that preceded the
+          // color token. This affects e.g. ["8", "1B", "2G", ...] sequences.
+          if (approach >= 0) last_source_physical_node = approach;
         }
         continue;
       }
@@ -483,6 +535,7 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
         const int approach = approachNodeForInputShelf(input);
         const int target_shelf = (last_source_physical_node == 8) ? (input + 100) : input;
         appendWarehousePickupTraversal(input, target_shelf, out, false);
+        if (approach >= 0) last_source_physical_node = approach;
         continue;
       }
     }
@@ -730,6 +783,7 @@ void CustomPlannerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
   std_msgs::Bool sw;
   sw.data = true;
   stop_waiting_send_pub_.publish(sw);
+  stop_waiting_pulse_active_ = true;
 
   if (stop_waiting_reset_timer_) {
     stop_waiting_reset_timer_.stop();
@@ -743,7 +797,11 @@ void CustomPlannerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
         std_msgs::Bool off;
         off.data = false;
         stop_waiting_send_pub_.publish(off);
+        std::lock_guard<std::mutex> lock(mtx_);
+        stop_waiting_pulse_active_ = false;
         stop_waiting_reset_timer_.stop();
+        // Drain any MSG_* tokens that were deferred while this pulse was active.
+        processTimelineLocked();
       },
       true, true);
 }
@@ -766,6 +824,13 @@ void CustomPlannerNode::processTimelineLocked() {
       continue;
     }
     if (isMsgLegToken(tok)) {
+      // Serialize MSG_* tokens: if a previous pulse is still in flight, defer this one. Otherwise
+      // the second target_id would overwrite the first inside pi_pico_driver before the Pico had a
+      // chance to TX the first on radio (Pico CMD is sent every 20 ms; pulse hold ≥ 120 ms).
+      // The timer that ends the active pulse calls processTimelineLocked() to drain queued MSGs.
+      if (stop_waiting_pulse_active_) {
+        return;
+      }
       const uint32_t target = static_cast<uint32_t>(-1000 - tok);
       publishRadioStopWaitingPulse(target);
       ++timeline_cursor_;
