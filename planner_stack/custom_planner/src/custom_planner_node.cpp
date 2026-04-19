@@ -209,33 +209,26 @@ void CustomPlannerNode::onRobotIdentity(const std_msgs::Int32::ConstPtr& msg) {
 void CustomPlannerNode::onPeerWaitRelease(const std_msgs::Empty::ConstPtr& msg) {
   (void)msg;
   std::lock_guard<std::mutex> lock(mtx_);
-  // Anti-ghost rule #1 (count, do not buffer): while we are STILL in WAITING, this release is the
-  // cause of the current wait. The wait_state falling edge will transition us to NAVIGATING and
-  // clear the count. Buffering here would create a ghost that consumes the NEXT timeline -1.
-  if (state_ == STATE_WAITING) {
-    ++peer_releases_during_wait_;
-    ROS_INFO_THROTTLE(0.5,
-                      "custom_planner: peer_wait_release counted during WAITING (count=%d)",
-                      peer_releases_during_wait_);
-    return;
-  }
-  // Anti-ghost rule #2 (absorb window, defensive): wait_state falling edge already moved us out
-  // of WAITING and recorded that no peer_wait_release had arrived; this one is the lagging match.
+  // Defensive: if onWaitState fired the falling edge BEFORE the matching peer_wait_release
+  // (callback-ordering anomaly), an absorb window was armed there. Drop this lagging release so
+  // it does not become a ghost on a future -1.
   if (extra_peer_release_drops_ > 0 && ros::Time::now() < extra_peer_release_drops_until_) {
     --extra_peer_release_drops_;
     ROS_INFO_THROTTLE(0.5,
-                      "custom_planner: peer_wait_release absorbed (post-WAIT window, drops left=%d)",
+                      "custom_planner: peer_wait_release absorbed (post-edge window, drops left=%d)",
                       extra_peer_release_drops_);
     return;
   }
   if (extra_peer_release_drops_ > 0 && ros::Time::now() >= extra_peer_release_drops_until_) {
     extra_peer_release_drops_ = 0;
   }
-  // True early release: peer fired stop_waiting before we reached our next -1. Buffer it so that
-  // the next timeline -1 consumes it and skips WAITING.
+  // Always buffer. The matching wait_state falling edge will pop_front (current WAIT). Any
+  // remaining entries are legitimate early releases for future -1 tokens.
   pending_peer_releases_.push_back(1u);
-  ROS_INFO_THROTTLE(0.5, "custom_planner: buffered peer_wait_release (FIFO size=%zu)",
-                    pending_peer_releases_.size());
+  ROS_INFO_THROTTLE(0.5, "custom_planner: buffered peer_wait_release (FIFO size=%zu, state=%s)",
+                    pending_peer_releases_.size(),
+                    state_ == STATE_WAITING ? "WAITING"
+                        : (state_ == STATE_NAVIGATING ? "NAVIGATING" : "IDLE"));
 }
 
 void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {
@@ -244,6 +237,17 @@ void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {
   if (state_ == STATE_WAITING && wait_state_resync_armed_) {
     last_pi_wait_state_ = msg->data;
     wait_state_resync_armed_ = false;
+    // Pico-side race: peer's stop_waiting reached the Pico BEFORE our wt=1 did, so the Pico's
+    // is_waiting was forced to 0 even at the very first publish after we entered WAITING. There
+    // is no future falling edge possible (baseline is already 0). If a peer_wait_release was
+    // already buffered, consume it now and exit WAITING immediately.
+    if (!msg->data && !pending_peer_releases_.empty()) {
+      pending_peer_releases_.pop_front();
+      setState(STATE_NAVIGATING);
+      ROS_INFO("custom_planner: race-released at WAIT entry (Pico flag pre-set); FIFO=%zu",
+               pending_peer_releases_.size());
+      processTimelineLocked();
+    }
     return;
   }
   const bool prev = last_pi_wait_state_;
@@ -252,16 +256,17 @@ void CustomPlannerNode::onWaitState(const std_msgs::Bool::ConstPtr& msg) {
   // Require falling edge: was waiting on the wire, peer cleared us via stop_waiting.
   if (!prev || msg->data) return;
   setState(STATE_NAVIGATING);
-  if (peer_releases_during_wait_ > 0) {
-    // Normal flow (pi_pico_driver publishes peer_wait_release before wait_state). All releases
-    // received during this WAIT were the cause of this transition; drop them en bloc so they
-    // never reach pending_peer_releases_.
-    peer_releases_during_wait_ = 0;
+  // Consume the release that caused this edge. Any remaining FIFO entries are early releases
+  // for future -1 tokens. If FIFO is empty, the edge fired before its matching peer_wait_release
+  // arrived (callback-order anomaly) — arm an absorb window to drop the lagging duplicate.
+  if (!pending_peer_releases_.empty()) {
+    pending_peer_releases_.pop_front();
+    ROS_INFO("custom_planner: wait_state edge consumed peer_wait_release; FIFO=%zu",
+             pending_peer_releases_.size());
   } else {
-    // Anomaly: wait_state edge fired before the matching peer_wait_release. Arm a short absorb
-    // window so the lagging release is dropped instead of becoming a ghost on a future -1.
     extra_peer_release_drops_ = 1;
     extra_peer_release_drops_until_ = ros::Time::now() + ros::Duration(0.30);
+    ROS_WARN("custom_planner: wait_state edge with empty FIFO; absorb window armed (300 ms)");
   }
   processTimelineLocked();
 }
@@ -310,7 +315,6 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   publishSpawnPose(manga_key);
   pending_peer_releases_.clear();
   extra_peer_release_drops_ = 0;
-  peer_releases_during_wait_ = 0;
   // Cancel any in-flight stop_waiting pulse from the previous mission so the new mission can
   // immediately fire MSG_* tokens.
   if (stop_waiting_reset_timer_) {

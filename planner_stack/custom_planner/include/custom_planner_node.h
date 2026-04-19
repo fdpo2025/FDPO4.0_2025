@@ -153,22 +153,20 @@ class CustomPlannerNode {
    *  True→False from before this wait cannot immediately release (fixes leading "W" skipped). */
   bool wait_state_resync_armed_ = false;
   /**
-   * FIFO: peer stop_waiting (radio) arrived before this robot reached timeline token -1.
-   * Consumed one-for-one when processing -1 (skip WAITING if non-empty). See firmware ;PR: in POS.
+   * FIFO of peer stop_waiting events. Every peer_wait_release is buffered here. The FIFO is
+   * consumed exactly once per logical release:
+   *   - When processing a `-1` token with non-empty FIFO: pop_front, skip WAITING (early release).
+   *   - When the wait_state falling edge fires while in STATE_WAITING: pop_front (this release is
+   *     the cause of the current wait ending; popping prevents it from "ghost"-releasing the
+   *     next `-1` such as an `_W`).
+   * Remaining entries after a pop are legitimate early releases for future `-1` tokens.
    */
   std::deque<uint8_t> pending_peer_releases_;
   /**
-   * Count of peer_wait_release events received while THIS robot was in STATE_WAITING. They are the
-   * direct cause of the current wait being released (peer just sent stop_waiting). We do NOT
-   * buffer them in pending_peer_releases_ (that would create a ghost that silently consumes the
-   * NEXT `-1` token, e.g. an `_W`). The wait_state falling edge consumes / clears them en bloc.
-   */
-  int peer_releases_during_wait_ = 0;
-  /**
    * Defensive against ROS callback reordering: if onWaitState fires the falling edge BEFORE the
-   * matching onPeerWaitRelease (anomaly — pi_pico_driver publishes peer_wait_release first), arm
-   * a short window in which the next incoming peer_wait_release is dropped instead of becoming a
-   * ghost in pending_peer_releases_.
+   * matching onPeerWaitRelease (anomaly — pi_pico_driver normally publishes peer_wait_release
+   * first), arm a short window in which the next incoming peer_wait_release is dropped instead of
+   * becoming a ghost in pending_peer_releases_.
    */
   int extra_peer_release_drops_ = 0;
   ros::Time extra_peer_release_drops_until_;
