@@ -191,18 +191,33 @@ missions_4:
     # robot_3:
     #   targets:
     #     - ["WAIT", 31, 8, 100, "WAIT", 8, 39, 19, "WAIT", 40, 27, 35]
+
+    # try 2 sem sucesso
+    #robot_0:
+    #   targets:
+    #     - [31, 8, "MSG_1", 11, 103, 11, "MSG_1", 4, 5, 7, 130, 38]
+    # robot_1:
+    #   targets:
+    #     - ["WAIT", 31, 8, "MSG_2", 10, 102, "WAIT", 10, 4, "MSG_2", 5, 7, 30, 29, 137]
+    # robot_2:
+    #   targets:
+    #     - ["WAIT", 31, 8, "MSG_3", 9, 101, "WAIT", 9, 4, "MSG_3", 5, 7, 30, 28, 136]
+    # robot_3:
+    #   targets:
+    #     - ["WAIT", 31, 8, 100, "WAIT", 8, 4, 5, 7, 30, 27, 135]
+
     robot_0:
       targets:
-        - [31, 8, "MSG_1", 11, 103, 11, "MSG_1", 4, 5, 7, 130, 38]
+        - [31, 8, "MSG_1","4B", "MSG_1", 4, 5, 7, 130, 38]
     robot_1:
       targets:
-        - ["WAIT", 31, 8, "MSG_2", 10, 102, "WAIT", 10, 4, "MSG_2", 5, 7, 30, 29, 137]
+        - ["WAIT", 31, 8, "MSG_2", "3B_W", 4, "MSG_2", 5, 7, 30, 29, 137]
     robot_2:
       targets:
-        - ["WAIT", 31, 8, "MSG_3", 9, 101, "WAIT", 9, 4, "MSG_3", 5, 7, 30, 28, 136]
+        - ["WAIT", 31, 8, "MSG_3", "2B_W", 4, "MSG_3", 5, 7, 30, 28, 136]
     robot_3:
       targets:
-        - ["WAIT", 31, 8, 100, "WAIT", 8, 4, 5, 7, 30, 27, 135]
+        - ["WAIT", 31, "1B_W", 4, 5, 7, 30, 27, 135]
 
     #robot_0:
     #  targets:
