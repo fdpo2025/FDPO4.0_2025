@@ -326,9 +326,7 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   extra_peer_release_drops_ = 0;
   // Cancel any in-flight stop_waiting pulse from the previous mission so the new mission can
   // immediately fire MSG_* tokens.
-  if (stop_waiting_reset_timer_) {
-    stop_waiting_reset_timer_.stop();
-  }
+  stop_waiting_max_hold_timer_.stop();
   if (stop_waiting_pulse_active_) {
     std_msgs::Bool off;
     off.data = false;
