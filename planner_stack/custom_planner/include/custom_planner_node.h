@@ -72,6 +72,7 @@ class CustomPlannerNode {
   bool parseColorWith900Suffix(const std::string& token, std::string& color_token_out, bool& wait_at_pick_out,
                                bool& use_900_approach_out, bool& end_on_900_out) const;
   bool parseMessageToken(const XmlRpc::XmlRpcValue& item, int& target_robot_id) const;
+  bool parseDelayToken(const XmlRpc::XmlRpcValue& item, double& delay_s_out) const;
   bool isWaitToken(const XmlRpc::XmlRpcValue& item) const;
   bool tryReadInt(const XmlRpc::XmlRpcValue& item, int& value) const;
   void appendWarehousePickupTraversal(int approach_source_shelf_node, int target_shelf_node,
@@ -115,6 +116,7 @@ class CustomPlannerNode {
   ros::Publisher active_task_nav_nodes_pub_;
   ros::Publisher last_executed_token_pub_;
   ros::Publisher spawn_pose_pub_;
+  ros::Timer timeline_delay_timer_;
 
   std::string color_sequence_topic_;
   std::string wait_state_topic_;
@@ -170,5 +172,6 @@ class CustomPlannerNode {
    */
   int extra_peer_release_drops_ = 0;
   ros::Time extra_peer_release_drops_until_;
+  bool timeline_delay_active_ = false;
 };
 

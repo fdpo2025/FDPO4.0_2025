@@ -40,8 +40,18 @@ int approach900NodeForApproach(int approach_normal) {
 /** Mission leg tokens from YAML: MSG_* encoded as -1000 - robot_id (see parseMessageToken). */
 bool isMsgLegToken(int v) { return v <= -1000 && v >= -1000 - 255; }
 
+constexpr int kDelayTokenBase = -2000000000;
+
+bool isDelayLegToken(int v) { return v <= kDelayTokenBase; }
+
+int encodeDelayTokenMs(int delay_ms) { return kDelayTokenBase + delay_ms; }
+
+double decodeDelayTokenSeconds(int token) {
+  return static_cast<double>(token - kDelayTokenBase) / 1000.0;
+}
+
 /** Graph node id in expanded leg (excludes W=-1 and MSG tokens). Matches /planned_paths body indices. */
-bool isPhysicalGraphNode(int v) { return v != -1 && !isMsgLegToken(v); }
+bool isPhysicalGraphNode(int v) { return v != -1 && !isMsgLegToken(v) && !isDelayLegToken(v); }
 
 /** 0-based index of out[out_idx] among physical nodes only (NavPlan / planned_paths order). */
 uint32_t physicalNodeIndexAtOutIndex(const std::vector<int>& out, size_t out_idx) {
@@ -326,6 +336,10 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
     stop_waiting_send_pub_.publish(off);
     stop_waiting_pulse_active_ = false;
   }
+  if (timeline_delay_timer_) {
+    timeline_delay_timer_.stop();
+  }
+  timeline_delay_active_ = false;
   pending_tasks_.clear();
   has_active_task_ = false;
   active_task_ = MissionTask();
@@ -456,13 +470,18 @@ std::vector<CustomPlannerNode::MissionSegment> CustomPlannerNode::buildMissionSe
           wait_before_move.wait_after = true;
           out.push_back(wait_before_move);
         }
-      } else if (v <= -1000) {
+      } else if (isMsgLegToken(v)) {
         if (!seg.nodes.empty()) {
           seg.notify_robot_id = -1000 - v;
           out.push_back(seg);
           seg = MissionSegment();
         } else if (!out.empty()) {
           out.back().notify_robot_id = -1000 - v;
+        }
+      } else if (isDelayLegToken(v)) {
+        if (!seg.nodes.empty()) {
+          out.push_back(seg);
+          seg = MissionSegment();
         }
       } else {
         seg.nodes.push_back(v);
@@ -489,6 +508,12 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
     const XmlRpc::XmlRpcValue& item = leg[i];
     if (isWaitToken(item)) {
       out.push_back(-1);
+      continue;
+    }
+    double delay_s = 0.0;
+    if (parseDelayToken(item, delay_s)) {
+      const int delay_ms = std::max(1, static_cast<int>(std::lround(delay_s * 1000.0)));
+      out.push_back(encodeDelayTokenMs(delay_ms));
       continue;
     }
     int msg_target = -2;
@@ -694,6 +719,21 @@ bool CustomPlannerNode::parseMessageToken(const XmlRpc::XmlRpcValue& item, int& 
   }
 }
 
+bool CustomPlannerNode::parseDelayToken(const XmlRpc::XmlRpcValue& item, double& delay_s_out) const {
+  if (item.getType() != XmlRpc::XmlRpcValue::TypeString) return false;
+  const std::string token = static_cast<std::string>(item);
+  std::smatch m;
+  if (!std::regex_match(token, m, std::regex("^([0-9]+(?:\\.[0-9]+)?)\\s*[sS]$"))) {
+    return false;
+  }
+  try {
+    delay_s_out = std::stod(m[1].str());
+    return delay_s_out > 0.0;
+  } catch (...) {
+    return false;
+  }
+}
+
 bool CustomPlannerNode::isWaitToken(const XmlRpc::XmlRpcValue& item) const {
   if (item.getType() != XmlRpc::XmlRpcValue::TypeString) return false;
   const std::string s = static_cast<std::string>(item);
@@ -813,6 +853,7 @@ void CustomPlannerNode::publishRadioStopWaitingPulse(uint32_t target_robot_id) {
 void CustomPlannerNode::processTimelineLocked() {
   if (!has_active_task_) return;
   if (state_ == STATE_WAITING) return;
+  if (timeline_delay_active_) return;
 
   while (timeline_cursor_ < active_task_.timeline_tokens.size()) {
     if (timeline_cursor_ >= active_task_.token_required_consumed_count.size()) break;
@@ -854,6 +895,23 @@ void CustomPlannerNode::processTimelineLocked() {
       }
       setState(STATE_WAITING);
       publishRadioWakeRequest(robot_id_);
+      ++timeline_cursor_;
+      publishActiveTaskDebugLocked();
+      return;
+    }
+    if (isDelayLegToken(tok)) {
+      const double delay_s = decodeDelayTokenSeconds(tok);
+      timeline_delay_active_ = true;
+      timeline_delay_timer_ = nh_.createTimer(
+          ros::Duration(delay_s),
+          [this](const ros::TimerEvent&) {
+            std::lock_guard<std::mutex> lock(mtx_);
+            timeline_delay_active_ = false;
+            timeline_delay_timer_.stop();
+            processTimelineLocked();
+          },
+          true, true);
+      ROS_INFO("custom_planner: delaying timeline for %.3f s", delay_s);
       ++timeline_cursor_;
       publishActiveTaskDebugLocked();
       return;
