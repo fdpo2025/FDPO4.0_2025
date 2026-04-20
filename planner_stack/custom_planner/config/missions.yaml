@@ -177,8 +177,8 @@ missions_4:
     robot_spawns:
       robot_0: {x: -0.79, y: -0.34, theta: 1.5708}
       robot_1: {x: -0.63, y: -0.4, theta: 1.5708}
-      robot_2: {x: -0.47, y: -0.31, theta: 1.5708}
-      robot_3: {x: -0.47, y: -0.52, theta: 1.5708}
+      robot_2: {x: -0.47, y: -0.31, theta: 0.0}
+      robot_3: {x: -0.47, y: -0.52, theta: 0.0}
     # 28 seg a 0.3m/s
     robot_0:
       targets:
