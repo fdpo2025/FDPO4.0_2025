@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <regex>
+#include <sstream>
 #include <unordered_set>
 
 namespace {
@@ -747,7 +748,10 @@ bool CustomPlannerNode::tryReadInt(const XmlRpc::XmlRpcValue& item, int& value) 
   }
   if (item.getType() == XmlRpc::XmlRpcValue::TypeString) {
     try {
-      value = std::stoi(static_cast<std::string>(item));
+      const std::string s = static_cast<std::string>(item);
+      size_t parsed = 0;
+      value = std::stoi(s, &parsed);
+      if (parsed != s.size()) return false;
       return true;
     } catch (...) { return false; }
   }
@@ -985,10 +989,19 @@ bool CustomPlannerNode::validatePath(const std::vector<int>& path) const {
   auto is_msg_sentinel = [](int n) {
     return n <= -900000000 && n >= -900000000 - 255;
   };
-  return std::all_of(path.begin(), path.end(), [&](int n) {
-    if (is_msg_sentinel(n)) return true;
-    return valid.count(n) > 0;
-  });
+  for (int n : path) {
+    if (is_msg_sentinel(n)) continue;
+    if (valid.count(n) > 0) continue;
+    std::ostringstream oss;
+    for (size_t i = 0; i < path.size(); ++i) {
+      if (i) oss << ", ";
+      oss << path[i];
+    }
+    ROS_ERROR("custom_planner: invalid mission route, unknown node=%d, path=[%s]", n,
+              oss.str().c_str());
+    return false;
+  }
+  return true;
 }
 
 bool CustomPlannerNode::tryReadDouble(const XmlRpc::XmlRpcValue& v, double& out) const {
