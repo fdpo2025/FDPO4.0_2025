@@ -220,7 +220,7 @@ missions_4:
     robot_0:
       targets:
         - [31, 8, "MSG_1", "2G", 11, 4, 12, "MSG_1",  "MSG_2",113]
-        - ["WAIT_1",113, 12, 4, "1B_WAIT_1", 39, 19, "WAIT_3",40, 27, 35]
+        - ["WAIT_1",113, 12, 4, "1B_WAIT_1", 39, 19, "WAIT_3",40, 28, 36]
     robot_1:
       targets:
         - ["WAIT_0", 31, 8, "1G_WAIT_0", 4, 19,"MSG_0", "MSG_3", 120]
