@@ -22,7 +22,6 @@
 #include <vector>
 #include <std_msgs/UInt32.h>
 #include <std_msgs/UInt8.h>
-#include <std_msgs/Empty.h>
 
 struct Pose {
 
@@ -41,9 +40,8 @@ namespace Communication {
             uint32_t cp_send;
             uint32_t np_send;
             bool waiting_send;
-            uint32_t target_id_send;
-            bool stop_waiting_send;
-            uint8_t stop_wait_seq_send;
+            /** Monotonic timeline cursor do custom_planner local (0..255). Enviado via CMD:. */
+            uint8_t timeline_index_send;
 
         };
 
@@ -58,6 +56,7 @@ namespace Communication {
             std::vector<uint32_t> cp_all;
             std::vector<uint32_t> np_all;
             std::vector<uint32_t> wt_all;
+            std::vector<uint32_t> ti_all;
 
         };
 
@@ -74,18 +73,18 @@ namespace Communication {
 
 
 class PiPicoDriver {
-    
+
     public:
         PiPicoDriver(ros::NodeHandle& nh_);
         ~PiPicoDriver();
 
-    private: 
+    private:
         ros::NodeHandle& nh;
 
         Communication::Message::ToPico messageToSend;
         Communication::Message::FromPico messageToReceive;
         Communication::ConnectionState con_state{false, 0};
-    
+
         int serial_fd_;
         bool debug_comm_;
         bool handshake_ok_{false};
@@ -108,7 +107,7 @@ class PiPicoDriver {
         void velCallBack(const geometry_msgs::Twist::ConstPtr& msg);
 
         ros::Subscriber pickBoxSub;
-        void pickBoxCallBack(const std_msgs::Bool::ConstPtr& msg);  
+        void pickBoxCallBack(const std_msgs::Bool::ConstPtr& msg);
 
         ros::Publisher posePub;
         void pubOdom();
@@ -118,9 +117,7 @@ class PiPicoDriver {
         ros::Subscriber cpSendSub;
         ros::Subscriber npSendSub;
         ros::Subscriber wtSendSub;
-        ros::Subscriber targetIdSendSub;
-        ros::Subscriber stopWaitingSendSub;
-        ros::Subscriber stopWaitSeqSub_;
+        ros::Subscriber timelineIndexSendSub_;
         ros::Subscriber colorSequenceSub_;
         ros::Subscriber thisCurrentPoseForCpSub_;
 
@@ -130,8 +127,6 @@ class PiPicoDriver {
         ros::Publisher rawSerialPub_;
         ros::Publisher networkTablePub_;
         ros::Publisher waitStatePub_;
-        /** Rising edge on POS ;PR:1 — peer sent stop_waiting for this robot (buffer in custom_planner). */
-        ros::Publisher peerWaitReleasePub_;
         ros::Publisher colorSequencePub_;
         /** Latched; id from Pico INIT line after handshake (fleet index 0-based). */
         ros::Publisher robot_identity_pub_;
@@ -139,9 +134,7 @@ class PiPicoDriver {
         void cpSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
         void npSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
         void wtSendCallBack(const std_msgs::Bool::ConstPtr& msg);
-        void targetIdSendCallBack(const std_msgs::UInt32::ConstPtr& msg);
-        void stopWaitingSendCallBack(const std_msgs::Bool::ConstPtr& msg);
-        void stopWaitSeqCallBack(const std_msgs::UInt8::ConstPtr& msg);
+        void timelineIndexSendCallBack(const std_msgs::UInt8::ConstPtr& msg);
         void thisCurrentPoseForCpSendCb(const std_msgs::UInt32::ConstPtr& msg);
         void colorSequenceCallBack(const std_msgs::String::ConstPtr& msg);
 
@@ -163,8 +156,5 @@ class PiPicoDriver {
 
         bool wait_state_initialized_{false};
         bool last_published_wait_state_{false};
-
-        /** Last ;PR: field from POS (0/1) for edge detection. */
-        int last_pr_field_{0};
 
 };

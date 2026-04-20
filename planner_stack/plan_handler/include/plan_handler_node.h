@@ -62,13 +62,8 @@ private:
     ros::Subscriber navCompletionFeedbackSub;
     ros::Publisher navPlanPub;
     ros::Publisher pickBoxPub;
-    ros::Publisher targetIdSendPub;
-    ros::Publisher stopWaitingSendPub;
-    ros::Timer stopWaitingResetTimer;
-    bool stopWaitingResetTimerValid{false};
 
     void plannedPathsCallback(const std_msgs::Int32MultiArray::ConstPtr& msg);
-    void publishRadioStopWaitingPulse(uint32_t target_robot_id);
     void navPlanWaypointConsumedCallback(const std_msgs::UInt32MultiArray::ConstPtr& msg);
     void navCompletionFeedbackCallback(const plan_handler::CompletionFeedback::ConstPtr& msg);
 
@@ -98,11 +93,4 @@ private:
 
     /** Monotonic NavPlan.header.seq; echoed by navigation_controller on consumption. */
     uint32_t nav_plan_publish_seq_{0};
-
-    struct PendingMsgPulse {
-        uint32_t target_robot_id;
-        int trigger_plan_index;
-        uint32_t nav_plan_seq;
-    };
-    std::vector<PendingMsgPulse> pending_msg_pulses_;
 };

@@ -10,16 +10,17 @@
 # Tarefas (targets):
 #   Cada entrada "- [ ... ]" sob robot_N é UMA tarefa completa (estilo pick→drop).
 #   O último inteiro da lista é sempre o nó de DROP (output warehouse) dessa tarefa.
-#   Waits ("W") e mensagens ("MSG_*") são expandidos pelo nó; um "W" no início da lista
-#   faz esperar antes do primeiro movimento desse segmento. Parada usa /pi_pico_driver/wait_state;
-#   o plan_handler pode enviar /target_id_send + /stop_waiting_send.
+#   Waits ("WAIT_N") e mensagens ("MSG_N") são emparelhados por canal N. A libertação
+#   é 100% local (cada robô observa /pi_pico_driver/network_table.timeline_index de cada
+#   produtor e conta MSG_N efetivamente atravessados). Já não existem mensagens de rádio
+#   adicionais para stop_waiting/target_id.
 #
 # Token syntax supported by the node:
 #   - Integer node ids (e.g., 31, 16, 27)
 #   - "1B", "2G", "1R", etc. (nth occurrence from left in /color_sequence)
-#   - "1B_W", "2G_W", "1R_W" (same + wait marker at pick)
-#   - "W" / "WAIT"
-#   - "MSG_0", "MSG_1", "MSG_2", "MSG_ALL" (MSG_ALL -> 255)
+#   - "1B_W_N" (pick + wait no canal N; obrigatório sufixo _N, ex.: "3B_W_2")
+#   - "WAIT_N" (canal N, obrigatório sufixo; "W" ou "WAIT" sem sufixo são rejeitados)
+#   - "MSG_N" (produção no canal N); "MSG_ALL" é broadcast informativo, NÃO conta como MSG_N.
 
 ###############################################################
 #                                                             #
