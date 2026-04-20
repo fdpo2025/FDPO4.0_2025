@@ -23,13 +23,26 @@
 /*
  * Novo modelo de sincronização (sem mensagens de rádio extra):
  *
- *   - Cada produtor de um canal N contribui para um contador global ticks[N] ao atravessar
- *     um token "MSG_N" na sua timeline. Isto é detectado pelos restantes robôs observando o
- *     timeline_index que cada Pico publica em RadioNetworkTable (broadcast no slot TDMA).
- *   - Cada waiter possui tokens "WAIT_N" ou "<algo>_W_N". A i-ésima ocorrência só liberta
- *     quando ticks[N] >= i.
- *   - Tokens "WAIT" / "_W" sem sufixo "_N" são rejeitados durante o parsing.
- *   - my_timeline_index é o cursor monotónico da nossa timeline, propagado via Pico→rádio.
+ *   Nomenclatura:
+ *     - MSG_Y    na timeline do produtor X → "mensagem para o robô Y".
+ *     - WAIT_X   na timeline do consumidor Y → "espero por mensagem vinda do robô X".
+ *     - O emparelhamento é o par ordenado (produtor X, consumidor Y).
+ *
+ *   Libertação:
+ *     - O i-ésimo WAIT_X em Y liberta quando o produtor X já tiver atravessado
+ *       o i-ésimo MSG_Y na sua própria timeline.
+ *     - Cada robô publica my_timeline_index (cursor monotónico, uint8) via Pico→rádio.
+ *       Os restantes robôs contam localmente quantos MSG_<meu_id> o produtor X atravessou.
+ *
+ *   Validação estática (arranque de missão):
+ *     - Para cada par (X, Y): #MSG_Y emitidos por X ≥ #WAIT_X consumidos por Y,
+ *       caso contrário a missão é abortada (prevenção de deadlock).
+ *
+ *   Parsing:
+ *     - WAIT_X   ou  W_X            (sufixo _N obrigatório; 0 ≤ X < num_robots)
+ *     - MSG_Y                       (0 ≤ Y < num_robots; MSG_ALL aceite mas ignorado para ticks)
+ *     - <color>_W_X / <color>_WAIT_X (pause no pick, espera produtor X)
+ *     - "WAIT"/"W" sem sufixo são rejeitados com ROS_ERROR.
  */
 
 class CustomPlannerNode {
@@ -45,10 +58,10 @@ class CustomPlannerNode {
 
   struct MissionTask {
     /** Tokens após expansão. Valores:
-     *   - inteiro >= 0      -> nó físico na timeline de navegação
-     *   - -1000 - N (N 0..255) -> MSG_N (produtor)
-     *   - -2000 - N (N 0..255) -> WAIT_N (waiter)
-     * Leading "W" (-1 puro) já não existe; é sempre sufixado.
+     *   - inteiro >= 0         -> nó físico na timeline de navegação
+     *   - -1000 - Y (Y 0..255) -> MSG_Y (mensagem para o robô Y)
+     *   - -2000 - X (X 0..255) -> WAIT_X (espera por mensagem do robô X)
+     * "WAIT"/"W" sem sufixo já não existem; são rejeitados no parsing.
      */
     std::vector<int> timeline_tokens;
     std::vector<int> nav_nodes;
@@ -64,7 +77,10 @@ class CustomPlannerNode {
     std::vector<int> timeline_tokens;                // mesmo esquema que MissionTask
     std::vector<uint8_t> expected_cp_at_index;       // último nó físico visto até i (ou 0)
     std::vector<uint8_t> has_expected_cp_at_index;   // bool: 1 se expected_cp_at_index[i] é válido
-    std::map<int, std::vector<uint32_t>> msg_positions;   // MSG_N -> posições (índices de timeline) onde produz
+    /** Para o produtor, mapa destinatário Y -> posições na sua timeline onde emite MSG_Y. */
+    std::map<int, std::vector<uint32_t>> msg_positions_by_target;
+    /** Para o waiter, mapa produtor X -> nº total de WAIT_X (usado na validação estática). */
+    std::map<int, uint32_t> wait_counts_by_producer;
   };
 
   void onMissionColorSequence(const std_msgs::String::ConstPtr& msg);
@@ -82,16 +98,14 @@ class CustomPlannerNode {
                                      bool collapse_duplicates = true) const;
   int resolveIndexedColorNode(const std::string& token, const std::string& color_sequence) const;
   bool parseColorWith900Suffix(const std::string& token, std::string& color_token_out, bool& wait_at_pick_out,
-                               int& wait_channel_out, bool& use_900_approach_out, bool& end_on_900_out) const;
-  /** MSG_N, MSG_ALL -> devolve N em msg_channel_out (255 para MSG_ALL, mas não produz canal).
-   *  MSG_ALL continua suportado como "aviso broadcast" mas NÃO incrementa ticks em nenhum canal;
-   *  é deprecado no novo esquema e deve ser evitado. */
-  bool parseMessageToken(const XmlRpc::XmlRpcValue& item, int& msg_channel_out) const;
-  /** WAIT_N (obrigatório sufixo). Retorna true e escreve channel se reconhecido. */
-  bool parseWaitToken(const XmlRpc::XmlRpcValue& item, int& channel_out) const;
+                               int& wait_producer_out, bool& use_900_approach_out, bool& end_on_900_out) const;
+  /** MSG_Y -> escreve Y (destinatário) em target_out. MSG_ALL -> target_out=255 (informativo). */
+  bool parseMessageToken(const XmlRpc::XmlRpcValue& item, int& target_out) const;
+  /** WAIT_X (obrigatório sufixo). Retorna true e escreve X (produtor) em producer_out. */
+  bool parseWaitToken(const XmlRpc::XmlRpcValue& item, int& producer_out) const;
   bool tryReadInt(const XmlRpc::XmlRpcValue& item, int& value) const;
   void appendWarehousePickupTraversal(int approach_source_shelf_node, int target_shelf_node,
-                                      std::vector<int>& out, bool wait_at_pick, int wait_channel) const;
+                                      std::vector<int>& out, bool wait_at_pick, int wait_producer) const;
   void collapseConsecutiveDuplicateNodes(std::vector<int>& nodes) const;
 
   void startMission(const std::string& color_sequence);
@@ -110,17 +124,16 @@ class CustomPlannerNode {
   static bool isWarehouseCoordinate(int node_id);
 
   /** Parses all robots' missions for the given manga + color sequence into peer_timelines_.
-   *  Populates msg_positions. Returns false on fatal parse error. */
+   *  Populates msg_positions_by_target and wait_counts_by_producer. Returns false em erro fatal. */
   bool buildPeerTimelinesLocked(const std::string& manga_key, const std::string& color_sequence);
-  /** Static validation: for every channel N, count WAIT_N tokens across all waiters and ensure
-   *  producers emit at least that many MSG_N. Prevents deadlocks from bad missions.yaml.
-   *  Logs errors (does not throw); returns false if any issue found. */
+  /** Validação estática: para cada par (produtor X, consumidor Y), verifica que
+   *  #MSG_Y em X >= #WAIT_X em Y. Previne deadlocks. Retorna false se detetar problema. */
   bool validateChannelsLocked() const;
-  /** Publish current my_timeline_index_ (clamped 0..255). */
+  /** Publica my_timeline_index_ (clamped 0..255). */
   void publishMyTimelineIndexLocked();
-  /** Release any pending WAIT_N if ticks_on_channel_[N] reached the needed count. Expects mtx_. */
+  /** Liberta WAIT_X pendente se ticks_from_producer_[X] >= consumed_from_producer_[X] + 1. */
   void tryReleaseWaitingLocked();
-  /** Recompute ticks_on_channel_ from observed_timeline_index_ and peer_timelines_. Expects mtx_. */
+  /** Recalcula ticks_from_producer_ a partir de observed_timeline_index_ e peer_timelines_. */
   void recomputeTicksLocked();
 
   ros::NodeHandle nh_;
@@ -171,12 +184,12 @@ class CustomPlannerNode {
   std::vector<PeerTimeline> peer_timelines_;
   /** Último timeline_index observado (monotónico) por robô. */
   std::vector<uint32_t> observed_timeline_index_;
-  /** Contagem derivada de MSG_N efetivamente produzidos (sobre todos os produtores). */
-  std::map<int, uint32_t> ticks_on_channel_;
-  /** Nº de WAIT_N já consumidos por nós (waiter local). */
-  std::map<int, uint32_t> consumed_on_channel_;
-  /** Canal em que estamos atualmente parados (-1 = não parado por canal). */
-  int waiting_on_channel_ = -1;
+  /** Nº de MSG_<meu_id> já atravessados pelo produtor X, por cada X. */
+  std::map<int, uint32_t> ticks_from_producer_;
+  /** Nº de WAIT_X já consumidos localmente, por cada produtor X. */
+  std::map<int, uint32_t> consumed_from_producer_;
+  /** Produtor em que estamos atualmente a aguardar (-1 = não parado). */
+  int waiting_on_producer_ = -1;
   /** Cursor publicado da timeline local (0..N). */
   uint32_t my_timeline_index_ = 0;
 };

@@ -41,15 +41,15 @@ int approach900NodeForApproach(int approach_normal) {
 
 /** Mission timeline encoding:
  *   physical node: v >= 0
- *   MSG_N        : v in [-1255, -1000]  (N = -1000 - v)
- *   WAIT_N       : v in [-2255, -2000]  (N = -2000 - v)
+ *   MSG_Y        : v in [-1255, -1000]  (Y = destinatário; -1000 - v)
+ *   WAIT_X       : v in [-2255, -2000]  (X = produtor;    -2000 - v)
  */
 bool isMsgLegToken(int v) { return v <= -1000 && v >= -1255; }
 bool isWaitLegToken(int v) { return v <= -2000 && v >= -2255; }
-int msgChannelOf(int v) { return -1000 - v; }
-int waitChannelOf(int v) { return -2000 - v; }
-int encodeMsg(int channel) { return -1000 - channel; }
-int encodeWait(int channel) { return -2000 - channel; }
+int msgTargetOf(int v) { return -1000 - v; }
+int waitProducerOf(int v) { return -2000 - v; }
+int encodeMsg(int target_consumer) { return -1000 - target_consumer; }
+int encodeWait(int producer) { return -2000 - producer; }
 
 /** Graph node id in expanded leg (excludes WAIT_N and MSG tokens). Matches /planned_paths body. */
 bool isPhysicalGraphNode(int v) { return v >= 0; }
@@ -258,9 +258,9 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   // Reset sync state for the new mission.
   peer_timelines_.clear();
   observed_timeline_index_.assign(num_robots_, 0);
-  ticks_on_channel_.clear();
-  consumed_on_channel_.clear();
-  waiting_on_channel_ = -1;
+  ticks_from_producer_.clear();
+  consumed_from_producer_.clear();
+  waiting_on_producer_ = -1;
   my_timeline_index_ = 0;
   publishMyTimelineIndexLocked();
   publishActiveTaskDebugLocked();
@@ -364,24 +364,24 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
   if (leg.getType() != XmlRpc::XmlRpcValue::TypeArray) return out;
   for (int i = 0; i < leg.size(); ++i) {
     const XmlRpc::XmlRpcValue& item = leg[i];
-    int wait_channel = -1;
-    if (parseWaitToken(item, wait_channel)) {
-      out.push_back(encodeWait(wait_channel));
+    int wait_producer = -1;
+    if (parseWaitToken(item, wait_producer)) {
+      out.push_back(encodeWait(wait_producer));
       continue;
     }
-    int msg_channel = -1;
-    if (parseMessageToken(item, msg_channel)) {
-      out.push_back(encodeMsg(msg_channel));
+    int msg_target = -1;
+    if (parseMessageToken(item, msg_target)) {
+      out.push_back(encodeMsg(msg_target));
       continue;
     }
     if (item.getType() == XmlRpc::XmlRpcValue::TypeString) {
       std::string token = static_cast<std::string>(item);
       std::string color_token;
       bool wait_pick = false;
-      int wait_pick_channel = -1;
+      int wait_pick_producer = -1;
       bool use_900 = false;
       bool end_on_900 = false;
-      if (parseColorWith900Suffix(token, color_token, wait_pick, wait_pick_channel, use_900, end_on_900)) {
+      if (parseColorWith900Suffix(token, color_token, wait_pick, wait_pick_producer, use_900, end_on_900)) {
         const int input = resolveIndexedColorNode(color_token, color_sequence);
         if (input >= 0) {
           const int approach = approachNodeForInputShelf(input);
@@ -389,7 +389,7 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
 
           std::vector<int> base;
           base.reserve(wait_pick ? 4 : 3);
-          appendWarehousePickupTraversal(input, target_shelf, base, wait_pick, wait_pick_channel);
+          appendWarehousePickupTraversal(input, target_shelf, base, wait_pick, wait_pick_producer);
 
           if (use_900) {
             const int approach900 = approach900NodeForApproach(approach);
@@ -485,15 +485,15 @@ int CustomPlannerNode::resolveIndexedColorNode(const std::string& token, const s
 }
 
 bool CustomPlannerNode::parseColorWith900Suffix(const std::string& token, std::string& color_token_out,
-                                                 bool& wait_at_pick_out, int& wait_channel_out,
+                                                 bool& wait_at_pick_out, int& wait_producer_out,
                                                  bool& use_900_approach_out,
                                                  bool& end_on_900_out) const {
   // Suportados:
   //   "1B", "2G", ... (sem pause)
   //   "1B_900", "1B_900f"
-  //   "1B_W_N" / "1B_W_N_900"  (novo: sempre obrigatório sufixo _N)
+  //   "1B_W_X" / "1B_WAIT_X" / "1B_W_X_900"  (novo: sufixo _X = produtor obrigatório)
   wait_at_pick_out = false;
-  wait_channel_out = -1;
+  wait_producer_out = -1;
   use_900_approach_out = false;
   end_on_900_out = false;
 
@@ -512,12 +512,12 @@ bool CustomPlannerNode::parseColorWith900Suffix(const std::string& token, std::s
     color_token_out = token.substr(0, token.size() - 5);
     return !color_token_out.empty();
   }
-  // _W_N_900  (com wait + canal + aux900)
+  // _W_X_900 / _WAIT_X_900  (pick wait + produtor + aux900)
   {
     std::smatch m;
-    if (std::regex_match(u, m, std::regex("^(.+)_W_([0-9]+)_900$"))) {
+    if (std::regex_match(u, m, std::regex("^(.+)_W(?:AIT)?_([0-9]+)_900$"))) {
       wait_at_pick_out = true;
-      wait_channel_out = std::stoi(m[2].str());
+      wait_producer_out = std::stoi(m[2].str());
       use_900_approach_out = true;
       color_token_out = token.substr(0, m[1].str().size());
       return !color_token_out.empty();
@@ -528,22 +528,23 @@ bool CustomPlannerNode::parseColorWith900Suffix(const std::string& token, std::s
     color_token_out = token.substr(0, token.size() - 4);
     return !color_token_out.empty();
   }
-  // _W_N puro (novo esquema obrigatório)
+  // _W_X / _WAIT_X puro (X = produtor de quem se espera)
   {
     std::smatch m;
-    if (std::regex_match(u, m, std::regex("^(.+)_W_([0-9]+)$"))) {
+    if (std::regex_match(u, m, std::regex("^(.+)_W(?:AIT)?_([0-9]+)$"))) {
       wait_at_pick_out = true;
-      wait_channel_out = std::stoi(m[2].str());
+      wait_producer_out = std::stoi(m[2].str());
       color_token_out = token.substr(0, m[1].str().size());
       return !color_token_out.empty();
     }
   }
-  // _W sem canal — rejeitado explicitamente no novo esquema
+  // _W / _WAIT sem canal — rejeitado explicitamente no novo esquema
   {
     std::smatch m;
-    if (std::regex_match(u, m, std::regex("^(.+)_W$"))) {
+    if (std::regex_match(u, m, std::regex("^(.+)_W(?:AIT)?$"))) {
       ROS_ERROR(
-          "custom_planner: token '%s' usa '_W' sem sufixo _N. É obrigatório '_W_<N>' (ex.: '3B_W_2'). Ignorado.",
+          "custom_planner: token '%s' usa '_W'/'_WAIT' sem sufixo _N. "
+          "É obrigatório '_W_<N>' ou '_WAIT_<N>' (ex.: '3B_W_2'). Ignorado.",
           token.c_str());
       return false;
     }
@@ -552,7 +553,7 @@ bool CustomPlannerNode::parseColorWith900Suffix(const std::string& token, std::s
   return false;
 }
 
-bool CustomPlannerNode::parseMessageToken(const XmlRpc::XmlRpcValue& item, int& msg_channel_out) const {
+bool CustomPlannerNode::parseMessageToken(const XmlRpc::XmlRpcValue& item, int& target_out) const {
   if (item.getType() != XmlRpc::XmlRpcValue::TypeString) return false;
   std::string token = static_cast<std::string>(item);
   std::string upper;
@@ -560,30 +561,30 @@ bool CustomPlannerNode::parseMessageToken(const XmlRpc::XmlRpcValue& item, int& 
   if (upper.rfind("MSG_", 0) != 0) return false;
   std::string suffix = upper.substr(4);
   if (suffix == "ALL") {
-    msg_channel_out = 255;
+    target_out = 255;  // broadcast informativo; não contabiliza ticks.
     return true;
   }
   try {
-    msg_channel_out = std::stoi(suffix);
+    target_out = std::stoi(suffix);
     return true;
   } catch (...) {
     return false;
   }
 }
 
-bool CustomPlannerNode::parseWaitToken(const XmlRpc::XmlRpcValue& item, int& channel_out) const {
+bool CustomPlannerNode::parseWaitToken(const XmlRpc::XmlRpcValue& item, int& producer_out) const {
   if (item.getType() != XmlRpc::XmlRpcValue::TypeString) return false;
   std::string s = static_cast<std::string>(item);
   std::string u;
   for (char c : s) u.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
   std::smatch m;
   if (std::regex_match(u, m, std::regex("^W(?:AIT)?_([0-9]+)$"))) {
-    channel_out = std::stoi(m[1].str());
+    producer_out = std::stoi(m[1].str());
     return true;
   }
   if (u == "W" || u == "WAIT") {
     ROS_ERROR(
-        "custom_planner: token '%s' sem sufixo _N. É obrigatório 'WAIT_<N>'. Ignorado (validação dispara).",
+        "custom_planner: token '%s' sem sufixo. É obrigatório 'WAIT_<produtor>'. Ignorado.",
         s.c_str());
     return false;
   }
@@ -606,7 +607,7 @@ bool CustomPlannerNode::tryReadInt(const XmlRpc::XmlRpcValue& item, int& value) 
 
 void CustomPlannerNode::appendWarehousePickupTraversal(int approach_source_shelf_node, int target_shelf_node,
                                                        std::vector<int>& out, bool wait_at_pick,
-                                                       int wait_channel) const {
+                                                       int wait_producer) const {
   const int approach = approachNodeForInputShelf(approach_source_shelf_node);
   if (approach < 0) {
     out.push_back(target_shelf_node);
@@ -615,12 +616,12 @@ void CustomPlannerNode::appendWarehousePickupTraversal(int approach_source_shelf
   out.push_back(approach);
   out.push_back(target_shelf_node);
   if (wait_at_pick) {
-    if (wait_channel >= 0) {
-      out.push_back(encodeWait(wait_channel));
+    if (wait_producer >= 0) {
+      out.push_back(encodeWait(wait_producer));
     } else {
       ROS_ERROR(
-          "custom_planner: _W sem canal em appendWarehousePickupTraversal (shelf=%d). "
-          "Canal obrigatório; pause ignorado.",
+          "custom_planner: _W sem produtor em appendWarehousePickupTraversal (shelf=%d). "
+          "Produtor obrigatório; pause ignorado.",
           target_shelf_node);
     }
   }
@@ -681,38 +682,37 @@ void CustomPlannerNode::publishMyTimelineIndexLocked() {
 }
 
 void CustomPlannerNode::recomputeTicksLocked() {
-  ticks_on_channel_.clear();
+  ticks_from_producer_.clear();
+  if (robot_id_ < 0) return;
   for (size_t p = 0; p < peer_timelines_.size(); ++p) {
     const PeerTimeline& pt = peer_timelines_[p];
     uint32_t obs = (p < observed_timeline_index_.size()) ? observed_timeline_index_[p] : 0;
-    // Own timeline uses the local cursor directly (broadcast value may lag).
+    // Para nós próprios, usar cursor local (o broadcast uint8 pode estar desatualizado).
     if (static_cast<int>(p) == robot_id_) {
       obs = my_timeline_index_;
     }
-    for (const auto& kv : pt.msg_positions) {
-      const int ch = kv.first;
-      const auto& positions = kv.second;
-      // MSG_N at position K fires when observed_index > K  (cursor advanced past K).
-      uint32_t fired = 0;
-      for (uint32_t pos : positions) {
-        if (obs > pos) ++fired;
-      }
-      ticks_on_channel_[ch] += fired;
+    // Só nos interessa contar os MSG com destinatário = eu.
+    auto it = pt.msg_positions_by_target.find(robot_id_);
+    if (it == pt.msg_positions_by_target.end()) continue;
+    uint32_t fired = 0;
+    for (uint32_t pos : it->second) {
+      // MSG na posição P dispara quando o cursor já passou P (obs > P).
+      if (obs > pos) ++fired;
     }
+    ticks_from_producer_[static_cast<int>(p)] = fired;
   }
 }
 
 void CustomPlannerNode::tryReleaseWaitingLocked() {
-  if (state_ != STATE_WAITING || waiting_on_channel_ < 0) return;
-  const int ch = waiting_on_channel_;
-  const uint32_t needed = consumed_on_channel_[ch] + 1u;
-  auto it = ticks_on_channel_.find(ch);
-  const uint32_t have = (it != ticks_on_channel_.end()) ? it->second : 0u;
+  if (state_ != STATE_WAITING || waiting_on_producer_ < 0) return;
+  const int X = waiting_on_producer_;
+  const uint32_t needed = consumed_from_producer_[X] + 1u;
+  auto it = ticks_from_producer_.find(X);
+  const uint32_t have = (it != ticks_from_producer_.end()) ? it->second : 0u;
   if (have >= needed) {
-    waiting_on_channel_ = -1;
+    waiting_on_producer_ = -1;
     setState(STATE_NAVIGATING);
-    ROS_INFO("custom_planner: WAIT_%d released (ticks=%u, need=%u)", ch, have, needed);
-    // processTimelineLocked volta ao WAIT, incrementa consumed_on_channel_ e avança cursor.
+    ROS_INFO("custom_planner: WAIT_%d released (ticks=%u, need=%u)", X, have, needed);
     processTimelineLocked();
   }
 }
@@ -769,19 +769,20 @@ void CustomPlannerNode::processTimelineLocked() {
     last_executed_token_value_ = static_cast<int32_t>(tok);
 
     if (isWaitLegToken(tok)) {
-      const int ch = waitChannelOf(tok);
+      const int X = waitProducerOf(tok);
       recomputeTicksLocked();
-      const uint32_t needed = consumed_on_channel_[ch] + 1u;
-      const uint32_t have = ticks_on_channel_[ch];
+      const uint32_t needed = consumed_from_producer_[X] + 1u;
+      const uint32_t have = ticks_from_producer_[X];
       if (have < needed) {
-        waiting_on_channel_ = ch;
+        waiting_on_producer_ = X;
         setState(STATE_WAITING);
-        ROS_INFO("custom_planner: STATE_WAITING canal=%d (ticks=%u, need=%u)", ch, have, needed);
+        ROS_INFO("custom_planner: STATE_WAITING a aguardar produtor=%d (ticks=%u, need=%u)",
+                 X, have, needed);
         publishActiveTaskDebugLocked();
         return;
       }
-      consumed_on_channel_[ch] = needed;
-      ROS_INFO("custom_planner: WAIT_%d liberação imediata (ticks=%u, need=%u)", ch, have, needed);
+      consumed_from_producer_[X] = needed;
+      ROS_INFO("custom_planner: WAIT_%d liberação imediata (ticks=%u, need=%u)", X, have, needed);
       ++timeline_cursor_;
       updateMyIndex();
       publishActiveTaskDebugLocked();
@@ -790,7 +791,6 @@ void CustomPlannerNode::processTimelineLocked() {
     if (isMsgLegToken(tok)) {
       ++timeline_cursor_;
       updateMyIndex();
-      // Atualiza ticks locais caso sejamos produtor+waiter no mesmo canal.
       recomputeTicksLocked();
       publishActiveTaskDebugLocked();
       continue;
@@ -956,10 +956,32 @@ bool CustomPlannerNode::buildPeerTimelinesLocked(const std::string& manga_key,
         pt.has_expected_cp_at_index[i] = 1;
       }
       if (isMsgLegToken(tok)) {
-        const int ch = msgChannelOf(tok);
-        if (ch >= 0 && ch < 255) {  // 255 = MSG_ALL, não contribui para ticks
-          pt.msg_positions[ch].push_back(static_cast<uint32_t>(i));
+        const int Y = msgTargetOf(tok);
+        if (Y == 255) continue;  // MSG_ALL: informativo, não contabiliza
+        if (Y < 0 || Y >= num_robots_) {
+          ROS_WARN(
+              "custom_planner: robot_%zu emite MSG_%d com destinatário fora de 0..%d. Ignorado.",
+              r, Y, num_robots_ - 1);
+          continue;
         }
+        if (Y == static_cast<int>(r)) {
+          ROS_WARN("custom_planner: robot_%zu emite MSG para si próprio (MSG_%d). Ignorado.", r, Y);
+          continue;
+        }
+        pt.msg_positions_by_target[Y].push_back(static_cast<uint32_t>(i));
+      } else if (isWaitLegToken(tok)) {
+        const int X = waitProducerOf(tok);
+        if (X < 0 || X >= num_robots_) {
+          ROS_WARN(
+              "custom_planner: robot_%zu tem WAIT_%d com produtor fora de 0..%d. Ignorado.",
+              r, X, num_robots_ - 1);
+          continue;
+        }
+        if (X == static_cast<int>(r)) {
+          ROS_WARN("custom_planner: robot_%zu espera por si próprio (WAIT_%d). Ignorado.", r, X);
+          continue;
+        }
+        pt.wait_counts_by_producer[X] += 1u;
       }
     }
   }
@@ -967,52 +989,51 @@ bool CustomPlannerNode::buildPeerTimelinesLocked(const std::string& manga_key,
 }
 
 bool CustomPlannerNode::validateChannelsLocked() const {
+  // Para cada par ordenado (produtor X, consumidor Y):
+  //   prod[(X,Y)] = #MSG_Y na timeline de X
+  //   wait[(X,Y)] = #WAIT_X na timeline de Y
   bool ok = true;
-  std::map<int, uint32_t> produced_total;
-  std::map<int, uint32_t> waited_total;
-  std::map<int, std::vector<int>> producers;  // channel -> robot_ids
-  std::map<int, std::vector<int>> waiters;    // channel -> robot_ids
+  std::map<std::pair<int, int>, uint32_t> produced;
+  std::map<std::pair<int, int>, uint32_t> waited;
 
   for (size_t r = 0; r < peer_timelines_.size(); ++r) {
+    const int X = static_cast<int>(r);
     const PeerTimeline& pt = peer_timelines_[r];
-    for (const auto& kv : pt.msg_positions) {
-      produced_total[kv.first] += static_cast<uint32_t>(kv.second.size());
-      producers[kv.first].push_back(static_cast<int>(r));
+    for (const auto& kv : pt.msg_positions_by_target) {
+      const int Y = kv.first;
+      produced[{X, Y}] += static_cast<uint32_t>(kv.second.size());
     }
-    for (int tok : pt.timeline_tokens) {
-      if (isWaitLegToken(tok)) {
-        const int ch = waitChannelOf(tok);
-        waited_total[ch] += 1u;
-        auto& v = waiters[ch];
-        if (v.empty() || v.back() != static_cast<int>(r)) v.push_back(static_cast<int>(r));
-      }
+    // O consumidor é r; os WAIT_X desta timeline são do par (X, r).
+    for (const auto& kv : pt.wait_counts_by_producer) {
+      const int producerX = kv.first;
+      waited[{producerX, X}] += kv.second;
     }
   }
 
-  std::set<int> all_channels;
-  for (const auto& kv : produced_total) all_channels.insert(kv.first);
-  for (const auto& kv : waited_total) all_channels.insert(kv.first);
+  std::set<std::pair<int, int>> all_pairs;
+  for (const auto& kv : produced) all_pairs.insert(kv.first);
+  for (const auto& kv : waited) all_pairs.insert(kv.first);
 
-  for (int ch : all_channels) {
-    const uint32_t prod = produced_total[ch];
-    const uint32_t wait = waited_total[ch];
-    if (wait == 0 && prod > 0) {
-      ROS_WARN(
-          "custom_planner: canal %d tem %u MSG produzidos mas 0 WAIT. Não é erro fatal mas verifica.",
-          ch, prod);
-    }
-    if (wait > 0 && prod < wait) {
+  for (const auto& pr : all_pairs) {
+    const int X = pr.first;
+    const int Y = pr.second;
+    const uint32_t p = produced.count(pr) ? produced.at(pr) : 0u;
+    const uint32_t w = waited.count(pr) ? waited.at(pr) : 0u;
+    if (w > 0 && p < w) {
       ROS_ERROR(
-          "custom_planner: canal %d tem %u WAIT mas apenas %u MSG produzidos → deadlock garantido.",
-          ch, wait, prod);
+          "custom_planner: par (produtor=%d -> consumidor=%d) tem %u WAIT_%d em robot_%d "
+          "mas só %u MSG_%d em robot_%d -> deadlock garantido.",
+          X, Y, w, X, Y, p, Y, X);
       ok = false;
+    } else if (w == 0 && p > 0) {
+      ROS_WARN(
+          "custom_planner: robot_%d emite %u MSG_%d mas robot_%d não tem WAIT_%d. "
+          "Não é erro, só aviso.",
+          X, p, Y, Y, X);
+    } else {
+      ROS_INFO("custom_planner: par (produtor=%d -> consumidor=%d) MSG=%u WAIT=%u ok",
+               X, Y, p, w);
     }
-    std::ostringstream oss_p;
-    for (int r : producers[ch]) oss_p << r << ",";
-    std::ostringstream oss_w;
-    for (int r : waiters[ch]) oss_w << r << ",";
-    ROS_INFO("custom_planner: canal %d produtores=[%s] waiters=[%s] prod=%u wait=%u",
-             ch, oss_p.str().c_str(), oss_w.str().c_str(), prod, wait);
   }
   return ok;
 }
