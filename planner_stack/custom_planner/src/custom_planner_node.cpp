@@ -43,7 +43,7 @@ bool isMsgLegToken(int v) { return v <= -1000 && v >= -1000 - 255; }
 
 constexpr int kDelayTokenBase = -2000000000;
 
-bool isDelayLegToken(int v) { return v <= kDelayTokenBase; }
+bool isDelayLegToken(int v) { return v >= kDelayTokenBase && v < -1000000000; }
 
 int encodeDelayTokenMs(int delay_ms) { return kDelayTokenBase + delay_ms; }
 
