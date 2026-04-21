@@ -281,11 +281,12 @@ void WifiDriverNode::timerCb(const ros::TimerEvent&)
                color_sequence_.c_str());
     }
 
+    // Após a primeira sequência publicada, paramos o ciclo CTL/IWP.
+    // Não queremos continuar a pedir IWP/CTL nem reiniciar o ciclo.
     color_sequence_.clear();
     have_sequence_ = false;
-    initial_ctl_value_ = -1;
-    phase_ = CommPhase::CaptureInitialCtl;
-    ROS_INFO("Ciclo concluido. Vou reiniciar com um novo CTL inicial.");
+    timer_.stop();
+    ROS_INFO("Primeira sequencia publicada. Ciclo CTL/IWP terminado (timer parado).");
   }
 }
 
