@@ -60,6 +60,10 @@ Editar os `.service` se algum destes não corresponder à Pi:
 - `EnvironmentFile=` — caminho para `/etc/fdpo/env` (FDPO_ROBOT_ID).
 - Caminho para `setup.bash` dentro do `ExecStart` (devel do workspace).
 
+O `fdpo-bootstrap.service` usa `roslaunch --wait` e `ROS_MASTER_URI=http://localhost:11311`
+para **não** arrancar um segundo `roscore` se o `fdpo-roscore` ainda estiver a
+inicializar (evita “auto-starting new master” e conflitos na porta 11311).
+
 ## Desinstalação
 
 ```bash

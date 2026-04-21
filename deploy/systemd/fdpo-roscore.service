@@ -8,6 +8,7 @@ Type=simple
 User=user
 Group=user
 EnvironmentFile=-/etc/fdpo/env
+Environment=ROS_MASTER_URI=http://localhost:11311
 WorkingDirectory=/home/user/catkin_ws_fdpo
 # Source do ROS e do workspace antes de arrancar o roscore.
 ExecStart=/bin/bash -lc 'source /opt/ros/noetic/setup.bash && source /home/user/catkin_ws_fdpo/devel/setup.bash && exec roscore'
