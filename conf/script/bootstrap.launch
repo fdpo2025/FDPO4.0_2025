@@ -1,0 +1,19 @@
+<launch>
+  <!--
+    Bootstrap do sistema FDPO: sobe apenas o initializer_node.
+    Este launch e o "nivel A" da arquitectura: NUNCA deve ser o alvo do
+    shutdown. O stack completo (wake_up_fdpo*) e arrancado como processo
+    filho pelo supervisor do initializer_node.
+
+    Argumentos:
+      params_file  - YAML de parametros do initializer_node.
+                     Usar initializer_params.sim.yaml em bancada.
+  -->
+  <arg name="params_file"
+       default="$(find fdpo_initializer)/config/initializer_params.yaml"
+       doc="YAML de parametros do initializer_node"/>
+
+  <include file="$(find conf)/system/initializer.xml">
+    <arg name="params_file" value="$(arg params_file)"/>
+  </include>
+</launch>

@@ -1,0 +1,14 @@
+<launch>
+  <!--
+    Wrapper em conf/launch/ para o bootstrap real em conf/script/.
+    Permite: roslaunch conf bootstrap.launch
+    (roslaunch procura por defeito em share/<pkg>/launch/)
+  -->
+  <arg name="params_file"
+       default="$(find fdpo_initializer)/config/initializer_params.yaml"
+       doc="YAML de parametros do initializer_node"/>
+
+  <include file="$(find conf)/script/bootstrap.launch">
+    <arg name="params_file" value="$(arg params_file)"/>
+  </include>
+</launch>
