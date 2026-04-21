@@ -14,7 +14,7 @@ navigation_controller:
 #  gain_fwd: 1.55
   k_line: 8.1
   gain_fwd: 1.5
-  vel_lin_nom: 0.3
+  vel_lin_nom: 0.4
   dist_da: 0.20
   tol_findist: 0.15
   max_etf: 0.2
