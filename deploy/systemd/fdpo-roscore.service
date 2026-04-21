@@ -1,0 +1,21 @@
+[Unit]
+Description=FDPO roscore (master ROS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=user
+Group=user
+EnvironmentFile=-/etc/fdpo/env
+WorkingDirectory=/home/user/catkin_ws_fdpo
+# Source do ROS e do workspace antes de arrancar o roscore.
+ExecStart=/bin/bash -lc 'source /opt/ros/noetic/setup.bash && source /home/user/catkin_ws_fdpo/devel/setup.bash && exec roscore'
+# Permitir que o initializer pendure-se no mesmo master depois deste arrancar.
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

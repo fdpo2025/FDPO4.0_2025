@@ -1,0 +1,23 @@
+<launch>
+  <!--
+    Arranque isolado do initializer_node.
+    Para o arranque no boot da Pi use-se conf/script/bootstrap.launch, que
+    inclui este ficheiro.
+
+    Argumentos:
+      params_file  - YAML de parametros a carregar para o namespace do no.
+                     Por defeito usa o perfil real (gpiozero).
+                     Para bancada sem GPIO: params_file:=$(find fdpo_initializer)/config/initializer_params.sim.yaml
+  -->
+  <arg name="params_file"
+       default="$(find fdpo_initializer)/config/initializer_params.yaml"
+       doc="YAML de parametros carregado no namespace do initializer_node"/>
+
+  <node pkg="fdpo_initializer"
+        type="initializer_node.py"
+        name="initializer_node"
+        output="screen"
+        required="true">
+    <rosparam command="load" file="$(arg params_file)"/>
+  </node>
+</launch>
