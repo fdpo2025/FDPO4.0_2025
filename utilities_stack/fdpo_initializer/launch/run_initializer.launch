@@ -1,7 +1,7 @@
 <launch>
   <!--
     Arranque isolado do initializer_node.
-    Para o arranque no boot da Pi use-se conf/script/bootstrap.launch, que
+    Para o arranque no boot da Pi use-se conf/launch/bootstrap.launch, que
     inclui este ficheiro.
 
     Argumentos:
