@@ -1,0 +1,30 @@
+[Unit]
+Description=FDPO bootstrap (initializer_node + GPIO switch)
+After=network-online.target fdpo-roscore.service pigpiod.service
+Wants=network-online.target
+Requires=fdpo-roscore.service pigpiod.service
+
+[Service]
+Type=simple
+User=user
+Group=user
+# FDPO_ROBOT_ID (0..3) por robô e variaveis ROS opcionais.
+EnvironmentFile=-/etc/fdpo/env
+WorkingDirectory=/home/user/catkin_ws_fdpo
+# Source + roslaunch do bootstrap. O bootstrap.launch arranca APENAS o
+# initializer_node; o stack principal (wake_up_fdpo*) e arrancado pelo
+# supervisor como filho do initializer, fora deste systemd unit.
+ExecStart=/bin/bash -lc 'source /opt/ros/noetic/setup.bash && source /home/user/catkin_ws_fdpo/devel/setup.bash && exec roslaunch conf bootstrap.launch'
+# Se o initializer morrer (excepcao nao tratada), reinicia. Nao e o "long
+# press" do utilizador: esse e tratado dentro do initializer e nao mata
+# este unit.
+Restart=on-failure
+RestartSec=3
+# SIGINT ao bash que tem o roslaunch filho: faz shutdown coordenado.
+KillSignal=SIGINT
+TimeoutStopSec=30
+# Nova process group para podermos matar em cascata em caso de stop manual.
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target
