@@ -1,8 +1,11 @@
 [Unit]
 Description=FDPO bootstrap (initializer_node + GPIO switch)
 After=network-online.target fdpo-roscore.service pigpiod.service
-Wants=network-online.target
-Requires=fdpo-roscore.service pigpiod.service
+Wants=network-online.target fdpo-roscore.service pigpiod.service
+# Usar Wants em vez de Requires: com Requires, um "systemctl restart
+# fdpo-roscore" para o bootstrap com SIGINT a meio do arranque (KeyboardInterrupt
+# no numpy, etc.). Wants mantem a ordem After= sem parar o bootstrap ao
+# reiniciares so o roscore.
 
 [Service]
 Type=simple

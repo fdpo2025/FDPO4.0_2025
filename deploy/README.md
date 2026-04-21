@@ -64,6 +64,11 @@ O `fdpo-bootstrap.service` usa `roslaunch --wait` e `ROS_MASTER_URI=http://local
 para **não** arrancar um segundo `roscore` se o `fdpo-roscore` ainda estiver a
 inicializar (evita “auto-starting new master” e conflitos na porta 11311).
 
+O bootstrap usa **`Wants=`** (e não `Requires=`) em relação ao `fdpo-roscore` e ao
+`pigpiod`: com `Requires=`, um `systemctl restart fdpo-roscore` faz o systemd
+**parar** o bootstrap durante o restart do master, o que interrompe o Python a
+meio do import (`KeyboardInterrupt` em `numpy`, `rosmaster`, etc.).
+
 ## Desinstalação
 
 ```bash
