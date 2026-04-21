@@ -10,11 +10,14 @@ User=user
 Group=user
 # FDPO_ROBOT_ID (0..3) por robô e variaveis ROS opcionais.
 EnvironmentFile=-/etc/fdpo/env
+# Garantir que nao arranca um segundo master: o fdpo-roscore.service ja
+# expoe o rosmaster; --wait bloqueia ate ROS_MASTER_URI estar disponivel.
+Environment=ROS_MASTER_URI=http://localhost:11311
 WorkingDirectory=/home/user/catkin_ws_fdpo
 # Source + roslaunch do bootstrap. O bootstrap.launch arranca APENAS o
 # initializer_node; o stack principal (wake_up_fdpo*) e arrancado pelo
 # supervisor como filho do initializer, fora deste systemd unit.
-ExecStart=/bin/bash -lc 'source /opt/ros/noetic/setup.bash && source /home/user/catkin_ws_fdpo/devel/setup.bash && exec roslaunch conf bootstrap.launch'
+ExecStart=/bin/bash -lc 'source /opt/ros/noetic/setup.bash && source /home/user/catkin_ws_fdpo/devel/setup.bash && exec roslaunch --wait conf bootstrap.launch'
 # Se o initializer morrer (excepcao nao tratada), reinicia. Nao e o "long
 # press" do utilizador: esse e tratado dentro do initializer e nao mata
 # este unit.
