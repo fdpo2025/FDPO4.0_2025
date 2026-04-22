@@ -127,7 +127,7 @@ roslaunch conf launch/hmi/teleop_rqt_steering.launch
 ```
 FDPO4.0_2025/
 ├─ conf/                             # Centralized launch wrappers & parameters
-│  └─ script/wake_up_fdpo.launch     # Full bring-up of the real robot
+│  └─ launch/wake_up_fdpo.launch     # Full bring-up of the real robot
 ├─ drivers_stack/                    # Hardware drivers
 │  ├─ lidar_drivers/                 # LiDAR drivers
 │  │  ├─ hls_lfcd_lds_driver/        # HLDS HLS-LFCD2 driver (LDS-01/02)
