@@ -210,7 +210,7 @@ missions_4:
 
 
   manga_2:
-    manga_2:
+#    manga_2:
     # 
     robot_spawns:
       robot_0: {x: -0.79, y: -0.34, theta: 1.5708}
