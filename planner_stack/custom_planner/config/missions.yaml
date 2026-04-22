@@ -228,8 +228,7 @@ missions_4:
     robot_3:
       targets:
         - ["WAIT_2", 31, 8, "1G_WAIT_2", 4, 19, 120, "MSG_1"]
-
-
+  
   # 46s
   # robot_0: 
   #   targets:
@@ -246,6 +245,21 @@ missions_4:
   #   targets:
   #     - ["WAIT_2", 31, 42, 27, 30, 22, "WAIT_1", 121,22, "MSG_2", 30, 27, 135]
   #     - [135,27,"MSG_0",34,33]
+  
+  # nova tentativa
+  # robot_0:
+  #   targets:
+  #     - [31, 8, "MSG_1", 4, 12, 113, "MSG_3", 12, 5, 6, 22, 21, 22, 230, 138]
+  # robot_1:
+  #   targets:
+  #     - ["WAIT_0", 31, 8, "MSG_2", "1G_WAIT_0", "MSG_2", 11, 19, 120, 19, 39, "2B", 11, 27, 35]
+  # robot_2:
+  #   targets:
+  #     - ["WAIT_1", 31, 16, "WAIT_1", 8, "1B", 8, 31, 27, 28, 36, 28, "MSG_3", 34, 32]
+  # robot_3:
+  #   targets:
+  #     - [31, 30, 15, 114, "WAIT_0", 15, 30, 29, 137, "WAIT_2", 29, 34]
+
 
   
   manga_3:
