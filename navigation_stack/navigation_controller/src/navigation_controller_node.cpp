@@ -298,6 +298,18 @@ void NavigationController::loadNavigationParams() {
     nh_fl.param("approaching_vel_process", param.approaching_vel_process, param.approaching_vel_pickdrop);
     nh_fl.param("drop_pick_box_release_distance", param.drop_pick_box_release_distance, 0.0);
 
+    nh_fl.param("vel_lin_sonic", param.vel_lin_sonic, 0.0);
+    nh_fl.param("w_nom_sonic", param.w_nom_sonic, 0.0);
+    nh_fl.param("sonic_min_len_m", param.sonic_min_len_m, 0.6);
+    nh_fl.param("sonic_decel_progress", param.sonic_decel_progress, 0.9);
+    nh_fl.param("sonic_decel_progress_prewh", param.sonic_decel_progress_prewh, 0.7);
+    nh_fl.param("sonic_decel_k", param.sonic_decel_k, 3.0);
+    nh_fl.param("sonic_decel_n", param.sonic_decel_n, 2.0);
+    ROS_INFO("NavigationController: sonic vel=%.2f w=%.2f min_len=%.2fm decel@%.0f%% (prewh %.0f%%) k=%.1f n=%.1f",
+             param.vel_lin_sonic, param.w_nom_sonic, param.sonic_min_len_m,
+             param.sonic_decel_progress * 100.0, param.sonic_decel_progress_prewh * 100.0,
+             param.sonic_decel_k, param.sonic_decel_n);
+
     ROS_INFO("NavigationController parameters loaded: v_nom=%.2f, w_nom=%.2f, k_line=%.2f, line_switch_ratio=%.2f (follow_line from /follow_line/navigation_controller)", 
              param.v_nom, param.w_nom, param.k_line, param.line_switch_ratio);
 
@@ -972,6 +984,100 @@ void NavigationController::followLine() {
         return std::max(v_quad, param.stanley_soft_v) + param.stanley_eps;
     };
 
+    // ========================================================================
+    // SONIC SPEED BOOST (apenas no estado Follow_Line)
+    // ------------------------------------------------------------------------
+    // Condições de ativação:
+    //   - estado == Follow_Line
+    //   - pf NÃO é warehouse (is_warehouse==false)
+    //   - segmento NÃO é backwards
+    //   - comprimento do segmento >= sonic_min_len_m
+    //   - param.vel_lin_sonic > 0
+    //
+    // Desaceleração de volta ao nominal do segmento (vnom_base):
+    //   - se pf é pré-warehouse / ratio>=0.999 → começa a 70%
+    //   - senão → começa a 90%
+    // ========================================================================
+    double w_nom_eff = param.w_nom;
+    if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
+        const double vnom_base = vel_lin_nom_eff;
+        const double seg_dx = line.pf.pose.x - line.pi.pose.x;
+        const double seg_dy = line.pf.pose.y - line.pi.pose.y;
+        const double seg_len = std::hypot(seg_dx, seg_dy);
+
+        // pf é pré-warehouse ⇔ o próximo waypoint do plano é warehouse.
+        // (Não usamos line_switch_ratio>=1.0 como proxy: apanharia também
+        //  linhas "after-warehouse" e outros nós com ratio 1.0 que NÃO queremos
+        //  tratar como pré-warehouse. O guard !ends_at_warehouse já trata do
+        //  cenário pré-warehouse→warehouse.)
+        const bool ends_at_warehouse = currentWaypoint.is_warehouse;
+        const bool ends_at_prewarehouse = pf_is_line_before_warehouse;
+        const bool is_backwards = currentWaypoint.backwards;
+
+        const bool sonic_allowed = (param.vel_lin_sonic > 0.0) &&
+                                   !ends_at_warehouse &&
+                                   !is_backwards &&
+                                   (seg_len >= param.sonic_min_len_m);
+
+        if (sonic_allowed) {
+            const double decel_start = ends_at_prewarehouse
+                                           ? param.sonic_decel_progress_prewh
+                                           : param.sonic_decel_progress;
+
+            if (line_progress < decel_start) {
+                // Fase sonic: velocidade alvo = vel_lin_sonic
+                vel_lin_nom_eff = param.vel_lin_sonic;
+            } else {
+                // Fase de desaceleração: vai de vsonic (em decel_start) até vnom (no fim).
+                double u = (line_progress - decel_start) /
+                           std::max(1.0 - decel_start, 1e-6);
+                if (u < 0.0) u = 0.0;
+                if (u > 1.0) u = 1.0;
+                const double vsonic = param.vel_lin_sonic;
+                const double vnom = vnom_base;
+
+                // ===== Curva LINEAR (ATIVA) =========================================
+                // v(u) = vsonic + (vnom - vsonic) * u
+                //   u=0 → vsonic | u=1 → vnom. Taxa de queda constante.
+                vel_lin_nom_eff = vsonic + (vnom - vsonic) * u;
+
+                // ===== Curva EXPONENCIAL (comentada) ================================
+                // v(u) = vnom + (vsonic - vnom) * exp(-k*u)
+                // Efeito do k (param.sonic_decel_k):
+                //   k maior → queda mais rápida no início (trava cedo e
+                //   estabiliza perto de vnom no fim).
+                //   k menor → queda mais suave / quase linear.
+                //   k=1 → em u=1 ainda está ~37% acima de vnom (grosseiro).
+                //   k=3 → em u=1 está ~5% acima. k=5 → <1% acima.
+                // Usar quando queres travar cedo.
+                // vel_lin_nom_eff = vnom + (vsonic - vnom) *
+                //                   std::exp(-param.sonic_decel_k * u);
+
+                // ===== Curva POWER-LAW (Skumanich-like, comentada) ==================
+                // v(u) = vnom + (vsonic - vnom) * (1 - u)^n
+                // Efeito do n (param.sonic_decel_n):
+                //   n=1 → linear.
+                //   n maior → mantém sonic mais tempo (curva "flat" no início)
+                //   e travagem final mais abrupta perto de u=1.
+                //   n=2 → parabólica (suave→forte).
+                //   n=3+ → quase rectangular (sonic quase até ao fim, trava brusco).
+                // Usar quando queres maximizar tempo em sonic.
+                // vel_lin_nom_eff = vnom + (vsonic - vnom) *
+                //                   std::pow(std::max(1.0 - u, 0.0), param.sonic_decel_n);
+            }
+
+            // Boost angular opcional durante sonic (0 → mantém w_nom normal).
+            if (param.w_nom_sonic > 0.0) {
+                w_nom_eff = param.w_nom_sonic;
+            }
+
+            ROS_INFO_THROTTLE(0.3,
+                "[SONIC] seg_len=%.2fm progress=%.0f%% decel@%.0f%% v_eff=%.2f w_eff=%.2f prewh=%d",
+                seg_len, line_progress * 100.0, decel_start * 100.0,
+                vel_lin_nom_eff, w_nom_eff, ends_at_prewarehouse ? 1 : 0);
+        }
+    }
+
     if (followLineFsm.state == navigation::followLineStates::Follow_Line) {
 
         if (param.use_stanley_follow_line) {
@@ -983,13 +1089,13 @@ void NavigationController::followLine() {
             w_d = param.k_line * k1_eff + param.gain_fwd * error_ang;
         }
 
-        double A = -vel_lin_nom_eff/(param.w_nom*param.w_nom);
-        v_d = std::max(A * (w_d - param.w_nom) * (w_d + param.w_nom), 0.0);
+        double A = -vel_lin_nom_eff/(w_nom_eff*w_nom_eff);
+        v_d = std::max(A * (w_d - w_nom_eff) * (w_d + w_nom_eff), 0.0);
 
         last_vel_before_approaching_ = std::abs(v_d);
 
-        if (w_d > param.w_nom) w_d = param.w_nom;
-        else if (w_d < -param.w_nom) w_d = -param.w_nom;
+        if (w_d > w_nom_eff) w_d = w_nom_eff;
+        else if (w_d < -w_nom_eff) w_d = -w_nom_eff;
 
     }
     else if (followLineFsm.state == navigation::followLineStates::Approaching) {

@@ -134,6 +134,15 @@ class NavigationController {
             /** Early drop: publish /pick_box=false when dist(go-to-XY target) <= this. <=0 disables. */
             double drop_pick_box_release_distance;
 
+            // Sonic speed boost em retas longas (só em Follow_Line)
+            double vel_lin_sonic;                  // <=0 → desliga sonic
+            double w_nom_sonic;                    // <=0 → usa w_nom normal durante sonic
+            double sonic_min_len_m;                // reta tem de ser pelo menos isto
+            double sonic_decel_progress;           // fração da linha a partir da qual desacelera (retas normais)
+            double sonic_decel_progress_prewh;     // idem, mas quando pf é pré-warehouse (100%)
+            double sonic_decel_k;                  // exponencial: e^(-k*u)
+            double sonic_decel_n;                  // power-law: (1-u)^n
+
         };
 
         dynamic_reconfigure::Server<navigation_controller::NavigationConfig> dr_srv_;
