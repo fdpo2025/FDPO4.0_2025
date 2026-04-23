@@ -63,8 +63,8 @@ navigation_controller:
   #   - caso contrário → a partir de 90%
   # Ver código para trocar a forma da curva (linear / exponencial / power-law).
   # ============================================================================
-  vel_lin_sonic: 0.5            # Velocidade linear alvo em reta longa. <=0 desliga tudo.
-  w_nom_sonic: 0.0              # Teto angular durante sonic. <=0 → usa w_nom normal.
+  vel_lin_sonic: 0.7            # Velocidade linear alvo em reta longa. <=0 desliga tudo.
+  w_nom_sonic: 3.0              # Teto angular durante sonic. <=0 → usa w_nom normal.
   sonic_min_len_m: 0.6          # Comprimento mínimo de reta para entrar em sonic (m).
   sonic_decel_progress: 0.9     # Início da desaceleração (fração da linha) em retas normais.
   sonic_decel_progress_prewh: 0.7  # Início da desaceleração quando pf é pré-warehouse / ratio=1.0.
