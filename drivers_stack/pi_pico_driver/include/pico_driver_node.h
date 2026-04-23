@@ -127,7 +127,6 @@ class PiPicoDriver {
         ros::Publisher rawSerialPub_;
         ros::Publisher networkTablePub_;
         ros::Publisher waitStatePub_;
-        ros::Publisher colorSequencePub_;
         /** Latched; id from Pico INIT line after handshake (fleet index 0-based). */
         ros::Publisher robot_identity_pub_;
 

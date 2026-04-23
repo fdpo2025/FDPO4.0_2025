@@ -57,7 +57,6 @@ PiPicoDriver::PiPicoDriver(ros::NodeHandle& nh_) : nh(nh_) {
   rawSerialPub_ = nh.advertise<std_msgs::String>("/pi_pico_driver/raw_serial", 50);
   networkTablePub_ = nh.advertise<pi_pico_driver::RadioNetworkTable>("/pi_pico_driver/network_table", 10);
   waitStatePub_ = nh.advertise<std_msgs::Bool>("/pi_pico_driver/wait_state", 10, true);
-  colorSequencePub_ = nh.advertise<std_msgs::String>("/color_sequence", 10, true);
   commTimer = nh.createTimer(ros::Duration(0.02), &PiPicoDriver::commTick, this);
 
   std::string serial_port;
@@ -301,12 +300,9 @@ void PiPicoDriver::decodeMsg(const std::string& msg) {
         }
       }
       if (ok) {
-        std_msgs::String m;
-        m.data = pay;
         last_color_from_pico_ = pay;
-        colorSequencePub_.publish(m);
         writeSerialRaw("ACK_COLOR:OK\n", 13);
-        ROS_INFO_THROTTLE(2.0, "[PiPicoDriver] COLOR -> /color_sequence (%s)", pay.c_str());
+        ROS_INFO_THROTTLE(2.0, "[PiPicoDriver] COLOR recebido da Pico (%s), sem publicar em /color_sequence", pay.c_str());
       }
     }
     return;
