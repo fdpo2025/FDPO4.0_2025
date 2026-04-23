@@ -43,13 +43,16 @@ int approach900NodeForApproach(int approach_normal) {
  *   physical node: v >= 0
  *   MSG_Y        : v in [-1255, -1000]  (Y = destinatário; -1000 - v)
  *   WAIT_X       : v in [-2255, -2000]  (X = produtor;    -2000 - v)
+ *   WAIT_FINAL   : v == -3000           (bloqueio local permanente)
  */
 bool isMsgLegToken(int v) { return v <= -1000 && v >= -1255; }
 bool isWaitLegToken(int v) { return v <= -2000 && v >= -2255; }
+bool isFinalWaitToken(int v) { return v == -3000; }
 int msgTargetOf(int v) { return -1000 - v; }
 int waitProducerOf(int v) { return -2000 - v; }
 int encodeMsg(int target_consumer) { return -1000 - target_consumer; }
 int encodeWait(int producer) { return -2000 - producer; }
+int encodeFinalWait() { return -3000; }
 
 /** Graph node id in expanded leg (excludes WAIT_N and MSG tokens). Matches /planned_paths body. */
 bool isPhysicalGraphNode(int v) { return v >= 0; }
@@ -261,6 +264,7 @@ void CustomPlannerNode::startMission(const std::string& color_sequence) {
   ticks_from_producer_.clear();
   consumed_from_producer_.clear();
   waiting_on_producer_ = -1;
+  waiting_final_latch_ = false;
   my_timeline_index_ = 0;
   publishMyTimelineIndexLocked();
   publishActiveTaskDebugLocked();
@@ -364,6 +368,15 @@ std::vector<int> CustomPlannerNode::resolveMissionLeg(const XmlRpc::XmlRpcValue&
   if (leg.getType() != XmlRpc::XmlRpcValue::TypeArray) return out;
   for (int i = 0; i < leg.size(); ++i) {
     const XmlRpc::XmlRpcValue& item = leg[i];
+    if (item.getType() == XmlRpc::XmlRpcValue::TypeString) {
+      std::string s = static_cast<std::string>(item);
+      std::string u;
+      for (char c : s) u.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
+      if (u == "WAIT_FINAL") {
+        out.push_back(encodeFinalWait());
+        continue;
+      }
+    }
     int wait_producer = -1;
     if (parseWaitToken(item, wait_producer)) {
       out.push_back(encodeWait(wait_producer));
@@ -704,6 +717,7 @@ void CustomPlannerNode::recomputeTicksLocked() {
 }
 
 void CustomPlannerNode::tryReleaseWaitingLocked() {
+  if (waiting_final_latch_) return;
   if (state_ != STATE_WAITING || waiting_on_producer_ < 0) return;
   const int X = waiting_on_producer_;
   const uint32_t needed = consumed_from_producer_[X] + 1u;
@@ -767,6 +781,15 @@ void CustomPlannerNode::processTimelineLocked() {
     const int tok = active_task_.timeline_tokens[timeline_cursor_];
     last_executed_token_index_ = static_cast<int32_t>(timeline_cursor_);
     last_executed_token_value_ = static_cast<int32_t>(tok);
+
+    if (isFinalWaitToken(tok)) {
+      waiting_on_producer_ = -1;
+      waiting_final_latch_ = true;
+      setState(STATE_WAITING);
+      ROS_INFO("custom_planner: WAIT_FINAL ativado; robô ficará bloqueado até nova missão.");
+      publishActiveTaskDebugLocked();
+      return;
+    }
 
     if (isWaitLegToken(tok)) {
       const int X = waitProducerOf(tok);
@@ -834,6 +857,7 @@ bool CustomPlannerNode::loadNextTaskLocked() {
   active_nav_plan_seq_ = 0;
   active_nav_plan_seq_valid_ = false;
   mission_route_published_ = false;
+  waiting_final_latch_ = false;
   my_timeline_index_ = active_task_.task_start_global_index;
   publishMyTimelineIndexLocked();
   publishActiveTaskDebugLocked();

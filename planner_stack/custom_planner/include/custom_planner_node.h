@@ -61,6 +61,7 @@ class CustomPlannerNode {
      *   - inteiro >= 0         -> nó físico na timeline de navegação
      *   - -1000 - Y (Y 0..255) -> MSG_Y (mensagem para o robô Y)
      *   - -2000 - X (X 0..255) -> WAIT_X (espera por mensagem do robô X)
+     *   - -3000                -> WAIT_FINAL (bloqueio local permanente)
      * "WAIT"/"W" sem sufixo já não existem; são rejeitados no parsing.
      */
     std::vector<int> timeline_tokens;
@@ -190,6 +191,8 @@ class CustomPlannerNode {
   std::map<int, uint32_t> consumed_from_producer_;
   /** Produtor em que estamos atualmente a aguardar (-1 = não parado). */
   int waiting_on_producer_ = -1;
+  /** Latch de WAIT_FINAL: true => bloqueio local sem auto-release. */
+  bool waiting_final_latch_ = false;
   /** Cursor publicado da timeline local (0..N). */
   uint32_t my_timeline_index_ = 0;
 };
