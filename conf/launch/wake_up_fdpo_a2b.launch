@@ -9,6 +9,8 @@
 	<arg name="rviz_config" default="$(find conf)/launch/hmi/fdpo_simulation.rviz"/>
 	<arg name="lidar_driver" default="ydlidar" doc="Escolha o driver de LiDAR: 'hlds' ou 'ydlidar'"/>
 	<arg name="debug_pico_comm" default="false" doc="Mostrar logs de comunicação Pi4-Pico"/>
+	<arg name="pico_robot_id" default="0" doc="ROBOT_ID no Pico (0-based); handshake serie"/>
+	<arg name="robot_id" default="$(arg pico_robot_id)" doc="Indice de frota 0-based; wifi_driver so arranca no robot_id 0"/>
 	<arg name="use_ekf" default="true" doc="Usar EKF localizer com beacons"/>
 	<arg name="use_raw_odom" default="false" doc="Usar odometria pura (/odom)"/>
 	<arg name="use_ss_controller" default="false" doc="Usar state space controller"/>
@@ -27,6 +29,7 @@
 	<include if="$(arg use_hal)" file="$(find conf)/system/hal.xml">
 		<arg name="lidar_driver" value="$(arg lidar_driver)"/>
 		<arg name="debug_pico_comm" value="$(arg debug_pico_comm)"/>
+		<arg name="pico_robot_id" value="$(arg pico_robot_id)"/>
 	</include>
 
 	<!-- Navigation: Localização e Controle de Navegação -->
@@ -35,6 +38,7 @@
 		<arg name="use_ekf" value="$(arg use_ekf)"/>
 		<arg name="use_raw_odom" value="$(arg use_raw_odom)"/>
 		<arg name="use_ss_controller" value="$(arg use_ss_controller)"/>
+		<arg name="robot_id" value="$(arg robot_id)"/>
 	</include>
     
 	<!-- HMI: Interface Humano-Máquina (Mapa, RViz, etc) -->
@@ -47,6 +51,7 @@
 	<!-- WiFi Driver -->
 	<include file="$(find conf)/system/wifi.xml">
 		<arg name="enable" value="$(arg use_wifi)"/>
+		<arg name="robot_id" value="$(arg robot_id)"/>
 	</include>
 
 	<!-- ==================== A2B Planner ==================== -->
