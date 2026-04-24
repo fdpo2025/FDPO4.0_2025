@@ -58,6 +58,7 @@
 		
 	<include file="$(find conf)/system/wifi.xml">
 		<arg name="enable" value="$(arg use_wifi)" />
+		<arg name="robot_id" value="$(arg robot_id)" />
 	</include>
 	
 </launch>

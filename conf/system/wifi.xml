@@ -1,7 +1,10 @@
 <launch>
   <arg name="enable" default="true" />
+  <arg name="robot_id" default="0"
+       doc="Índice 0-based da frota; wifi_driver só arranca quando robot_id == 0." />
 
-  <include if="$(arg enable)"
+  <!-- Evitar N instâncias do wifi_driver na mesma rede (uma por robô). -->
+  <include if="$(eval str(arg('enable')).lower() in ('true', '1') and int(str(arg('robot_id')).strip()) == 0)"
            file="$(find wifi_driver)/launch/wifi_driver.launch" />
 </launch>
 

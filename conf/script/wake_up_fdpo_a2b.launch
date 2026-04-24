@@ -17,6 +17,7 @@
 	<arg name="use_hmi" default="true"/>
 	<arg name="use_rviz" default="false" doc="Ativar RViz automaticamente"/>
 	<arg name="use_wifi" default="true"/>
+	<arg name="robot_id" default="0" doc="Índice 0-based; wifi_driver só corre em robot_id==0"/>
 
 	<!-- Argumentos específicos do rosbridge -->
 	<arg name="rosbridge_port" default="9090" doc="Porta do WebSocket do rosbridge"/>
@@ -47,6 +48,7 @@
 	<!-- WiFi Driver -->
 	<include file="$(find conf)/system/wifi.xml">
 		<arg name="enable" value="$(arg use_wifi)"/>
+		<arg name="robot_id" value="$(arg robot_id)"/>
 	</include>
 
 	<!-- ==================== A2B Planner ==================== -->
