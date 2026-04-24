@@ -3,14 +3,14 @@
 
 Responsabilidades
 -----------------
-1. Ler parâmetros (YAML) com o mapeamento *número de cliques → modo*.
+1. Ler o **modo único** (YAML) a executar quando o botão for premido.
 2. Escutar um switch ligado a um GPIO através do :class:`GpioButton`.
-3. Correr a :class:`InitializerStateMachine` para, após a janela de
-   inactividade, decidir o modo e pedir ao :class:`StackSupervisor` para
-   arrancar o ``roslaunch`` do stack FDPO.
+3. Correr a :class:`InitializerStateMachine` para, no primeiro clique
+   curto detectado, pedir ao :class:`StackSupervisor` para arrancar o
+   ``roslaunch`` do stack FDPO.
 4. Em long press (``hold_time_ms``) com o stack no ar, reiniciar o stack:
-   encerrar o filho (SIGINT → SIGTERM → SIGKILL à process group) e deixar
-   o utilizador escolher o modo outra vez.
+   encerrar o filho (SIGINT → SIGTERM → SIGKILL à process group) e voltar
+   a IDLE para novo arranque.
 5. Publicar o estado actual em ``/initializer/status`` para depuração.
 
 Identidade do robô
@@ -68,40 +68,27 @@ def _expand_env(value: str) -> str:
     return _ENV_TOKEN_RE.sub(_sub, value)
 
 
-def _parse_click_to_mode(raw: Any) -> Dict[int, ModeCommand]:
-    """Converte o YAML ``click_to_mode`` num dict ``int -> ModeCommand``."""
+def _parse_mode(raw: Any) -> ModeCommand:
+    """Converte o YAML ``mode`` num :class:`ModeCommand`."""
     if not isinstance(raw, dict):
-        raise ValueError("click_to_mode deve ser um dicionario")
+        raise ValueError("mode deve ser um dicionario")
 
-    out: Dict[int, ModeCommand] = {}
-    for key, value in raw.items():
-        try:
-            n = int(key)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"click_to_mode: chave '{key}' nao e inteiro") from exc
+    pkg = raw.get("launch_pkg")
+    launch = raw.get("launch_file")
+    if not pkg or not launch:
+        raise ValueError("mode precisa de 'launch_pkg' e 'launch_file'")
 
-        if not isinstance(value, dict):
-            raise ValueError(f"click_to_mode[{n}] deve ser um dicionario")
+    raw_args = raw.get("args", {}) or {}
+    if not isinstance(raw_args, dict):
+        raise ValueError("mode.args deve ser um dicionario")
 
-        pkg = value.get("launch_pkg")
-        launch = value.get("launch_file")
-        if not pkg or not launch:
-            raise ValueError(
-                f"click_to_mode[{n}] precisa de 'launch_pkg' e 'launch_file'"
-            )
+    expanded_args: Dict[str, str] = {}
+    for k, v in raw_args.items():
+        expanded_args[str(k)] = _expand_env(str(v))
 
-        raw_args = value.get("args", {}) or {}
-        if not isinstance(raw_args, dict):
-            raise ValueError(f"click_to_mode[{n}].args deve ser um dicionario")
-
-        expanded_args: Dict[str, str] = {}
-        for k, v in raw_args.items():
-            expanded_args[str(k)] = _expand_env(str(v))
-
-        out[n] = ModeCommand(
-            launch_pkg=str(pkg), launch_file=str(launch), args=expanded_args
-        )
-    return out
+    return ModeCommand(
+        launch_pkg=str(pkg), launch_file=str(launch), args=expanded_args
+    )
 
 
 class InitializerNode:
@@ -113,7 +100,6 @@ class InitializerNode:
         self.gpio_pin = int(rospy.get_param("~gpio_pin", 17))
         self.active_low = bool(rospy.get_param("~active_low", True))
         self.debounce_ms = int(rospy.get_param("~debounce_ms", 30))
-        self.inactivity_ms = int(rospy.get_param("~inactivity_ms", 1000))
         self.hold_time_ms = int(rospy.get_param("~long_press_ms", 5000))
         self.sim_topic = rospy.get_param("~sim_topic", "/initializer/sim_button")
         self.status_topic = rospy.get_param("~status_topic", "/initializer/status")
@@ -121,29 +107,29 @@ class InitializerNode:
         self.sigint_timeout_s = float(rospy.get_param("~sigint_timeout_s", 15.0))
         self.sigterm_timeout_s = float(rospy.get_param("~sigterm_timeout_s", 5.0))
 
-        # ---- Mapeamento cliques -> modo -----------------------------------
-        raw_map = rospy.get_param("~click_to_mode", None)
-        if raw_map is None:
+        # ---- Modo único ---------------------------------------------------
+        raw_mode = rospy.get_param("~mode", None)
+        if raw_mode is None:
             rospy.logfatal(
-                "[fdpo_initializer] Parametro ~click_to_mode em falta. Abortar."
+                "[fdpo_initializer] Parametro ~mode em falta. Abortar."
             )
             sys.exit(2)
 
         try:
-            self.click_to_mode = _parse_click_to_mode(raw_map)
+            self.mode = _parse_mode(raw_mode)
         except Exception as exc:
-            rospy.logfatal("[fdpo_initializer] click_to_mode invalido: %s", exc)
+            rospy.logfatal("[fdpo_initializer] mode invalido: %s", exc)
             sys.exit(2)
 
         rospy.loginfo(
-            "[fdpo_initializer] Modos configurados: %s",
-            ", ".join(
-                f"{n}x->{m.launch_pkg}/{m.launch_file}"
-                for n, m in sorted(self.click_to_mode.items())
-            ),
+            "[fdpo_initializer] Modo unico: %s/%s args=%s",
+            self.mode.launch_pkg,
+            self.mode.launch_file,
+            self.mode.args,
         )
         rospy.loginfo(
-            "[fdpo_initializer] FDPO_ROBOT_ID=%s", os.environ.get("FDPO_ROBOT_ID", "(nao definido)")
+            "[fdpo_initializer] FDPO_ROBOT_ID=%s",
+            os.environ.get("FDPO_ROBOT_ID", "(nao definido)"),
         )
 
         # ---- Publisher de estado ------------------------------------------
@@ -160,8 +146,7 @@ class InitializerNode:
 
         # ---- State machine -------------------------------------------------
         self.fsm = InitializerStateMachine(
-            click_to_mode=self.click_to_mode,
-            inactivity_ms=self.inactivity_ms,
+            mode=self.mode,
             start_stack=self._start_stack,
             stop_stack=self._stop_stack,
             on_state_change=self._publish_status,

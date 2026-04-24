@@ -22,12 +22,9 @@ active_low: true
 # Valores tipicos: 20-50 ms para um switch mecanico.
 debounce_ms: 40
 
-# Janela de inactividade apos o ultimo clique curto para confirmar o modo (ms).
-inactivity_ms: 5000
-
 # Tempo que o botao tem de estar premido para disparar "long press" (ms).
-# Em S_RUNNING faz reset do stack; em outros estados cancela contagem.
-long_press_ms: 5000
+# Em S_RUNNING faz reset do stack; em outros estados e ignorado.
+long_press_ms: 2500
 
 # Topico e status:
 sim_topic: "/initializer/sim_button"
@@ -42,40 +39,12 @@ sigterm_timeout_s: 5.0
 # systemd/launch pai).
 source_setup: ""
 
-# Mapeamento numero_de_cliques -> argumentos do roslaunch.
+# Modo unico arrancado por qualquer clique curto.
 # IMPORTANTE: cada robo deve ter FDPO_ROBOT_ID definido como variavel de
-# ambiente (0, 1, 2 ou 3). Essa variavel e injectada abaixo.
-# As chaves sao strings de proposito: o rosparam do roslaunch trata as
-# chaves de um dict como nomes de parametros ROS e nao aceita inteiros
-# puros (faz name[0] internamente). O initializer_node converte-as para
-# int em runtime.
-click_to_mode:
-  "1":
-    launch_pkg: "conf"
-    launch_file: "wake_up_fdpo.launch"
-    args:
-      planner_type: "chris"
-      robot_id: "$(env FDPO_ROBOT_ID)"
-      pico_robot_id: "$(env FDPO_ROBOT_ID)"
-
-  "2":
-    launch_pkg: "conf"
-    launch_file: "wake_up_fdpo.launch"
-    args:
-      planner_type: "multi"
-      robot_id: "$(env FDPO_ROBOT_ID)"
-      pico_robot_id: "$(env FDPO_ROBOT_ID)"
-
-  "3":
-    launch_pkg: "conf"
-    launch_file: "wake_up_fdpo_hardcoded.launch"
-    args:
-      pico_num_robots: "3"
-      pico_robot_id: "$(env FDPO_ROBOT_ID)"
-
-  "4":
-    launch_pkg: "conf"
-    launch_file: "wake_up_fdpo_hardcoded.launch"
-    args:
-      pico_num_robots: "4"
-      pico_robot_id: "$(env FDPO_ROBOT_ID)"
+# ambiente (0..3). Esse valor e injectado em pico_robot_id.
+mode:
+  launch_pkg: "conf"
+  launch_file: "wake_up_fdpo_hardcoded.launch"
+  args:
+    pico_num_robots: "4"
+    pico_robot_id: "$(env FDPO_ROBOT_ID)"
