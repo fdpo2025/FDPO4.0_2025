@@ -262,7 +262,7 @@ missions_4:
   #     - [31, 30, 15, 114, "WAIT_0", 15, 30, 29, 137, "WAIT_2", 29, 34,"WAIT_FINAL"]
 
 
-  
+
   manga_3:
     robot_spawns:
       robot_0: {x: -0.79, y: -0.34, theta: 1.5708}
