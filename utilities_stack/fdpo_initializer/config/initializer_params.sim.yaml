@@ -1,0 +1,27 @@
+# Parâmetros do initializer_node (perfil bancada / simulacao).
+#
+# Sem GPIO: o botao e simulado por mensagens std_msgs/Bool no sim_topic.
+# Exemplo para simular clique:
+#   rostopic pub -1 /initializer/sim_button std_msgs/Bool "data: true"
+#   rostopic pub -1 /initializer/sim_button std_msgs/Bool "data: false"
+
+backend: "sim"
+sim_topic: "/initializer/sim_button"
+status_topic: "/initializer/status"
+
+gpio_pin: 0
+active_low: true
+debounce_ms: 0
+long_press_ms: 2500
+
+sigint_timeout_s: 15.0
+sigterm_timeout_s: 5.0
+source_setup: ""
+
+# Modo unico arrancado por qualquer clique curto.
+mode:
+  launch_pkg: "conf"
+  launch_file: "wake_up_fdpo_hardcoded.launch"
+  args:
+    pico_num_robots: "4"
+    pico_robot_id: "$(env FDPO_ROBOT_ID)"
