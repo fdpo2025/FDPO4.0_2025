@@ -177,8 +177,8 @@ missions_4:
     robot_spawns:
       robot_0: {x: -0.79, y: -0.34, theta: 1.5708}
       robot_1: {x: -0.63, y: -0.4, theta: 1.5708}
-      robot_2: {x: -0.47, y: -0.31, theta: 0.0}
-      robot_3: {x: -0.47, y: -0.52, theta: 0.0}
+      robot_2: {x: -0.47, y: -0.31, theta: 1.5708}
+      robot_3: {x: -0.47, y: -0.52, theta: 1.5708}
     # 28 seg a 0.3m/s
     robot_0:
       targets:
@@ -216,35 +216,35 @@ missions_4:
       robot_2: {x: -0.47, y: -0.31, theta: 1.5708}
       robot_3: {x: -0.47, y: -0.52, theta: 1.5708}
 
-    # robot_0:
-    #   targets:
-    #     - [31, 8, "MSG_1", "2B", 39, "MSG_1", 40, 29, 37, 29, "MSG_1", 30, 15, 114, "WAIT_1", 15, 230, 138]
-    # robot_1:
-    #   targets:
-    #     - ["WAIT_0", 31, 8, "MSG_2", "1B_WAIT_0", "MSG_2", 39, 40, 27, 35, "WAIT_0", 27, 30, 22, 121, "WAIT_3", 22, "MSG_0", 30, 30, 28, 136]
-    # robot_2:
-    #   targets:
-    #     - ["WAIT_1", 31, 16, "WAIT_1", 8, "MSG_3", "2G", 4, 12, "MSG_3", 113, "MSG_1"]
-    # robot_3:
-    #   targets:
-    #     - ["WAIT_2", 31, 8, "1G_WAIT_2", 4, 19, 120, "MSG_1"]
+      robot_0:
+        targets:
+          - [31, 8, "MSG_1", "2B", 39, "MSG_1", 40, 29, 37, 29, "MSG_1", 30, 15, 114, "WAIT_1", 15, 230, 138]
+      robot_1:
+        targets:
+          - ["WAIT_0", 31, 8, "MSG_2", "1B_WAIT_0", "MSG_2", 39, 40, 27, 35, "WAIT_0", 27, 30, 22, 121, "WAIT_3", 22, "MSG_0", 30, 30, 28, 136]
+      robot_2:
+        targets:
+          - ["WAIT_1", 31, 16, "WAIT_1", 8, "MSG_3", "2G", 4, 12, "MSG_3", 113, "MSG_1"]
+      robot_3:
+        targets:
+          - ["WAIT_2", 31, 8, "1G_WAIT_2", 4, 19, 120, "MSG_1"]
   
   # 46s
-    robot_0: 
-      targets:
-        - [31, 8, "MSG_1", "2G", 11, 4, 12, "MSG_1",113,  "MSG_2"]
-        - ["WAIT_1",113, 12, 4, "1B_WAIT_1", 39, 19, "WAIT_3",40, 28, 36]
-    robot_1:
-      targets:
-        - ["WAIT_0", 31, 8, "1G_WAIT_0", 4, 19,"MSG_0", 120, "MSG_3"]
-        - [120, 19, 4, "2B", 39,"MSG_0", 5,7,130,138]
-    robot_2:
-      targets:
-        - [31, 42, "MSG_3", 27, 30, 15,"WAIT_0", 114, "WAIT_3", 15, 30, 29,137]
-    robot_3:
-      targets:
-        - ["WAIT_2", 31, 42, 27, 30, 22, "WAIT_1", 121,22, "MSG_2", 30, 27, 135]
-        - [135,27,"MSG_0",34,33]
+  #  robot_0: 
+  #    targets:
+  #      - [31, 8, "MSG_1", "2G", 11, 4, 12, "MSG_1",113,  "MSG_2"]
+  #      - ["WAIT_1",113, 12, 4, "1B_WAIT_1", 39, 19, "WAIT_3",40, 28, 36]
+  #  robot_1:
+  #    targets:
+  #      - ["WAIT_0", 31, 8, "1G_WAIT_0", 4, 19,"MSG_0", 120, "MSG_3"]
+  #      - [120, 19, 4, "2B", 39,"MSG_0", 5,7,130,138]
+  #  robot_2:
+  #    targets:
+  #      - [31, 42, "MSG_3", 27, 30, 15,"WAIT_0", 114, "WAIT_3", 15, 30, 29,137]
+  #  robot_3:
+  #    targets:
+  #      - ["WAIT_2", 31, 42, 27, 30, 22, "WAIT_1", 121,22, "MSG_2", 30, 27, 135]
+  #      - [135,27,"MSG_0",34,33]
   
   # nova tentativa
   # robot_0:
