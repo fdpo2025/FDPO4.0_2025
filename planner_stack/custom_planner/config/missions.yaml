@@ -216,19 +216,19 @@ missions_4:
       robot_2: {x: -0.47, y: -0.31, theta: 1.5708}
       robot_3: {x: -0.47, y: -0.52, theta: 1.5708}
 
-      robot_0:
-        targets:
-          - [31, 8, "MSG_1", "2B", 39, "MSG_1", 40, 29, 37, 29, "MSG_1", 30, 15, 114, "WAIT_1", 15, 230, 138]
-      robot_1:
-        targets:
-          - ["WAIT_0", 31, 8, "MSG_2", "1B_WAIT_0", "MSG_2", 39, 40, 27, 35, "WAIT_0", 27, 30, 22, 121, "WAIT_3", 22, "MSG_0", 30, 30, 28, 136]
-      robot_2:
-        targets:
-          - ["WAIT_1", 31, 16, "WAIT_1", 8, "MSG_3", "2G", 4, 12, "MSG_3", 113, "MSG_1"]
-      robot_3:
-        targets:
-          - ["WAIT_2", 31, 8, "1G_WAIT_2", 4, 19, 120, "MSG_1"]
-  
+    robot_0:
+      targets:
+        - [31, 8, "MSG_1", "2B", 39, "MSG_1", 40, 29, 37, 29, "MSG_1", 30, 15, 114, "WAIT_1", 15, 230, 138]
+    robot_1:
+      targets:
+        - ["WAIT_0", 31, 8, "MSG_2", "1B_WAIT_0", "MSG_2", 39, 40, 27, 35, "WAIT_0", 27, 30, 22, 121, "WAIT_3", 22, "MSG_0", 30, 30, 28, 136]
+    robot_2:
+      targets:
+        - ["WAIT_1", 31, 16, "WAIT_1", 8, "MSG_3", "2G", 4, 12, "MSG_3", 113, "MSG_1"]
+    robot_3:
+      targets:
+        - ["WAIT_2", 31, 8, "1G_WAIT_2", 4, 19, 120, "MSG_1"]
+
   # 46s
   #  robot_0: 
   #    targets:
