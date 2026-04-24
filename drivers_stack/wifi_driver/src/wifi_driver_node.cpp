@@ -4,8 +4,6 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
-#include <iostream>
-#include <cctype>
 
 WifiDriverNode::WifiDriverNode(ros::NodeHandle& nh)
   : nh_(nh)
@@ -36,7 +34,7 @@ WifiDriverNode::WifiDriverNode(ros::NodeHandle& nh)
   // Timer: evita bloquear o ROS
   timer_ = nh_.createTimer(ros::Duration(1.0), &WifiDriverNode::timerCb, this);
 
-  ROS_INFO("WifiDriverNode pronto. Vai iniciar automaticamente o ciclo CTL/IWP.");
+  ROS_INFO("WifiDriverNode pronto. Vai iniciar automaticamente o ciclo IWP.");
 }
 
 bool WifiDriverNode::setupSocket()
@@ -100,203 +98,53 @@ bool WifiDriverNode::recvMsg(std::string& out)
   return true;
 }
 
-void WifiDriverNode::doPingPong()
-{
-  ROS_INFO_THROTTLE(5.0, "[FASE 1] A testar conexao UDP com PING/PONG...");
-
-  sendMsg("PING");
-
-  std::string resp;
-  if (recvMsg(resp))
-  {
-    if (resp == "PONG")
-    {
-      connected_ = true;
-      ROS_INFO("[RX] PONG recebido. Servidor online.");
-    }
-    else
-    {
-      ROS_WARN("[RX] Resposta inesperada a PING: '%s'", resp.c_str());
-    }
-  }
-  else
-  {
-    ROS_WARN_THROTTLE(3.0, "Sem resposta ao PING (timeout).");
-  }
-}
-
 void WifiDriverNode::doIWP()
 {
-  // Pergunta sequencia
-  sendMsg("IWP");
+  if (!sendMsg("IWP"))
+  {
+    ROS_WARN_THROTTLE(3.0, "Falha ao enviar IWP.");
+    return;
+  }
 
   std::string resp;
   if (!recvMsg(resp))
   {
-    ROS_WARN_THROTTLE(3.0, "Timeout durante IWP.");
+    ROS_WARN_THROTTLE(3.0, "Timeout a espera de resposta a IWP.");
     return;
   }
 
   if (resp == "STOP")
   {
-    ROS_INFO_THROTTLE(3.0, "[RX] STOP recebido. Nao publica.");
+    ROS_INFO_THROTTLE(3.0, "[RX] STOP recebido. Continuo a tentar IWP.");
     return;
   }
 
-  if (resp.size() == 4)
+  if (!isColorSeq4(resp))
   {
-    // Evita publicar repetido
-    if (resp == last_published_)
-    {
-      ROS_INFO_THROTTLE(2.0, "Sequencia repetida (%s). Ignorar.", resp.c_str());
-      return;
-    }
-
-    std_msgs::String msg;
-    msg.data = resp;
-    color_pub_.publish(msg);
-
-    last_published_ = resp;
-    ROS_INFO("[PUB] /color_sequence = %s", resp.c_str());
-
-    timer_.stop();
-    ROS_INFO("Sequencia recebida. Vou parar de pedir IWP.");
+    ROS_WARN_THROTTLE(3.0, "[RX] Resposta invalida a IWP: '%s'", resp.c_str());
+    return;
   }
-  else
+
+  if (resp == last_published_)
   {
-    ROS_WARN("[RX] Resposta invalida IWP: '%s'", resp.c_str());
+    ROS_INFO_THROTTLE(2.0, "Sequencia repetida (%s). Ignorar.", resp.c_str());
+    return;
   }
+
+  std_msgs::String msg;
+  msg.data = resp;
+  color_pub_.publish(msg);
+
+  last_published_ = resp;
+  ROS_INFO("[PUB] /color_sequence = %s", resp.c_str());
+
+  timer_.stop();
+  ROS_INFO("Sequencia recebida. Vou parar de pedir IWP.");
 }
 
 void WifiDriverNode::timerCb(const ros::TimerEvent&)
 {
-  if (phase_ == CommPhase::CaptureInitialCtl)
-  {
-    if (!sendMsg("CTL"))
-    {
-      ROS_WARN_THROTTLE(3.0, "Falha ao enviar CTL.");
-      return;
-    }
-
-    std::string resp_ctl;
-    if (!recvMsg(resp_ctl))
-    {
-      ROS_WARN_THROTTLE(3.0, "Timeout a espera de resposta a CTL.");
-      return;
-    }
-
-    int tval = -1;
-    if (!parseTxxx(resp_ctl, tval))
-    {
-      ROS_WARN_THROTTLE(3.0, "[RX] Esperava T### de CTL, recebi: '%s'", resp_ctl.c_str());
-      return;
-    }
-
-    ROS_INFO_THROTTLE(2.0, "[RX] %s (=%d)", resp_ctl.c_str(), tval);
-
-    initial_ctl_value_ = tval;
-    phase_ = CommPhase::WaitSequence;
-    ROS_INFO("CTL inicial guardado: %d. Vou comecar a pedir IWP.", initial_ctl_value_);
-
-    return;
-  }
-
-  if (phase_ == CommPhase::WaitSequence)
-  {
-    if (!sendMsg("IWP"))
-    {
-      ROS_WARN_THROTTLE(3.0, "Falha ao enviar IWP.");
-      return;
-    }
-
-    std::string resp_iwp;
-    if (!recvMsg(resp_iwp))
-    {
-      ROS_WARN_THROTTLE(3.0, "Timeout a espera de resposta a IWP.");
-      return;
-    }
-
-    if (isColorSeq4(resp_iwp))
-    {
-      color_sequence_ = resp_iwp;
-      have_sequence_ = true;
-      phase_ = CommPhase::WaitCtlChange;
-
-      ROS_INFO("[RX] Sequencia recebida: %s. Agora vou esperar mudanca no CTL.",
-               color_sequence_.c_str());
-    }
-    else if (resp_iwp == "STOP")
-    {
-      ROS_INFO_THROTTLE(3.0, "[RX] STOP recebido. Continuo a tentar IWP.");
-    }
-    else
-    {
-      ROS_WARN_THROTTLE(3.0, "[RX] Resposta invalida a IWP: '%s'", resp_iwp.c_str());
-    }
-
-    return;
-  }
-
-  if (phase_ == CommPhase::WaitCtlChange && have_sequence_)
-  {
-    if (!sendMsg("CTL"))
-    {
-      ROS_WARN_THROTTLE(3.0, "Falha ao enviar CTL.");
-      return;
-    }
-
-    std::string resp_ctl;
-    if (!recvMsg(resp_ctl))
-    {
-      ROS_WARN_THROTTLE(3.0, "Timeout a espera de resposta a CTL.");
-      return;
-    }
-
-    int tval = -1;
-    if (!parseTxxx(resp_ctl, tval))
-    {
-      ROS_WARN_THROTTLE(3.0, "[RX] Esperava T### de CTL, recebi: '%s'", resp_ctl.c_str());
-      return;
-    }
-
-    ROS_INFO_THROTTLE(2.0, "[RX] CTL atual %s (=%d), inicial=%d",
-                      resp_ctl.c_str(), tval, initial_ctl_value_);
-
-    if (tval == initial_ctl_value_)
-    {
-      return;
-    }
-
-    if (color_sequence_ != last_published_)
-    {
-      std_msgs::String msg;
-      msg.data = color_sequence_;
-      color_pub_.publish(msg);
-      last_published_ = color_sequence_;
-      ROS_INFO("[PUB] /color_sequence = %s", color_sequence_.c_str());
-    }
-    else
-    {
-      ROS_INFO("Sequencia %s ja tinha sido publicada. Nao volto a publicar.",
-               color_sequence_.c_str());
-    }
-
-    // Após a primeira sequência publicada, paramos o ciclo CTL/IWP.
-    // Não queremos continuar a pedir IWP/CTL nem reiniciar o ciclo.
-    color_sequence_.clear();
-    have_sequence_ = false;
-    timer_.stop();
-    ROS_INFO("Primeira sequencia publicada. Ciclo CTL/IWP terminado (timer parado).");
-  }
-}
-
-bool WifiDriverNode::parseTxxx(const std::string& s, int& out_val)
-{
-  if (s.size() != 4) return false;
-  if (s[0] != 'T') return false;
-  if (!isdigit(s[1]) || !isdigit(s[2]) || !isdigit(s[3])) return false;
-  out_val = (s[1] - '0') * 100 + (s[2] - '0') * 10 + (s[3] - '0');
-  return true;
+  doIWP();
 }
 
 bool WifiDriverNode::isColorSeq4(const std::string& s)

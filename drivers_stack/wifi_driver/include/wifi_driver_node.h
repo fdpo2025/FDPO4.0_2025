@@ -12,13 +12,6 @@ public:
   explicit WifiDriverNode(ros::NodeHandle& nh);
 
 private:
-  enum class CommPhase
-  {
-    CaptureInitialCtl,
-    WaitSequence,
-    WaitCtlChange
-  };
-
   ros::NodeHandle nh_;
 
   // ROS publisher
@@ -32,15 +25,9 @@ private:
   int sock_fd_;
   sockaddr_in server_addr_;
 
-  bool connected_ = false;
   std::string last_published_;
 
   ros::Timer timer_;
-
-  CommPhase phase_ = CommPhase::CaptureInitialCtl;
-  int initial_ctl_value_ = -1;
-  bool have_sequence_ = false;
-  std::string color_sequence_;
 
   void timerCb(const ros::TimerEvent&);
 
@@ -48,9 +35,7 @@ private:
   bool sendMsg(const std::string& msg);
   bool recvMsg(std::string& out);
 
-  void doPingPong();
   void doIWP();
 
-  bool parseTxxx(const std::string& s, int& out_val);
   bool isColorSeq4(const std::string& s);
 };
