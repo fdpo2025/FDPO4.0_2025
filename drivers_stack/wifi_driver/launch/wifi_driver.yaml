@@ -1,3 +1,4 @@
-server_ip: "10.227.21.102"
+#server_ip: "10.227.21.102"
+server_ip: "10.227.21.133"
 port: 44832
 timeout: 1.0
