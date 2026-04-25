@@ -33,7 +33,7 @@ navigation_controller:
   drop_magnet_wiggle_angular_vel: 0.0
   # Publica /pick_box=false antecipadamente quando a distancia ao alvo de drop no go-to-XY fica abaixo deste valor. <=0 desliga.
   drop_pick_box_release_distance: 0.15
-  k_approaching: 8.5
+  k_approaching: 2.5
   gain_approaching_fwd: 1.0
   approaching_vel_normal: 0.07
 
