@@ -19,12 +19,8 @@
 	<arg name="planning_method" default="astar" doc="Planning method for chris_planner: closest, onebyone, greedy_h, or astar"/>
 	<arg name="use_wifi" default="true" />
 	<arg name="planner_type" default="chris" doc="chris ou multi"/>
-<<<<<<< HEAD
 	<arg name="robot_id" default="0" doc="ID do robo para comunicacoes (0 ou 1)"/>
 	<arg name="spawn_manga" default="manga_1" doc="EKF: robot_spawns em missions.yaml (antes da missão)"/>
-=======
-	<arg name="robot_id" default="1" doc="ID do robo para comunicacoes (1, 2, 3 ou 4)"/>
->>>>>>> 208_tunning
 
 	<!-- HAL: Hardware Abstraction Layer (LiDAR, etc) -->
 	<include if="$(arg use_hal)" file="$(find conf)/system/hal.xml">
@@ -62,6 +58,7 @@
 		
 	<include file="$(find conf)/system/wifi.xml">
 		<arg name="enable" value="$(arg use_wifi)" />
+		<arg name="robot_id" value="$(arg robot_id)" />
 	</include>
 	
 </launch>
