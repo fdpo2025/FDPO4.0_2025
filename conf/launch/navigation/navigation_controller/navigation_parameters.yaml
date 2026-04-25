@@ -24,7 +24,7 @@ yaw_tol: 0.08       # Tolerância de orientação (rad)
 # ============================================================================
 
 kp_linear: 5.0      # Ganho proporcional para controlo linear (~1/lambda, lambda≈0.2)
-kp_angular: 1.0     # Ganho proporcional para controlo angular
+kp_angular: 2.5     # Ganho proporcional para controlo angular
 
 # ============================================================================
 # PARÂMETROS followLine → conf/launch/navigation/navigation_controller/follow_line_parameters.yaml
